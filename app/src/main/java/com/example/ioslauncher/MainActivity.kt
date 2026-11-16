@@ -416,49 +416,90 @@ fun LauncherRoot(db: LauncherDb) {
                         Spacer(Modifier.height(16.dp))
                         Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
                     }
-                } else LazyVerticalGrid(
-                    columns=GridCells.Fixed(columns),
-                    modifier=Modifier.fillMaxSize()
-                        .pointerInput(doubleTapLock) {
-                            detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
+                } else Column(Modifier.fillMaxSize()) {
+                    if (targetPage == 0) {
+                        Row(Modifier.fillMaxWidth().padding(top=18.dp, bottom=12.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                            HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.weight(1f), Color(0xFFFFB648))
+                            HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
+                                SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
+                                Icons.Default.CalendarMonth, Modifier.weight(1f), Color(0xFFEF6375))
                         }
-                        .pointerInput(page, pageCount) {
-                            var horizontalDistance = 0f
-                            detectHorizontalDragGestures(
-                                onHorizontalDrag={ change, amount ->
-                                    horizontalDistance += amount
-                                    change.consume()
-                                },
-                                onDragEnd={
-                                    if (kotlin.math.abs(horizontalDistance) > 70f) {
-                                        page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
-                                    }
-                                    horizontalDistance = 0f
-                                },
-                                onDragCancel={ horizontalDistance = 0f }
-                            )
-                        },
-                    verticalArrangement=Arrangement.spacedBy(18.dp),
-                    horizontalArrangement=Arrangement.spacedBy(10.dp),
-                    contentPadding=PaddingValues(bottom=12.dp)
-                ) {
-                    itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
-                        val isDragging = draggingApp?.packageName == app.packageName
-                        val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
-                        val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
-                        AppIcon(
-                            app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
-                            dragTranslation=translation, isDragging=isDragging,
-                            onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
-                            onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
-                            onDrag={ delta -> dragPosition += delta },
-                            onDragEnd={ finishIconDrag() },
-                            onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
-                        )
                     }
-                    if (fillCells) {
-                        items((columns * rows - pageApps.size).coerceAtLeast(0)) {
-                            Spacer(Modifier.size(62.dp))
+                    val pageWidgetIds = homeWidgets.filter { it.second == targetPage }.map { it.first }
+                    pageWidgetIds.forEach { widgetId ->
+                        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
+                        if (info != null) {
+                            val widgetHeight = info.minHeight.coerceIn(110, 260).dp
+                            val isWidgetDragging = draggingWidgetId == widgetId
+                            val widgetCenter = remember(widgetId) { mutableStateOf(Offset.Zero) }
+                            AndroidView(
+                                factory = { viewContext ->
+                                    activity.widgetHost.createView(viewContext, widgetId, info).apply { setAppWidget(info) }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(widgetHeight).padding(vertical=5.dp)
+                                    .onGloballyPositioned { widgetCenter.value = it.boundsInRoot().center }
+                                    .graphicsLayer {
+                                        if (isWidgetDragging) {
+                                            translationX = widgetDragPosition.x - widgetCenter.value.x
+                                            translationY = widgetDragPosition.y - widgetCenter.value.y
+                                            scaleX = 1.025f; scaleY = 1.025f; alpha = .92f
+                                        }
+                                    }
+                                    .pointerInput(widgetId) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = { draggingWidgetId = widgetId; widgetDragPosition = widgetCenter.value },
+                                            onDrag = { change, amount -> change.consume(); widgetDragPosition += amount },
+                                            onDragEnd = { finishWidgetDrag() },
+                                            onDragCancel = { finishWidgetDrag() }
+                                        )
+                                    }
+                            )
+                        }
+                    }
+                    LazyVerticalGrid(
+                        columns=GridCells.Fixed(columns),
+                        modifier=Modifier.weight(1f).fillMaxWidth()
+                            .pointerInput(doubleTapLock) {
+                                detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
+                            }
+                            .pointerInput(page, pageCount) {
+                                var horizontalDistance = 0f
+                                detectHorizontalDragGestures(
+                                    onHorizontalDrag={ change, amount ->
+                                        horizontalDistance += amount
+                                        change.consume()
+                                    },
+                                    onDragEnd={
+                                        if (kotlin.math.abs(horizontalDistance) > 70f) {
+                                            page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
+                                        }
+                                        horizontalDistance = 0f
+                                    },
+                                    onDragCancel={ horizontalDistance = 0f }
+                                )
+                            },
+                        verticalArrangement=Arrangement.spacedBy(18.dp),
+                        horizontalArrangement=Arrangement.spacedBy(10.dp),
+                        contentPadding=PaddingValues(bottom=12.dp)
+                    ) {
+                        itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
+                            val isDragging = draggingApp?.packageName == app.packageName
+                            val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
+                            val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
+                            AppIcon(
+                                app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
+                                dragTranslation=translation, isDragging=isDragging,
+                                onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
+                                onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
+                                onDrag={ delta -> dragPosition += delta },
+                                onDragEnd={ finishIconDrag() },
+                                onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
+                            )
+                        }
+                        if (fillCells) {
+                            items((columns * rows - pageApps.size).coerceAtLeast(0)) {
+                                Spacer(Modifier.size(62.dp))
+                            }
                         }
                     }
                 }
