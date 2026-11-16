@@ -264,6 +264,13 @@ fun LauncherRoot(db: LauncherDb) {
         val y=parts.getOrNull(2)?.toFloatOrNull()
         if(id!=null && x!=null && y!=null) id to Offset(x,y) else null
     }.toMap()) }
+    var widgetSizes by remember { mutableStateOf(db.get("home_widget_sizes").split(";").mapNotNull { item ->
+        val parts=item.split(":")
+        val id=parts.getOrNull(0)?.toIntOrNull()
+        val w=parts.getOrNull(1)?.toFloatOrNull()
+        val h=parts.getOrNull(2)?.toFloatOrNull()
+        if(id!=null && w!=null && h!=null) id to (w.dp to h.dp) else null
+    }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val density = LocalDensity.current
@@ -355,7 +362,8 @@ fun LauncherRoot(db: LauncherDb) {
         while (cursor < apps.size || index < minimumPages) {
             val widgetRows = homeWidgets.count { it.second == index }
             val builtInRows = if (index == 0 && (showWeatherWidget || showTodayWidget)) 1 else 0
-            val capacity = (columns * rows - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
+            val visibleRows = rows.coerceAtMost(4)
+            val capacity = (columns * visibleRows - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
             val end = (cursor + capacity).coerceAtMost(apps.size)
             result.add(apps.subList(cursor, end))
             cursor = end
@@ -552,7 +560,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                     onDrag={ change, amount ->
                                                         change.consume()
                                                         val current=widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(180).dp to info.minHeight.coerceIn(110,300).dp)
-                                                        val w=(current.first+with(density){amount.x.toDp()}).coerceIn(140.dp, maxWidth)
+                                                        val w=(current.first+with(density){amount.x.toDp()}) .coerceIn(140.dp, 360.dp)
                                                         val h=(current.second+with(density){amount.y.toDp()}).coerceIn(100.dp, 420.dp)
                                                         widgetSizes=widgetSizes+(widgetId to (w to h))
                                                         db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
