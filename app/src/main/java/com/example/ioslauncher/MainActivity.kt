@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
     }
     fun requestHighestRefreshRate() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            val mode = display?.supportedModes?.maxByOrNull { it.refreshRate }
+            val mode = windowManager.defaultDisplay.supportedModes.maxByOrNull { it.refreshRate }
             if (mode != null) window.attributes = window.attributes.apply { preferredDisplayModeId = mode.modeId }
         }
     }
@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 InstalledApp(ri.loadLabel(packageManager).toString(), ai.packageName, ri.loadIcon(packageManager))
             }
             .distinctBy { it.packageName }
+            .filterNot { it.label.equals("Settings", ignoreCase = true) }
             .plus(
                 listOf(
                     InstalledApp("Safari", "internal:browser", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(40, 135, 225)); cornerRadius=28f }),
@@ -201,16 +202,16 @@ fun LauncherRoot(db: LauncherDb) {
                         change.consume()
                         finished = true
                     } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
-                        if (dy < 0 && down.position.y > size.height * .78f && !drawer && !controlCenter && !locked && homeStyle == "With App drawer") {
+                        if (dy < 0 && down.position.y > size.height * .78f && !drawer && !controlCenter && !locked && homeStyle == "With App drawer" && navigationMode == "gestures") {
                             drawer = true; change.consume(); finished = true
                         } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "App finder") {
                             drawer = true; search = ""; change.consume(); finished = true
+                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "Control Center") {
+                            controlCenter = true; change.consume(); finished = true
                         } else if (dy > 0 && drawer) {
                             drawer = false; change.consume(); finished = true
                         } else if (dy < 0 && controlCenter) {
                             controlCenter = false; change.consume(); finished = true
-                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked) {
-                            controlCenter = true; change.consume(); finished = true
                         } else if (down.position.y > size.height * .18f && down.position.y < size.height * .78f) {
                             finished = true
                         }
@@ -284,6 +285,7 @@ fun LauncherRoot(db: LauncherDb) {
                     DockButton(Icons.Default.Message,"Messages",fg) {
                         apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
                     }
+                    DockButton(Icons.Default.Settings,"Settings",fg) { settings=true }
                 }
             }
             Box(Modifier.fillMaxWidth().padding(bottom=4.dp).pointerInput(doubleTapLock) {
