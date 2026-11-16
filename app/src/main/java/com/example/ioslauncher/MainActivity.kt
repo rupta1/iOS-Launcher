@@ -546,7 +546,7 @@ private fun iconResourceForLabel(label:String):Int {
 fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
     dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false,
-    onBounds:(String,Rect)->Unit={}, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={},
+    onBounds:(String,Rect)->Unit={ _, _ -> }, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={ _ -> },
     onDragEnd:()->Unit={}, onClick:()->Unit
 ) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
