@@ -18,7 +18,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -620,14 +619,27 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
 fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onClose:()->Unit) {
     val context= LocalContext.current
     val bg=Color(0xFFE9EAF0)
-    var verticalDrag by remember { mutableFloatStateOf(0f) }
     Column(
         Modifier.fillMaxSize()
             .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onVerticalDrag={ change, amount -> verticalDrag += amount; change.consume() },
-                    onDragEnd={ if(verticalDrag < -70f) onClose(); verticalDrag=0f }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed=false)
+                    if (down.position.y > size.height * .80f) {
+                        var totalY = 0f
+                        var finished = false
+                        while (!finished) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            totalY += change.position.y - change.previousPosition.y
+                            if (totalY < -80f) {
+                                change.consume()
+                                onClose()
+                                finished = true
+                            }
+                        }
+                    }
+                }
             }
             .background(bg.copy(alpha=.80f))
             .padding(WindowInsets.statusBars.asPaddingValues())
