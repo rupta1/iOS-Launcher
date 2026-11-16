@@ -472,7 +472,7 @@ fun LauncherRoot(db: LauncherDb) {
                             val widgetCenter = remember(widgetId) { mutableStateOf(Offset.Zero) }
                             AndroidView(
                                 factory = { viewContext ->
-                                    activity.widgetHost.createView(viewContext, widgetId, info).apply { setAppWidget(info) }
+                                    activity.widgetHost.createView(viewContext, widgetId, info)
                                 },
                                 modifier = Modifier.fillMaxWidth().height(widgetHeight).padding(vertical=5.dp)
                                     .onGloballyPositioned { widgetCenter.value = it.boundsInRoot().center }
