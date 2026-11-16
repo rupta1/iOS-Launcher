@@ -76,3 +76,8 @@ The launcher requests the highest display mode reported by Android when **Prefer
 - Selecting **Gestures** hides the launcher's navigation bar while the launcher is visible and allows Android to reveal transient bars with an edge swipe. For system-wide gesture navigation, the Android / MIUI navigation mode still has to be changed in device Settings; third-party apps cannot change that protected OS setting.
 - Control Center uses open-source Material Design vector icons, a 20%-transparent glass surface, a 20 dp blurred Home screen backdrop on Android 12+, and swipe-up dismissal.
 - Long-press and drag an app icon to reorder it anywhere on the visible Home page. Drag it to the red **Uninstall** target at the top to open Android's standard uninstall confirmation for that app. System apps and the launcher's built-in shortcuts cannot be uninstalled this way.
+
+
+## Control Center and Home grid update
+
+The latest Control Center has been redesigned around the iOS Control Center composition: a combined connectivity cluster, media panel, orientation lock and screen-mirroring controls, vertical brightness and volume sliders, Focus, and circular utility shortcuts. It uses a dark translucent glass overlay over the blurred Home screen. App icon taps no longer show the rectangular Compose ripple highlight. Home grid horizontal swipes are handled by the grid itself, separately from vertical grid scrolling and long-press icon drag.
