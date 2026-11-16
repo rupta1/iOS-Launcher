@@ -673,7 +673,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
                 Icon(Icons.Default.Add,null,tint=white,modifier=Modifier.size(25.dp))
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick={ open(Intent(Settings.ACTION_POWER_USAGE_SUMMARY)) }) {
+            IconButton(onClick={ open(Intent(Settings.ACTION_SETTINGS)) }) {
                 Icon(Icons.Default.PowerSettingsNew,null,tint=white,modifier=Modifier.size(25.dp))
             }
         }
@@ -695,7 +695,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
                         IosConnectivityButton(Icons.Default.Bluetooth,"Bluetooth",bluetoothOn,Modifier.weight(1f),blue) {
                             open(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                         }
-                        IosConnectivityButton(Icons.Default.Cellular4g,"Mobile",state.cellularType!="Off",Modifier.weight(1f),blue) {
+                        IosConnectivityButton(Icons.Default.SignalCellularAlt,"Mobile",state.cellularType!="Off",Modifier.weight(1f),blue) {
                             open(Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS))
                         }
                     }
