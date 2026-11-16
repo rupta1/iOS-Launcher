@@ -242,7 +242,7 @@ fun LauncherRoot(db: LauncherDb) {
                     } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                         if (dy < 0 && down.position.y > size.height * .78f && !drawer && !controlCenter && !locked && homeStyle == "With App drawer" && navigationMode == "gestures") {
                             drawer = true; change.consume(); finished = true
-                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "App finder") {
+                        } else if (dy > 0 && down.position.y > size.height * .16f && down.position.y < size.height * .92f && !locked && swipeDownAction == "App finder") {
                             drawer = true; search = ""; change.consume(); finished = true
                         } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "Control Center") {
                             controlCenter = true; change.consume(); finished = true
