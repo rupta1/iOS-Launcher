@@ -256,6 +256,14 @@ fun LauncherRoot(db: LauncherDb) {
     var showWeatherWidget by remember { mutableStateOf(db.get("show_weather_widget", "true") == "true") }
     var showTodayWidget by remember { mutableStateOf(db.get("show_today_widget", "true") == "true") }
     var widgetDragPosition by remember { mutableStateOf(Offset.Zero) }
+    var widgetCanvasBounds by remember { mutableStateOf(Rect.Zero) }
+    var widgetPositions by remember { mutableStateOf(db.get("home_widget_positions").split(";").mapNotNull { item ->
+        val parts=item.split(":")
+        val id=parts.getOrNull(0)?.toIntOrNull()
+        val x=parts.getOrNull(1)?.toFloatOrNull()
+        val y=parts.getOrNull(2)?.toFloatOrNull()
+        if(id!=null && x!=null && y!=null) id to Offset(x,y) else null
+    }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val density = LocalDensity.current
@@ -325,6 +333,16 @@ fun LauncherRoot(db: LauncherDb) {
                     homeWidgets = homeWidgets.filterNot { it.first == id }
                 }
             }
+            widgetPositions = widgetPositions - id
+        } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetCanvasBounds.width > 0f) {
+            val maxX = (widgetCanvasBounds.width - 1f).coerceAtLeast(1f)
+            val maxY = (widgetCanvasBounds.height - 1f).coerceAtLeast(1f)
+            val normalized = Offset(
+                ((widgetDragPosition.x - widgetCanvasBounds.left) / maxX).coerceIn(0f,1f),
+                ((widgetDragPosition.y - widgetCanvasBounds.top) / maxY).coerceIn(0f,1f)
+            )
+            widgetPositions = widgetPositions + (id to normalized)
+            db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
         }
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
@@ -477,34 +495,45 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                     }
                     val pageWidgetIds = homeWidgets.filter { it.second == targetPage }.map { it.first }
-                    pageWidgetIds.forEach { widgetId ->
-                        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
-                        if (info != null) {
-                            val widgetHeight = info.minHeight.coerceIn(110, 260).dp
-                            val isWidgetDragging = draggingWidgetId == widgetId
-                            val widgetCenter = remember(widgetId) { mutableStateOf(Offset.Zero) }
-                            AndroidView(
-                                factory = { viewContext ->
-                                    activity.widgetHost.createView(viewContext, widgetId, info)
-                                },
-                                modifier = Modifier.fillMaxWidth().height(widgetHeight).padding(vertical=5.dp)
-                                    .onGloballyPositioned { widgetCenter.value = it.boundsInRoot().center }
-                                    .graphicsLayer {
-                                        if (isWidgetDragging) {
-                                            translationX = widgetDragPosition.x - widgetCenter.value.x
-                                            translationY = widgetDragPosition.y - widgetCenter.value.y
-                                            scaleX = 1.025f; scaleY = 1.025f; alpha = .92f
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().height(280.dp)
+                            .onGloballyPositioned { widgetCanvasBounds = it.boundsInRoot() }
+                    ) {
+                        pageWidgetIds.forEach { widgetId ->
+                            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
+                            if (info != null) {
+                                val widgetHeight = info.minHeight.coerceIn(110, 260).dp
+                                val normalized = widgetPositions[widgetId] ?: Offset(0f,0f)
+                                val isWidgetDragging = draggingWidgetId == widgetId
+                                val widgetCenter = remember(widgetId) { mutableStateOf(Offset.Zero) }
+                                val widgetWidth = maxWidth * .92f
+                                AndroidView(
+                                    factory = { viewContext -> activity.widgetHost.createView(viewContext, widgetId, info) },
+                                    modifier = Modifier
+                                        .offset {
+                                            val x = normalized.x * (constraints.maxWidth - with(density) { widgetWidth.roundToPx() }).coerceAtLeast(0)
+                                            val y = normalized.y * (constraints.maxHeight - with(density) { widgetHeight.roundToPx() }).coerceAtLeast(0)
+                                            IntOffset(x.toInt(), y.toInt())
                                         }
-                                    }
-                                    .pointerInput(widgetId) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = { draggingWidgetId = widgetId; widgetDragPosition = widgetCenter.value },
-                                            onDrag = { change, amount -> change.consume(); widgetDragPosition += amount },
-                                            onDragEnd = { finishWidgetDrag() },
-                                            onDragCancel = { finishWidgetDrag() }
-                                        )
-                                    }
-                            )
+                                        .width(widgetWidth).height(widgetHeight)
+                                        .onGloballyPositioned { widgetCenter.value = it.boundsInRoot().center }
+                                        .graphicsLayer {
+                                            if (isWidgetDragging) {
+                                                translationX = widgetDragPosition.x - widgetCenter.value.x
+                                                translationY = widgetDragPosition.y - widgetCenter.value.y
+                                                scaleX = 1.025f; scaleY = 1.025f; alpha = .92f
+                                            }
+                                        }
+                                        .pointerInput(widgetId) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = { draggingWidgetId = widgetId; widgetDragPosition = widgetCenter.value },
+                                                onDrag = { change, amount -> change.consume(); widgetDragPosition += amount },
+                                                onDragEnd = { finishWidgetDrag() },
+                                                onDragCancel = { finishWidgetDrag() }
+                                            )
+                                        }
+                                )
+                            }
                         }
                     }
                     LazyVerticalGrid(
