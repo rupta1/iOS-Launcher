@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -338,9 +340,26 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 } else LazyVerticalGrid(
                     columns=GridCells.Fixed(columns),
-                    modifier=Modifier.fillMaxSize().pointerInput(doubleTapLock) {
-                        detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
-                    },
+                    modifier=Modifier.fillMaxSize()
+                        .pointerInput(doubleTapLock) {
+                            detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
+                        }
+                        .pointerInput(page, pageCount) {
+                            var horizontalDistance = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag={ change, amount ->
+                                    horizontalDistance += amount
+                                    change.consume()
+                                },
+                                onDragEnd={
+                                    if (kotlin.math.abs(horizontalDistance) > 70f) {
+                                        page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
+                                    }
+                                    horizontalDistance = 0f
+                                },
+                                onDragCancel={ horizontalDistance = 0f }
+                            )
+                        },
                     verticalArrangement=Arrangement.spacedBy(18.dp),
                     horizontalArrangement=Arrangement.spacedBy(10.dp),
                     contentPadding=PaddingValues(bottom=12.dp)
@@ -582,7 +601,11 @@ fun AppIcon(
                     onDragCancel=onDragEnd
                 )
             }
-            .clickable(onClick=onClick)
+            .clickable(
+                interactionSource=remember { MutableInteractionSource() },
+                indication=null,
+                onClick=onClick
+            )
     ) {
         Surface(modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
             shape=RoundedCornerShape(21.dp), color=Color.White) {
@@ -623,115 +646,182 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
 
 @Composable
 fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onClose:()->Unit) {
-    val context= LocalContext.current
-    val bg=Color(0xFFE9EAF0)
+    val context=LocalContext.current
+    val audio=context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+    val maxVolume=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    var volume by remember { mutableFloatStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()/maxVolume) }
+    var brightness by remember { mutableFloatStateOf(.72f) }
+    var focusOn by remember { mutableStateOf(false) }
+    var rotationLocked by remember { mutableStateOf(false) }
+    var airplaneOn by remember { mutableStateOf(false) }
+    var wifiOn by remember { mutableStateOf(state.transport=="Wi-Fi") }
+    var bluetoothOn by remember { mutableStateOf(state.bluetooth=="On") }
+    val white=Color.White
+    val panel=Color(0xFF5B6477).copy(alpha=.48f)
+    val panelBorder=Color.White.copy(alpha=.16f)
+    val blue=Color(0xFF168AF4)
+    fun open(action:Intent) { try { context.startActivity(action) } catch (_:Exception) { } }
     Column(
         Modifier.fillMaxSize()
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed=false)
-                    if (down.position.y > size.height * .80f) {
-                        var totalY = 0f
-                        var finished = false
-                        while (!finished) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            totalY += change.position.y - change.previousPosition.y
-                            if (totalY < -80f) {
-                                change.consume()
-                                onClose()
-                                finished = true
-                            }
+            .background(Color(0xFF101724).copy(alpha=.30f))
+            .padding(WindowInsets.statusBars.asPaddingValues())
+            .padding(horizontal=18.dp, vertical=10.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp, vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick={ open(Intent(Settings.ACTION_SETTINGS)) }) {
+                Icon(Icons.Default.Add,null,tint=white,modifier=Modifier.size(25.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick={ open(Intent(Settings.ACTION_POWER_USAGE_SUMMARY)) }) {
+                Icon(Icons.Default.PowerSettingsNew,null,tint=white,modifier=Modifier.size(25.dp))
+            }
+        }
+        Row(horizontalArrangement=Arrangement.spacedBy(12.dp), modifier=Modifier.fillMaxWidth()) {
+            Surface(
+                modifier=Modifier.weight(1.08f).height(196.dp),
+                shape=RoundedCornerShape(30.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder)
+            ) {
+                Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.weight(1f)) {
+                        IosConnectivityButton(Icons.Default.AirplanemodeActive,"Airplane",airplaneOn,Modifier.weight(1f),blue) {
+                            open(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS))
+                        }
+                        IosConnectivityButton(Icons.Default.Wifi,"Wi-Fi",wifiOn,Modifier.weight(1f),blue) {
+                            open(Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY))
+                        }
+                    }
+                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.weight(1f)) {
+                        IosConnectivityButton(Icons.Default.Bluetooth,"Bluetooth",bluetoothOn,Modifier.weight(1f),blue) {
+                            open(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                        }
+                        IosConnectivityButton(Icons.Default.Cellular4g,"Mobile",state.cellularType!="Off",Modifier.weight(1f),blue) {
+                            open(Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS))
                         }
                     }
                 }
             }
-            .background(bg.copy(alpha=.80f))
-            .padding(WindowInsets.statusBars.asPaddingValues())
-            .padding(horizontal=16.dp, vertical=10.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        Row(Modifier.fillMaxWidth().padding(bottom=10.dp), verticalAlignment=Alignment.CenterVertically) {
-            Text("Control Center", fontSize=27.sp, fontWeight=FontWeight.Bold, color=Color(0xFF17191F), modifier=Modifier.weight(1f))
-            IconButton(onClick=onClose) { Icon(Icons.Default.Close,null,tint=Color(0xFF17191F)) }
-        }
-        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1.08f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                ControlTile(Icons.Default.AirplanemodeActive,"Airplane mode","Open system setting") { context.startActivity(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) }
-                ControlTile(Icons.Default.Wifi,"Wi-Fi",if(state.transport=="Wi-Fi") "Connected" else state.transport) { context.startActivity(Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)) }
-                ControlTile(Icons.Default.Bluetooth,"Bluetooth",state.bluetooth) { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-            }
-            Column(Modifier.weight(.92f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                ControlTile(Icons.Default.MusicNote,"Not Playing","Media controls") { context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
-                ControlTile(Icons.Default.Bedtime,"Focus","Do Not Disturb settings") { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            SliderTile(Icons.Default.Brightness6,"Brightness", Modifier.weight(1f)) { value ->
-                val activity = context as? Activity
-                activity?.window?.attributes = activity.window.attributes.apply { screenBrightness = value }
-            }
-            SliderTile(Icons.Default.VolumeUp,"Volume", Modifier.weight(1f)) { value ->
-                val audio = context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
-                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                audio.setStreamVolume(AudioManager.STREAM_MUSIC, (value * max).toInt(), 0)
+            Surface(
+                modifier=Modifier.weight(.92f).height(196.dp),
+                shape=RoundedCornerShape(30.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder)
+            ) {
+                Column(Modifier.fillMaxSize().padding(15.dp),verticalArrangement=Arrangement.SpaceBetween) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color.White.copy(alpha=.12f)))
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.Default.Airplay,null,tint=white.copy(alpha=.85f),modifier=Modifier.size(23.dp))
+                    }
+                    Text("Not Playing",color=white,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
+                        Icon(Icons.Default.SkipPrevious,null,tint=white.copy(alpha=.55f),modifier=Modifier.size(24.dp))
+                        Icon(Icons.Default.PlayArrow,null,tint=white,modifier=Modifier.size(34.dp))
+                        Icon(Icons.Default.SkipNext,null,tint=white.copy(alpha=.55f),modifier=Modifier.size(24.dp))
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            SmallTile(Icons.Default.ScreenRotation,"Rotation", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
-            SmallTile(Icons.Default.BatteryChargingFull,"Low Power", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) }
-            SmallTile(Icons.Default.DarkMode,"Dark Mode", Modifier.weight(1f)) { onDark(!dark) }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            IosRoundAction(Icons.Default.ScreenRotation,"Lock",rotationLocked,Modifier.weight(1f)) { rotationLocked=!rotationLocked; open(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+            IosRoundAction(Icons.Default.ScreenShare,"Screen Mirroring",false,Modifier.weight(1f)) { open(Intent(Settings.ACTION_CAST_SETTINGS)) }
+            Column(Modifier.weight(.82f).height(174.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                IosVerticalSlider(brightness,{ brightness=it
+                    val window=(context as? Activity)?.window
+                    window?.attributes=window.attributes.apply { screenBrightness=it.coerceIn(.02f,1f) }
+                },Icons.Default.WbSunny)
+            }
+            Column(Modifier.weight(.82f).height(174.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                IosVerticalSlider(volume,{ volume=it; audio.setStreamVolume(AudioManager.STREAM_MUSIC,(it*maxVolume).toInt().coerceIn(0,maxVolume),0) },Icons.Default.VolumeUp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            onClick={focusOn=!focusOn;open(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))},
+            shape=RoundedCornerShape(28.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder),
+            modifier=Modifier.fillMaxWidth().height(66.dp)
+        ) {
+            Row(Modifier.padding(horizontal=17.dp),verticalAlignment=Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(blue),contentAlignment=Alignment.Center) {
+                    Icon(Icons.Default.NightlightRound,null,tint=white,modifier=Modifier.size(23.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text("Focus",color=white,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ExpandMore,null,tint=white.copy(alpha=.8f))
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            IosUtilityButton(Icons.Default.FlashlightOn,"Flashlight",Modifier.weight(1f)) { open(Intent(Settings.ACTION_SETTINGS)) }
+            IosUtilityButton(Icons.Default.Timer,"Timer",Modifier.weight(1f)) { open(Intent(android.provider.AlarmClock.ACTION_SET_TIMER)) }
+            IosUtilityButton(Icons.Default.Calculate,"Calculator",Modifier.weight(1f)) {
+                val launch=context.packageManager.getLaunchIntentForPackage("com.google.android.calculator")
+                if(launch!=null) open(launch) else open(Intent(Settings.ACTION_SETTINGS))
+            }
+            IosUtilityButton(Icons.Default.PhotoCamera,"Camera",Modifier.weight(1f)) { open(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth()) {
+            IosUtilityButton(Icons.Default.QrCodeScanner,"Code Scanner",Modifier.weight(1f)) { open(Intent(Settings.ACTION_SETTINGS)) }
+            Spacer(Modifier.weight(3f))
+        }
+        Spacer(Modifier.height(14.dp))
+        Surface(shape=RoundedCornerShape(22.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder),modifier=Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                Text("Internet: ${if(state.online) "Online" else "Offline"}",color=white.copy(alpha=.9f),fontSize=12.sp)
+                Text("Wi-Fi: ${state.wifiSsid}",color=white.copy(alpha=.9f),fontSize=12.sp)
+                Text("Bluetooth: ${state.bluetooth}",color=white.copy(alpha=.9f),fontSize=12.sp)
+                Text("Cellular: ${state.cellularType}",color=white.copy(alpha=.9f),fontSize=12.sp)
+            }
         }
         Spacer(Modifier.height(16.dp))
-        Text("DEVICE STATUS", color=Color(0xFF777982), fontSize=11.sp, fontWeight=FontWeight.Bold)
-        Surface(shape=RoundedCornerShape(22.dp), color=Color.White.copy(alpha=.88f), modifier=Modifier.fillMaxWidth().padding(top=8.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                Text("Internet: ${if(state.online) "Online" else "Offline"}", color=Color(0xFF45464D), fontSize=13.sp)
-                Text("Network: ${state.transport}", color=Color(0xFF45464D), fontSize=13.sp)
-                Text("Wi-Fi SSID: ${state.wifiSsid}", color=Color(0xFF45464D), fontSize=13.sp)
-                Text("Bluetooth: ${state.bluetooth}", color=Color(0xFF45464D), fontSize=13.sp)
-                Text("Cellular: ${state.cellularType}", color=Color(0xFF45464D), fontSize=13.sp)
-            }
-        }
-        Spacer(Modifier.height(20.dp))
-        Text("Some controls open Android system panels; Android restricts direct toggling by third-party launchers.", color=Color(0xFF777982), fontSize=10.sp)
+        Text("Swipe up to close",color=white.copy(alpha=.58f),fontSize=10.sp,modifier=Modifier.align(Alignment.CenterHorizontally))
     }
 }
 
 @Composable
-fun ControlTile(icon:ImageVector,title:String,subtitle:String,onClick:()->Unit) {
-    Surface(onClick=onClick, shape=RoundedCornerShape(23.dp), color=Color.White.copy(alpha=.90f), modifier=Modifier.fillMaxWidth().heightIn(min=78.dp)) {
-        Row(Modifier.padding(horizontal=12.dp,vertical=13.dp), verticalAlignment=Alignment.CenterVertically) {
-            Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF1685F8)), contentAlignment=Alignment.Center) {
-                Icon(icon,null,tint=Color.White,modifier=Modifier.size(21.dp))
-            }
-            Spacer(Modifier.width(9.dp))
-            Column { Text(title,fontSize=12.sp,fontWeight=FontWeight.SemiBold,color=Color(0xFF363840));Text(subtitle,fontSize=9.sp,color=Color(0xFF7A7C84),maxLines=1) }
-        }
+fun IosConnectivityButton(icon:ImageVector,label:String,active:Boolean,modifier:Modifier=Modifier,blue:Color=Color(0xFF168AF4),onClick:()->Unit) {
+    Surface(onClick=onClick,modifier=modifier.fillMaxHeight(),shape=CircleShape,color=if(active) blue else Color.White.copy(alpha=.15f)) {
+        Box(contentAlignment=Alignment.Center) { Icon(icon,null,tint=Color.White,modifier=Modifier.size(25.dp)) }
     }
 }
 @Composable
-fun SliderTile(icon:ImageVector,title:String,modifier:Modifier=Modifier,onChange:(Float)->Unit) {
-    var value by remember(title) { mutableFloatStateOf(.65f) }
-    Surface(modifier.height(148.dp), shape=RoundedCornerShape(24.dp), color=Color.White.copy(alpha=.91f)) {
-        Column(Modifier.padding(horizontal=10.dp,vertical=12.dp), horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.SpaceBetween) {
-            Icon(icon,null,tint=Color(0xFF565861),modifier=Modifier.size(22.dp))
-            Slider(value,{value=it;onChange(it)},colors=SliderDefaults.colors(thumbColor=Color(0xFF6952A3),activeTrackColor=Color(0xFF6952A3),inactiveTrackColor=Color(0xFFDCD5EE)))
-            Text(title,fontSize=10.sp,color=Color(0xFF85868D))
+fun IosRoundAction(icon:ImageVector,label:String,active:Boolean,modifier:Modifier=Modifier,onClick:()->Unit) {
+    Column(modifier, horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+        Surface(onClick=onClick,shape=CircleShape,color=if(active) Color(0xFFDAF3E6) else Color.White.copy(alpha=.18f),
+            border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.14f)),modifier=Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(contentAlignment=Alignment.Center) { Icon(icon,null,tint=if(active) Color(0xFFE56A75) else Color.White,modifier=Modifier.size(27.dp)) }
         }
+        Spacer(Modifier.height(5.dp))
+        Text(label,color=Color.White.copy(alpha=.75f),fontSize=9.sp,maxLines=1)
     }
 }
 @Composable
-fun SmallTile(icon:ImageVector,title:String,modifier:Modifier=Modifier,onClick:()->Unit) {
-    Surface(onClick=onClick,modifier=modifier.height(88.dp),shape=RoundedCornerShape(22.dp),color=Color.White.copy(alpha=.90f)) {
-        Column(Modifier.padding(vertical=13.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-            Icon(icon,null,tint=Color(0xFF4C4E56),modifier=Modifier.size(22.dp))
-            Spacer(Modifier.height(5.dp))
-            Text(title,fontSize=10.sp,color=Color(0xFF85868D))
+fun IosVerticalSlider(value:Float,onValue:(Float)->Unit,icon:ImageVector) {
+    var sliderHeight by remember { mutableFloatStateOf(0f) }
+    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha=.18f))
+        .pointerInput(Unit) {
+            detectDragGestures(
+                onDragStart={ offset -> onValue((1f-offset.y/size.height).coerceIn(0f,1f)) },
+                onDrag={ change,_ -> change.consume(); onValue((1f-change.position.y/size.height).coerceIn(0f,1f)) }
+            )
         }
+        .clickable(interactionSource=remember { MutableInteractionSource() },indication=null) { },
+        contentAlignment=Alignment.BottomCenter
+    ) {
+        Box(Modifier.fillMaxWidth().fillMaxHeight(value.coerceIn(.02f,1f)).clip(RoundedCornerShape(28.dp)).background(Color.White))
+        Icon(icon,null,tint=if(value>.55f) Color(0xFFFFC84A) else Color(0xFF25BDEB),modifier=Modifier.align(Alignment.BottomCenter).padding(bottom=10.dp).size(22.dp))
+    }
+}
+@Composable
+fun IosUtilityButton(icon:ImageVector,label:String,modifier:Modifier=Modifier,onClick:()->Unit) {
+    Column(modifier, horizontalAlignment=Alignment.CenterHorizontally) {
+        Surface(onClick=onClick,shape=CircleShape,color=Color.White.copy(alpha=.18f),
+            border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.18f)),modifier=Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(contentAlignment=Alignment.Center) { Icon(icon,null,tint=Color.White,modifier=Modifier.size(27.dp)) }
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(label,color=Color.White.copy(alpha=.78f),fontSize=9.sp,maxLines=1)
     }
 }
 
