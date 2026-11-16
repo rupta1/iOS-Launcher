@@ -271,6 +271,12 @@ fun LauncherRoot(db: LauncherDb) {
             if (index < 0) Int.MAX_VALUE else index
         })
     }
+    var appPageAssignments by remember { mutableStateOf(db.get("app_pages").split(";").mapNotNull { token ->
+        val parts=token.split(":")
+        val packageName=parts.getOrNull(0)
+        val pageIndex=parts.getOrNull(1)?.toIntOrNull()
+        if(!packageName.isNullOrBlank() && pageIndex!=null) packageName to pageIndex else null
+    }.toMap()) }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var widgetPickerOpen by remember { mutableStateOf(false) }
     var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
@@ -378,22 +384,29 @@ fun LauncherRoot(db: LauncherDb) {
         dragEdgeDirection = 0
     }
     val showLabels = labels && hideText == "Off"
-    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget) {
-        val result = mutableListOf<List<InstalledApp>>()
-        var cursor = 0
-        var index = 0
-        val minimumPages = maxOf(1, (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1), if(showWeatherWidget) weatherWidgetPage+1 else 1, if(showTodayWidget) todayWidgetPage+1 else 1)
-        while (cursor < apps.size || index < minimumPages) {
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments) {
+        val result = mutableMapOf<Int, MutableList<InstalledApp>>()
+        var defaultPage = 0
+        fun capacityFor(index: Int): Int {
             val widgetRows = homeWidgets.count { it.second == index }
             val builtInRows = if ((showWeatherWidget && index == weatherWidgetPage) || (showTodayWidget && index == todayWidgetPage)) 1 else 0
-            val visibleRows = rows.coerceAtMost(4)
-            val capacity = (columns * visibleRows - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
-            val end = (cursor + capacity).coerceAtMost(apps.size)
-            result.add(apps.subList(cursor, end))
-            cursor = end
-            index++
+            return (columns * rows.coerceAtMost(4) - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
         }
-        result
+        apps.forEach { app ->
+            val explicitPage = appPageAssignments[app.packageName]
+            val destination = if (explicitPage != null) explicitPage.coerceAtLeast(0) else {
+                while ((result[defaultPage]?.size ?: 0) >= capacityFor(defaultPage)) defaultPage++
+                defaultPage
+            }
+            result.getOrPut(destination) { mutableListOf() }.add(app)
+        }
+        val maxPage = maxOf(
+            result.keys.maxOrNull() ?: 0,
+            homeWidgets.maxOfOrNull { it.second } ?: 0,
+            if (showWeatherWidget) weatherWidgetPage else 0,
+            if (showTodayWidget) todayWidgetPage else 0
+        )
+        (0..maxPage).map { result[it]?.toList().orEmpty() }
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     fun updateDragEdge(position: Offset) {
@@ -421,7 +434,7 @@ fun LauncherRoot(db: LauncherDb) {
             dragEdgeDirection = 0
             return
         }
-        val targetPage = page.coerceIn(0, pageCount - 1)
+        val targetPage = page.coerceAtLeast(0)
         val visiblePackages = pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
         val target = appBounds.entries.firstOrNull { (key, rect) ->
             key != dragged.packageName && key in visiblePackages && rect.contains(dragPosition)
@@ -429,9 +442,10 @@ fun LauncherRoot(db: LauncherDb) {
         val list = apps.toMutableList()
         list.removeAll { it.packageName == dragged.packageName }
         val targetIndex = target?.let { key -> list.indexOfFirst { it.packageName == key } } ?: -1
-        val pageStart = pageAppSlices.take(targetPage).sumOf { it.size }.coerceIn(0, list.size)
-        val insertAt = if (targetIndex >= 0) targetIndex else pageStart + pageAppSlices.getOrNull(targetPage).orEmpty().size.coerceAtMost(list.size - pageStart)
-        list.add(insertAt.coerceIn(0, list.size), dragged)
+        if (targetIndex >= 0) list.add(targetIndex, dragged) else list.add(dragged)
+        val stablePages = pageAppSlices.flatMapIndexed { pageIndex, pageApps -> pageApps.map { it.packageName to pageIndex } }.toMap()
+        appPageAssignments = stablePages + (dragged.packageName to targetPage)
+        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key+":"+it.value })
         apps = list
         db.put("app_order", list.joinToString("|") { it.packageName })
         extraHomePages = 0
