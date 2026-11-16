@@ -230,7 +230,10 @@ fun LauncherRoot(db: LauncherDb) {
         val bars = androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView)
         bars.isAppearanceLightStatusBars = false
         bars.isAppearanceLightNavigationBars = false
-        if (navigationMode == "gestures") {
+    }
+    LaunchedEffect(navigationMode, settings) {
+        val bars = androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+        if (navigationMode == "gestures" && !settings) {
             bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             bars.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
         } else {
