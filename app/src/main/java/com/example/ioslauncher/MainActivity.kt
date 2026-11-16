@@ -283,6 +283,8 @@ fun LauncherRoot(db: LauncherDb) {
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     var showWeatherWidget by remember { mutableStateOf(db.get("show_weather_widget", "true") == "true") }
     var showTodayWidget by remember { mutableStateOf(db.get("show_today_widget", "true") == "true") }
+    var weatherWidgetPage by remember { mutableIntStateOf(db.get("weather_widget_page", "0").toIntOrNull() ?: 0) }
+    var todayWidgetPage by remember { mutableIntStateOf(db.get("today_widget_page", "0").toIntOrNull() ?: 0) }
     var widgetDragPosition by remember { mutableStateOf(Offset.Zero) }
     var widgetCanvasBounds by remember { mutableStateOf(Rect.Zero) }
     var widgetPositions by remember { mutableStateOf(db.get("home_widget_positions").split(";").mapNotNull { item ->
@@ -351,6 +353,10 @@ fun LauncherRoot(db: LauncherDb) {
             widgetPositions = widgetPositions - id
         } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetCanvasBounds.width > 0f) {
             val destinationPage = page.coerceAtLeast(0)
+            when (id) {
+                -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page", destinationPage.toString()) }
+                -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page", destinationPage.toString()) }
+            }
             if (id > 0) {
                 homeWidgets = homeWidgets.map { if (it.first == id) id to destinationPage else it }
                 db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString()+":"+it.second })
@@ -372,10 +378,10 @@ fun LauncherRoot(db: LauncherDb) {
         val result = mutableListOf<List<InstalledApp>>()
         var cursor = 0
         var index = 0
-        val minimumPages = maxOf(1, (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1))
+        val minimumPages = maxOf(1, (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1), if(showWeatherWidget) weatherWidgetPage+1 else 1, if(showTodayWidget) todayWidgetPage+1 else 1)
         while (cursor < apps.size || index < minimumPages) {
             val widgetRows = homeWidgets.count { it.second == index }
-            val builtInRows = if (index == 0 && (showWeatherWidget || showTodayWidget)) 1 else 0
+            val builtInRows = if ((showWeatherWidget && index == weatherWidgetPage) || (showTodayWidget && index == todayWidgetPage)) 1 else 0
             val visibleRows = rows.coerceAtMost(4)
             val capacity = (columns * visibleRows - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
             val end = (cursor + capacity).coerceAtMost(apps.size)
@@ -572,10 +578,10 @@ fun LauncherRoot(db: LauncherDb) {
                         horizontalArrangement=Arrangement.spacedBy(10.dp),
                         contentPadding=PaddingValues(top=12.dp, bottom=12.dp)
                     ) {
-                        if (targetPage == 0 && (showWeatherWidget || showTodayWidget)) {
+                        if ((showWeatherWidget && targetPage == weatherWidgetPage) || (showTodayWidget && targetPage == todayWidgetPage)) {
                             item(span={ GridItemSpan(maxLineSpan) }, key="builtin-summary-widgets") {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                                    if (showWeatherWidget) {
+                                    if (showWeatherWidget && targetPage == weatherWidgetPage) {
                                         var center by remember { mutableStateOf(Offset.Zero) }
                                         Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
@@ -586,7 +592,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                 )
                                             }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648)) }
                                     }
-                                    if (showTodayWidget) {
+                                    if (showTodayWidget && targetPage == todayWidgetPage) {
                                         var center by remember { mutableStateOf(Offset.Zero) }
                                         Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
