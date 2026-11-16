@@ -616,7 +616,7 @@ fun LauncherRoot(db: LauncherDb) {
                                     }
                                     if (showTodayWidget && targetPage == todayWidgetPage) {
                                         var center by remember { mutableStateOf(Offset.Zero) }
-                                        Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                        Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
