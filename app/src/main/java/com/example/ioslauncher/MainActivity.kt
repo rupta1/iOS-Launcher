@@ -194,6 +194,18 @@ fun LauncherRoot(db: LauncherDb) {
     }
     val showLabels = labels && hideText == "Off"
     val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
+    SideEffect {
+        activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
+        activity.window.navigationBarColor = when {
+            settings -> android.graphics.Color.BLACK
+            navigationMode == "buttons" -> android.graphics.Color.rgb(228, 161, 124)
+            else -> android.graphics.Color.TRANSPARENT
+        }
+        androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = navigationMode == "buttons" && !settings
+        }
+    }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
 
     LaunchedEffect(Unit) {
