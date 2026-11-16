@@ -169,6 +169,8 @@ fun LauncherRoot(db: LauncherDb) {
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
+    val density = LocalDensity.current
+    val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
     var drawer by remember { mutableStateOf(false) }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
@@ -197,8 +199,7 @@ fun LauncherRoot(db: LauncherDb) {
     val filtered = apps.filter { it.label.contains(search, true) }
     fun finishIconDrag() {
         val dragged = draggingApp ?: return
-        val dropZoneHeight = with(LocalDensity.current) { 112.dp.toPx() }
-        if (dragPosition.y < dropZoneHeight && !dragged.packageName.startsWith("internal:")) {
+        if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
             activity.uninstall(dragged)
             draggingApp = null
             return
@@ -253,6 +254,7 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && !locked) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    if (appBounds.values.none { it.contains(down.position) }) {
                     var dx = 0f
                     var dy = 0f
                     var finished = false
@@ -283,6 +285,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 finished = true
                             }
                         }
+                    }
                     }
                 }
             }
@@ -532,6 +535,7 @@ private fun iconResourceForLabel(label:String):Int {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
@@ -590,7 +594,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
         }
         OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), placeholder={Text("Search apps")}, leadingIcon={Icon(Icons.Default.Search,null)}, singleLine=true)
         Spacer(Modifier.height(14.dp))
-        LazyVerticalGrid(columns=GridCells.Fixed(4), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        LazyVerticalGrid(columns=GridCells.Fixed(4), modifier=Modifier.weight(1f).fillMaxWidth(), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp), contentPadding=PaddingValues(bottom=24.dp)) {
             items(apps, key={it.packageName}) { AppIcon(app=it,labels=labels,fg=fg,index=0,animationSpeed="Fast",size=54.dp,onClick={onLaunch(it)}) }
         }
     }
