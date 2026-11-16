@@ -880,6 +880,24 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             .background(Color(0xFF101724).copy(alpha=.30f))
             .padding(WindowInsets.statusBars.asPaddingValues())
             .padding(horizontal=18.dp, vertical=10.dp)
+            .pointerInput(onClose) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed=false)
+                    var totalY = 0f
+                    var closed = false
+                    while (!closed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        totalY += change.position.y - change.previousPosition.y
+                        if (totalY < -72f) {
+                            change.consume()
+                            onClose()
+                            closed = true
+                        }
+                    }
+                }
+            }
             .verticalScroll(rememberScrollState())
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal=8.dp, vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
