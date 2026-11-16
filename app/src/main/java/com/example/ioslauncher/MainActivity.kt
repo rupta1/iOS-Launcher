@@ -178,26 +178,34 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             Spacer(Modifier.height(24.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
-                Text("Your apps", color=fg, fontWeight=FontWeight.SemiBold, fontSize=16.sp)
-                Text("Page ${page+1} of 3", color=fg.copy(alpha=.55f), fontSize=12.sp)
+            Row(Modifier.fillMaxWidth().padding(top=18.dp, bottom=12.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.weight(1f), Color(0xFFFFB648))
+                HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
+                    SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
+                    Icons.Default.CalendarMonth, Modifier.weight(1f), Color(0xFFEF6375))
             }
-            Spacer(Modifier.height(14.dp))
-            val pageApps = apps.chunked(columns*4).getOrNull(page).orEmpty()
-            LazyVerticalGrid(
-                columns=GridCells.Fixed(columns),
-                modifier=Modifier.weight(1f),
-                verticalArrangement=Arrangement.spacedBy(20.dp),
-                horizontalArrangement=Arrangement.spacedBy(12.dp),
-                contentPadding=PaddingValues(bottom=16.dp)
-            ) {
-                items(pageApps, key={it.packageName}) { app ->
-                    AppIcon(app, labels, fg) {
-                        if (app.packageName == "internal:settings") settings = true else activity.launch(app)
+            AnimatedContent(
+                targetState = page,
+                modifier = Modifier.weight(1f),
+                transitionSpec = {
+                    (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(280)) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)))
+                },
+                label = "home-pages"
+            ) { targetPage ->
+                val pageApps = apps.chunked(columns*3).getOrNull(targetPage).orEmpty()
+                LazyVerticalGrid(
+                    columns=GridCells.Fixed(columns),
+                    modifier=Modifier.fillMaxSize(),
+                    verticalArrangement=Arrangement.spacedBy(18.dp),
+                    horizontalArrangement=Arrangement.spacedBy(10.dp),
+                    contentPadding=PaddingValues(bottom=12.dp)
+                ) {
+                    itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
+                        AppIcon(app, labels, fg, index) {
+                            if (app.packageName == "internal:settings") settings = true else activity.launch(app)
+                        }
                     }
-                }
-                item {
-                    if (pageApps.isEmpty()) Text("Install apps to see them here", color=fg.copy(alpha=.6f), fontSize=12.sp)
                 }
             }
             Surface(shape=RoundedCornerShape(28.dp), color=Color.White.copy(alpha=if (dark) 0f else .48f), modifier=Modifier.fillMaxWidth().padding(bottom=18.dp)) {
