@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
                 InstalledApp(ri.loadLabel(packageManager).toString(), ai.packageName, ri.loadIcon(packageManager))
             }
             .distinctBy { it.packageName }
+            .distinctBy { it.label.trim().lowercase(Locale.getDefault()) }
             .filterNot { it.label.equals("Settings", ignoreCase = true) }
             .plus(
                 listOf(
