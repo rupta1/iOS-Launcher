@@ -317,6 +317,7 @@ fun LauncherRoot(db: LauncherDb) {
     val systemDark = isSystemInDarkTheme()
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
+    var extraHomePages by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "7").toIntOrNull() ?: 7) }
     var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "buttons")) }
     var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Fast")) }
@@ -372,6 +373,7 @@ fun LauncherRoot(db: LauncherDb) {
                 db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
             }
         }
+        extraHomePages = 0
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
         dragEdgeDirection = 0
     }
@@ -393,7 +395,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
         result
     }
-    val pageCount = pageAppSlices.size.coerceAtLeast(1)
+    val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     fun updateDragEdge(position: Offset) {
         val widthPx = activity.window.decorView.width.toFloat()
         val edgePx = with(density) { 34.dp.toPx() }
@@ -404,7 +406,10 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if (direction == 0) dragEdgeDirection = 0
         else if (direction != dragEdgeDirection) {
-            page = (page + direction).coerceIn(0, pageCount - 1)
+            if (direction > 0 && page >= pageCount - 1) {
+                extraHomePages += 1
+                page += 1
+            } else page = (page + direction).coerceIn(0, pageCount - 1)
             dragEdgeDirection = direction
         }
     }
@@ -429,6 +434,7 @@ fun LauncherRoot(db: LauncherDb) {
         list.add(insertAt.coerceIn(0, list.size), dragged)
         apps = list
         db.put("app_order", list.joinToString("|") { it.packageName })
+        extraHomePages = 0
         draggingApp = null
         dragEdgeDirection = 0
     }
