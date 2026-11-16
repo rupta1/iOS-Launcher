@@ -4,6 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
+import android.app.WallpaperManager
+import android.view.MotionEvent
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
@@ -87,6 +91,14 @@ class MainActivity : ComponentActivity() {
     private val widgetPickRequest = 9101
     private val widgetConfigureRequest = 9102
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    private val wallpaperPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try {
+            contentResolver.openInputStream(uri)?.use { WallpaperManager.getInstance(this).setStream(it) }
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            db.put("custom_wallpaper_uri", uri.toString())
+        } catch (_: Exception) { }
+    }
+    fun chooseWallpaper() { wallpaperPicker.launch(arrayOf("image/*")) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
@@ -404,13 +416,23 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
 
+    val systemWallpaper = remember(dark) {
+        try {
+            WallpaperManager.getInstance(context).drawable?.toBitmap(
+                (context.resources.displayMetrics.widthPixels / 2).coerceAtLeast(1),
+                (context.resources.displayMetrics.heightPixels / 2).coerceAtLeast(1)
+            )?.asImageBitmap()
+        } catch (_: Exception) { null }
+    }
     Box(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             )
-        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
+        ).drawBehind {
+            systemWallpaper?.let { drawImage(it, dstSize=androidx.compose.ui.unit.IntSize(size.width.toInt(),size.height.toInt()), alpha=.88f) }
+        }.pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
             if (!drawer && !controlCenter && !settings && !locked) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -545,13 +567,49 @@ fun LauncherRoot(db: LauncherDb) {
                                 item(span={ GridItemSpan(maxLineSpan) }, key="host-widget-$widgetId") {
                                     Box(Modifier.fillMaxWidth().height(customSize.second).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot() }) {
                                         AndroidView(
-                                            factory={ viewContext -> activity.widgetHost.createView(viewContext, widgetId, info) },
-                                            modifier=Modifier.fillMaxSize().pointerInput(widgetId) {
-                                                detectDragGesturesAfterLongPress(
-                                                    onDragStart={ draggingWidgetId=widgetId; widgetDragPosition=widgetCanvasBounds.center },
-                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
-                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
-                                                )
+                                            factory={ viewContext ->
+                                                activity.widgetHost.createView(viewContext, widgetId, info).apply {
+                                                    var downRawX=0f
+                                                    var downRawY=0f
+                                                    var startCenter=Offset.Zero
+                                                    var dragging=false
+                                                    val handler=Handler(Looper.getMainLooper())
+                                                    val beginDrag=Runnable {
+                                                        dragging=true
+                                                        draggingWidgetId=widgetId
+                                                        startCenter=widgetCanvasBounds.center
+                                                        widgetDragPosition=startCenter
+                                                    }
+                                                    setOnTouchListener { _, event ->
+                                                        when(event.actionMasked) {
+                                                            MotionEvent.ACTION_DOWN -> {
+                                                                downRawX=event.rawX; downRawY=event.rawY; dragging=false
+                                                                handler.removeCallbacks(beginDrag)
+                                                                handler.postDelayed(beginDrag, viewContext.resources.getInteger(android.R.integer.config_longPressTimeout).toLong())
+                                                                false
+                                                            }
+                                                            MotionEvent.ACTION_MOVE -> {
+                                                                if (!dragging && (kotlin.math.abs(event.rawX-downRawX)>18f || kotlin.math.abs(event.rawY-downRawY)>18f)) handler.removeCallbacks(beginDrag)
+                                                                if (dragging) {
+                                                                    widgetDragPosition=startCenter+Offset(event.rawX-downRawX,event.rawY-downRawY)
+                                                                    true
+                                                                } else false
+                                                            }
+                                                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                                                handler.removeCallbacks(beginDrag)
+                                                                if (dragging) { finishWidgetDrag(); dragging=false; true } else false
+                                                            }
+                                                            else -> dragging
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            modifier=Modifier.fillMaxSize().graphicsLayer {
+                                                if (draggingWidgetId == widgetId) {
+                                                    translationX=widgetDragPosition.x-widgetCanvasBounds.center.x
+                                                    translationY=widgetDragPosition.y-widgetCanvasBounds.center.y
+                                                    scaleX=1.04f; scaleY=1.04f; alpha=.92f
+                                                }
                                             }
                                         )
                                         Box(Modifier.align(Alignment.BottomEnd).size(28.dp).background(Color(0x88444444), CircleShape)
@@ -646,6 +704,7 @@ fun LauncherRoot(db: LauncherDb) {
                 navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
                 themeMode=themeMode, onThemeMode={ themeMode=it; db.put("theme_mode", it) },
                 onAddWidget={ widgetProviders=activity.availableHomeWidgets(); widgetPickerOpen=true },
+                onChooseWallpaper={ activity.chooseWallpaper() },
                 onColumns={columns=it;db.put("grid_columns",it.toString())},
                 onRows={rows=it;db.put("grid_rows",it.toString())},
                 onLabels={labels=it;db.put("show_labels",it.toString())},
@@ -787,7 +846,7 @@ fun HomeWidget(kicker:String, value:String, subtitle:String, icon:ImageVector, m
     }
 }
 
-private fun iconResourceForLabel(label:String):Int {
+private fun iconResourceForLabel(label:String, packageName:String = ""):Int {
     val n=label.lowercase(Locale.getDefault())
     return when {
         "calendar" in n -> R.drawable.ios18_calendar
@@ -801,7 +860,8 @@ private fun iconResourceForLabel(label:String):Int {
         "photo" in n || "gallery" in n -> R.drawable.ios18_photos
         "file" in n -> R.drawable.ios18_files
         "music" in n || "spotify" in n -> R.drawable.ios18_music
-        "phone" in n || "dialer" in n -> R.drawable.ios18_phone
+        "phonepe" in n || "phonepe" in packageName.lowercase(Locale.getDefault()) -> 0
+        packageName == "com.google.android.dialer" || packageName == "com.android.dialer" || n == "phone" || n == "dialer" -> R.drawable.ios18_phone
         "health" in n -> R.drawable.ios18_health
         "map" in n -> R.drawable.ios18_maps
         "amazon" in n -> R.drawable.ios18_amazon
@@ -827,7 +887,7 @@ fun AppIcon(
     val duration = when(animationSpeed) { "Slow" -> 300; "Normal" -> 210; else -> 140 }
     val scale by animateFloatAsState(if(shown) 1f else .96f, spring(stiffness=androidx.compose.animation.core.Spring.StiffnessMediumLow), label="icon-scale")
     val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(duration), label="icon-alpha")
-    val iconRes=iconResourceForLabel(app.label)
+    val iconRes=iconResourceForLabel(app.label, app.packageName)
     val fallbackBitmap = remember(app.packageName) { app.icon.toBitmap(192,192).asImageBitmap() }
     Column(
         horizontalAlignment=Alignment.CenterHorizontally,
@@ -1098,7 +1158,7 @@ fun SettingsScreen(
     homeStyle:String, minusScreen:String, searchStyle:String, swipeDownAction:String,
     animationSpeed:String, doubleTapLock:Boolean, fillCells:Boolean, lockLayout:Boolean,
     navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
-    themeMode:String, onThemeMode:(String)->Unit, onAddWidget:()->Unit,
+    themeMode:String, onThemeMode:(String)->Unit, onAddWidget:()->Unit, onChooseWallpaper:()->Unit,
     onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
     onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
     onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
@@ -1129,6 +1189,9 @@ fun SettingsScreen(
                 SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("Control Center","None"),onSwipeDown) }
                 SettingChoice("Animation speed",animationSpeed,fg,muted) { choose("Animation speed",animationSpeed,listOf("Fast","Normal","Slow"),onAnimationSpeed) }
                 SettingSwitch("Double tap an empty spot on the Home screen to lock",doubleTapLock,fg,onDoubleTapLock)
+            }
+            SettingsGroup("Personalization",card,muted) {
+                SettingChoice("Wallpaper","Choose wallpaper",fg,muted) { onChooseWallpaper() }
             }
             SettingsGroup("Home screen layout",card,muted) {
                 SettingSwitch("Fill cells of uninstalled apps",fillCells,fg,onFillCells)
