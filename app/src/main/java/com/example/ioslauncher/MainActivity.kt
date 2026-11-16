@@ -181,32 +181,41 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             )
-        ).pointerInput(drawer, controlCenter, locked) {
-            var start = Offset.Zero
-            var totalX = 0f
-            var totalY = 0f
-            detectDragGestures(
-                onDragStart = { start = it; totalX = 0f; totalY = 0f },
-                onDragEnd = {
-                    if (kotlin.math.abs(totalX) > 90 && !drawer && !controlCenter) {
-                        page = (page + if (totalX < 0) 1 else -1).coerceIn(0, 2)
-                    } else if (totalY < -85 && start.y > size.height - 150) {
-                        drawer = true
-                    } else if (totalY < -110 && !drawer && !controlCenter) {
-                        drawer = true
-                    } else if (totalY > 85 && start.y < 130) {
-                        controlCenter = true
-                    } else if (totalY > 90 && drawer) {
-                        drawer = false
-                    } else if (totalY < -90 && controlCenter) {
-                        controlCenter = false
+        ).pointerInput(drawer, controlCenter, locked, navigationMode, homeStyle, swipeDownAction, page) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var dx = 0f
+                var dy = 0f
+                var finished = false
+                while (!finished) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    val delta = change.position - change.previousPosition
+                    dx += delta.x
+                    dy += delta.y
+                    val threshold = viewConfiguration.touchSlop * 1.4f
+                    if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f && !drawer && !controlCenter && !locked) {
+                        page = (page + if (dx < 0) 1 else -1).coerceIn(0, 2)
+                        change.consume()
+                        finished = true
+                    } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                        if (dy < 0 && down.position.y > size.height * .78f && !drawer && !controlCenter && !locked && homeStyle == "With App drawer") {
+                            drawer = true; change.consume(); finished = true
+                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "App finder") {
+                            drawer = true; search = ""; change.consume(); finished = true
+                        } else if (dy > 0 && drawer) {
+                            drawer = false; change.consume(); finished = true
+                        } else if (dy < 0 && controlCenter) {
+                            controlCenter = false; change.consume(); finished = true
+                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked) {
+                            controlCenter = true; change.consume(); finished = true
+                        } else if (down.position.y > size.height * .18f && down.position.y < size.height * .78f) {
+                            finished = true
+                        }
                     }
-                },
-                onDrag = { change, drag ->
-                    totalX += drag.x; totalY += drag.y
-                    change.consume()
                 }
-            )
+            }
         }
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
