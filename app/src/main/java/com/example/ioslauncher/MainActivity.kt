@@ -351,7 +351,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             widgetPositions = widgetPositions - id
-        } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetCanvasBounds.width > 0f) {
+        } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && (id < 0 || widgetCanvasBounds.width > 0f)) {
             val destinationPage = page.coerceAtLeast(0)
             when (id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page", destinationPage.toString()) }
@@ -361,14 +361,16 @@ fun LauncherRoot(db: LauncherDb) {
                 homeWidgets = homeWidgets.map { if (it.first == id) id to destinationPage else it }
                 db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString()+":"+it.second })
             }
-            val maxX = (widgetCanvasBounds.width - 1f).coerceAtLeast(1f)
-            val maxY = (widgetCanvasBounds.height - 1f).coerceAtLeast(1f)
-            val normalized = Offset(
-                ((widgetDragPosition.x - widgetCanvasBounds.left) / maxX).coerceIn(0f,1f),
-                ((widgetDragPosition.y - widgetCanvasBounds.top) / maxY).coerceIn(0f,1f)
-            )
-            widgetPositions = widgetPositions + (id to normalized)
-            db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
+            if (id > 0 && widgetCanvasBounds.width > 0f) {
+                val maxX = (widgetCanvasBounds.width - 1f).coerceAtLeast(1f)
+                val maxY = (widgetCanvasBounds.height - 1f).coerceAtLeast(1f)
+                val normalized = Offset(
+                    ((widgetDragPosition.x - widgetCanvasBounds.left) / maxX).coerceIn(0f,1f),
+                    ((widgetDragPosition.y - widgetCanvasBounds.top) / maxY).coerceIn(0f,1f)
+                )
+                widgetPositions = widgetPositions + (id to normalized)
+                db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
+            }
         }
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
         dragEdgeDirection = 0
@@ -583,14 +585,14 @@ fun LauncherRoot(db: LauncherDb) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                                     if (showWeatherWidget && targetPage == weatherWidgetPage) {
                                         var center by remember { mutableStateOf(Offset.Zero) }
-                                        Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                        Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
                                                     onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
                                                     onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
                                                 )
-                                            }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648)) }
+                                            }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth().graphicsLayer { if(draggingWidgetId == -1001) { translationX=widgetDragPosition.x-center.x; translationY=widgetDragPosition.y-center.y; scaleX=1.04f; scaleY=1.04f } }, Color(0xFFFFB648)) }
                                     }
                                     if (showTodayWidget && targetPage == todayWidgetPage) {
                                         var center by remember { mutableStateOf(Offset.Zero) }
@@ -598,13 +600,13 @@ fun LauncherRoot(db: LauncherDb) {
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
-                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
                                                     onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
                                                 )
                                             }) {
                                             HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
                                                 SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                                Icons.Default.CalendarMonth, Modifier.fillMaxWidth(), Color(0xFFEF6375))
+                                                Icons.Default.CalendarMonth, Modifier.fillMaxWidth().graphicsLayer { if(draggingWidgetId == -1002) { translationX=widgetDragPosition.x-center.x; translationY=widgetDragPosition.y-center.y; scaleX=1.04f; scaleY=1.04f } }, Color(0xFFEF6375))
                                         }
                                     }
                                 }
