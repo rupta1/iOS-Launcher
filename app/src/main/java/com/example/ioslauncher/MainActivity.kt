@@ -88,7 +88,11 @@ class MainActivity : ComponentActivity() {
                     InstalledApp("Settings", "internal:settings", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(125, 130, 145)); cornerRadius=28f })
                 )
             )
-            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+            .sortedWith(compareBy<InstalledApp> {
+                val preferred = listOf("Phone", "Messages", "Safari", "Chrome", "Calendar", "Photos", "Camera", "Weather", "Clock", "Settings", "Notes", "Maps", "Music", "Files", "Health")
+                val position = preferred.indexOfFirst { token -> it.label.contains(token, true) }
+                if (position < 0) 1000 else position
+            }.thenBy { it.label.lowercase(Locale.getDefault()) })
     }
 
     fun launch(app: InstalledApp) {
@@ -137,7 +141,7 @@ fun LauncherRoot(db: LauncherDb) {
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
-                else listOf(Color(0xFFDFE9F6), Color(0xFFF7F5FA), Color(0xFFDCE6F4))
+                else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             )
         ).pointerInput(drawer, controlCenter, locked) {
             var start = Offset.Zero
