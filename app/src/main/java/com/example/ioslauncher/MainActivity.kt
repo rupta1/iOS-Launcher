@@ -519,10 +519,10 @@ fun LauncherRoot(db: LauncherDb) {
                         apps.firstOrNull { it.label.contains("Music",true) }
                     ).filterNotNull().distinctBy { it.packageName }.take(3)
                     dock.forEach { item -> AppIcon(app=item,labels=false,fg=fg,index=0,animationSpeed="Fast",size=52.dp,onClick={activity.launch(item)}) }
-                    DockButton(Icons.Default.Message,"Messages",fg) {
+                    DockIosIcon(R.drawable.ios18_messages, "Messages", fg) {
                         apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
                     }
-                    DockButton(Icons.Default.Settings,"Settings",fg) { settings=true }
+                    DockIosIcon(R.drawable.ios18_settings, "Settings", fg) { settings=true }
                 }
             }
             Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
@@ -551,11 +551,13 @@ fun LauncherRoot(db: LauncherDb) {
                 homeStyle=homeStyle, minusScreen=minusScreen, searchStyle=searchStyle, swipeDownAction=swipeDownAction,
                 animationSpeed=animationSpeed, doubleTapLock=doubleTapLock, fillCells=fillCells, lockLayout=lockLayout,
                 navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
+                themeMode=themeMode, onThemeMode={ themeMode=it; db.put("theme_mode", it) },
+                onAddWidget={ activity.addHomeWidget(page) },
                 onColumns={columns=it;db.put("grid_columns",it.toString())},
                 onRows={rows=it;db.put("grid_rows",it.toString())},
                 onLabels={labels=it;db.put("show_labels",it.toString())},
                 onHideText={hideText=it;db.put("hide_text",it)},
-                onDark={dark=it;db.put("dark_mode",it.toString())},
+                onDark={ themeMode=if(it) "dark" else "light"; db.put("theme_mode", themeMode) },
                 onHomeStyle={homeStyle=it;db.put("home_style",it)},
                 onMinusScreen={minusScreen=it;db.put("minus_screen",it)},
                 onSearchStyle={searchStyle=it;db.put("search_style",it)},
@@ -580,12 +582,12 @@ fun LauncherRoot(db: LauncherDb) {
                 db.put("launcher_unlocked", "true")
             }
         }
-        AnimatedVisibility(visible=draggingApp != null, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
+        AnimatedVisibility(visible=draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
             Surface(shape=RoundedCornerShape(22.dp), color=Color(0xFFE5484D), shadowElevation=12.dp,
                 modifier=Modifier.padding(top=18.dp).size(width=118.dp,height=72.dp)) {
                 Column(Modifier.fillMaxSize(), horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.Center) {
                     Icon(Icons.Default.Delete, null, tint=Color.White, modifier=Modifier.size(25.dp))
-                    Text("Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
+                    Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove widget" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
             }
         }
@@ -740,6 +742,16 @@ fun AppIcon(
         }
     }
 }
+@Composable
+fun DockIosIcon(resId:Int, label:String, fg:Color, onClick:()->Unit) {
+    Column(Modifier.clickable(
+        interactionSource=remember { MutableInteractionSource() }, indication=null, onClick=onClick
+    ).padding(horizontal=7.dp), horizontalAlignment=Alignment.CenterHorizontally) {
+        Image(painterResource(resId), contentDescription=label, modifier=Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)))
+        Text(label, color=fg, fontSize=9.sp)
+    }
+}
+
 @Composable
 fun DockButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, fg: Color, onClick: () -> Unit) {
     Column(Modifier.clickable { onClick() }.padding(horizontal=8.dp), horizontalAlignment=Alignment.CenterHorizontally) {
@@ -943,6 +955,7 @@ fun SettingsScreen(
     homeStyle:String, minusScreen:String, searchStyle:String, swipeDownAction:String,
     animationSpeed:String, doubleTapLock:Boolean, fillCells:Boolean, lockLayout:Boolean,
     navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
+    themeMode:String, onThemeMode:(String)->Unit, onAddWidget:()->Unit,
     onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
     onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
     onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
@@ -994,6 +1007,10 @@ fun SettingsScreen(
                 SettingChoice("Arrange items in Recents",recentsArrangement,fg,muted) {
                     choose("Arrange items in Recents",recentsArrangement,listOf("Vertically","Horizontally"),onRecentsArrangement)
                 }
+                SettingChoice("Appearance",themeMode.replaceFirstChar { it.uppercase() },fg,muted) {
+                    choose("Appearance",themeMode,listOf("system","light","dark"),onThemeMode)
+                }
+                SettingChoice("Widgets","Add system or third-party widgets",fg,muted,onAddWidget)
                 SettingSwitch("Prefer highest supported refresh rate",highRefreshRate,fg,onHighRefreshRate)
             }
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
