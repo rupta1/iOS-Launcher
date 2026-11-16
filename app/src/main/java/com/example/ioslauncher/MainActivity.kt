@@ -151,7 +151,7 @@ fun LauncherRoot(db: LauncherDb) {
     var dark by remember { mutableStateOf(db.get("dark_mode", "false") == "true") }
     var page by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "7").toIntOrNull() ?: 7) }
-    var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "gestures")) }
+    var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "buttons")) }
     var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Fast")) }
     var homeStyle by remember { mutableStateOf(db.get("home_style", "With App drawer")) }
     var minusScreen by remember { mutableStateOf(db.get("minus_screen", "Google Discover")) }
@@ -170,6 +170,7 @@ fun LauncherRoot(db: LauncherDb) {
     val filtered = apps.filter { it.label.contains(search, true) }
     val showLabels = labels && hideText == "Off"
     val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
+    LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
 
     LaunchedEffect(Unit) {
         while (true) {
