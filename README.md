@@ -39,3 +39,12 @@ The build environment used to prepare this project has Java/Kotlin but does not 
 - `BrowserActivity.kt` — native WebView browser
 - `NotesActivity.kt` — SQLite-backed notes
 - `AndroidManifest.xml` — launcher HOME intent and permissions
+
+
+## iOS-inspired visual refresh
+
+The Home screen now includes animated horizontal page transitions, staggered icon entrance motion, rounded-square gradient app glyphs, weather/calendar summary widgets, page dots, a translucent dock, and a swipe-up launcher lock-screen-style welcome overlay.
+
+The custom glyph artwork is drawn with the open-source **Material Icons Extended** Compose library and custom color treatments. An MIT-licensed iOS icon pack is available at [SysAdminDoc/iOSIconPack](https://github.com/SysAdminDoc/iOSIconPack) as an optional separate Android icon-pack project; its separate APK artwork is not bundled into this launcher.
+
+**Lock-screen limitation:** Android's secure lock screen (PIN, pattern, fingerprint, notifications and keyguard) is owned by the operating system. This project provides an iOS-inspired in-launcher lock-screen-style overlay only; it does not replace or bypass Android's real lock screen.
