@@ -170,8 +170,8 @@ fun LauncherRoot(db: LauncherDb) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()), color = fg.copy(alpha=.72f), fontSize=13.sp)
-                    Text("Good afternoon", color = fg, fontSize=28.sp, fontWeight=FontWeight.Bold)
+                    Text(greeting(), color = fg.copy(alpha=.72f), fontSize=14.sp)
+                    Text(SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date()), color = fg, fontSize=24.sp, fontWeight=FontWeight.SemiBold)
                 }
                 Surface(shape=CircleShape, color=Color.White.copy(alpha=.5f), modifier=Modifier.size(42.dp).clickable { controlCenter=true }) {
                     Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Tune, null, tint=fg) }
@@ -208,12 +208,24 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(shape=RoundedCornerShape(28.dp), color=Color.White.copy(alpha=if (dark) 0f else .48f), modifier=Modifier.fillMaxWidth().padding(bottom=18.dp)) {
-                Row(Modifier.padding(horizontal=10.dp, vertical=10.dp), horizontalArrangement=Arrangement.SpaceEvenly, verticalAlignment=Alignment.CenterVertically) {
-                    val pinned = listOf("com.google.android.dialer","com.android.dialer","com.google.android.apps.messaging","com.android.messaging","com.android.chrome","com.google.android.googlequicksearchbox")
-                    pinned.mapNotNull { p -> apps.firstOrNull { it.packageName==p } }.distinctBy{it.packageName}.take(4).forEach { AppIcon(it, false, fg, 0, 52.dp) { activity.launch(it) } }
-                    DockButton(Icons.Default.Apps, "Apps", fg) { drawer=true }
-                    DockButton(Icons.Default.Settings, "Settings", fg) { settings=true }
+            Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
+                repeat(3) { index ->
+                    Box(Modifier.padding(horizontal=4.dp).size(if(page==index) 9.dp else 7.dp)
+                        .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f)))
+                }
+            }
+            Surface(shape=RoundedCornerShape(30.dp), color=Color.White.copy(alpha=if (dark) .16f else .52f),
+                modifier=Modifier.fillMaxWidth().padding(bottom=16.dp).border(1.dp,Color.White.copy(alpha=.45f),RoundedCornerShape(30.dp))) {
+                Row(Modifier.padding(horizontal=12.dp, vertical=12.dp), horizontalArrangement=Arrangement.SpaceEvenly, verticalAlignment=Alignment.CenterVertically) {
+                    val dock = listOf(
+                        apps.firstOrNull { it.label.contains("Phone",true) || it.label.contains("Dialer",true) },
+                        apps.firstOrNull { it.label.contains("Chrome",true) || it.label.contains("Browser",true) },
+                        apps.firstOrNull { it.label.contains("Music",true) }
+                    ).filterNotNull().distinctBy { it.packageName }.take(3)
+                    dock.forEach { item -> AppIcon(item,false,fg,0,52.dp) { activity.launch(item) } }
+                    DockButton(Icons.Default.Message,"Messages",fg) {
+                        apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
+                    }
                 }
             }
             Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
@@ -292,6 +304,12 @@ fun LauncherLockScreen(onUnlock:()->Unit) {
             Box(Modifier.width(110.dp).height(5.dp).clip(CircleShape).background(Color.White))
         }
     }
+}
+
+private fun greeting():String = when(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+    in 5..11 -> "Good morning"
+    in 12..16 -> "Good afternoon"
+    else -> "Good evening"
 }
 
 @Composable
