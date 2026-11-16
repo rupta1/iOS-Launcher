@@ -345,7 +345,7 @@ fun LauncherRoot(db: LauncherDb) {
                         AppIcon(
                             app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
                             dragTranslation=translation, isDragging=isDragging,
-                            onBounds={ key, rect -> appBounds[key] = rect },
+                            onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
                             onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
                             onDrag={ delta -> dragPosition += delta },
                             onDragEnd={ finishIconDrag() },
