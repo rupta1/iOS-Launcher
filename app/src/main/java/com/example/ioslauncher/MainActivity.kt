@@ -347,9 +347,23 @@ fun LauncherRoot(db: LauncherDb) {
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
     val showLabels = labels && hideText == "Off"
-    val appPageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
-    val widgetPageCount = (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1)
-    val pageCount = maxOf(appPageCount, widgetPageCount).coerceAtLeast(1)
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget) {
+        val result = mutableListOf<List<InstalledApp>>()
+        var cursor = 0
+        var index = 0
+        val minimumPages = maxOf(1, (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1))
+        while (cursor < apps.size || index < minimumPages) {
+            val widgetRows = homeWidgets.count { it.second == index }
+            val builtInRows = if (index == 0 && (showWeatherWidget || showTodayWidget)) 1 else 0
+            val capacity = (columns * rows - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
+            val end = (cursor + capacity).coerceAtMost(apps.size)
+            result.add(apps.subList(cursor, end))
+            cursor = end
+            index++
+        }
+        result
+    }
+    val pageCount = pageAppSlices.size.coerceAtLeast(1)
     SideEffect {
         activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
         activity.window.navigationBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
@@ -452,7 +466,7 @@ fun LauncherRoot(db: LauncherDb) {
                 },
                 label = "home-pages"
             ) { targetPage ->
-                val pageApps = if (targetPage < 0) emptyList() else apps.chunked(columns*rows).getOrNull(targetPage).orEmpty()
+                val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
                 if (targetPage < 0 && minusScreen == "Google Discover") {
                     val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
                     Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
@@ -462,82 +476,9 @@ fun LauncherRoot(db: LauncherDb) {
                         Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
                     }
                 } else Column(Modifier.fillMaxSize()) {
-                    if (targetPage == 0 && (showWeatherWidget || showTodayWidget)) {
-                        Row(Modifier.fillMaxWidth().padding(top=18.dp, bottom=12.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                            if (showWeatherWidget) {
-                                var center by remember { mutableStateOf(Offset.Zero) }
-                                Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
-                                    .pointerInput(Unit) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
-                                            onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
-                                            onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
-                                        )
-                                    }) {
-                                    HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648))
-                                }
-                            }
-                            if (showTodayWidget) {
-                                var center by remember { mutableStateOf(Offset.Zero) }
-                                Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
-                                    .pointerInput(Unit) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
-                                            onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
-                                            onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
-                                        )
-                                    }) {
-                                    HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
-                                        SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                        Icons.Default.CalendarMonth, Modifier.fillMaxWidth(), Color(0xFFEF6375))
-                                }
-                            }
-                        }
-                    }
-                    val pageWidgetIds = homeWidgets.filter { it.second == targetPage }.map { it.first }
-                    BoxWithConstraints(
-                        Modifier.fillMaxWidth().height(280.dp)
-                            .onGloballyPositioned { widgetCanvasBounds = it.boundsInRoot() }
-                    ) {
-                        pageWidgetIds.forEach { widgetId ->
-                            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
-                            if (info != null) {
-                                val widgetHeight = info.minHeight.coerceIn(110, 260).dp
-                                val normalized = widgetPositions[widgetId] ?: Offset(0f,0f)
-                                val isWidgetDragging = draggingWidgetId == widgetId
-                                val widgetCenter = remember(widgetId) { mutableStateOf(Offset.Zero) }
-                                val widgetWidth = maxWidth * .92f
-                                AndroidView(
-                                    factory = { viewContext -> activity.widgetHost.createView(viewContext, widgetId, info) },
-                                    modifier = Modifier
-                                        .offset {
-                                            val x = normalized.x * (constraints.maxWidth - with(density) { widgetWidth.roundToPx() }).coerceAtLeast(0)
-                                            val y = normalized.y * (constraints.maxHeight - with(density) { widgetHeight.roundToPx() }).coerceAtLeast(0)
-                                            IntOffset(x.toInt(), y.toInt())
-                                        }
-                                        .width(widgetWidth).height(widgetHeight)
-                                        .onGloballyPositioned { widgetCenter.value = it.boundsInRoot().center }
-                                        .graphicsLayer {
-                                            if (isWidgetDragging) {
-                                                translationX = widgetDragPosition.x - widgetCenter.value.x
-                                                translationY = widgetDragPosition.y - widgetCenter.value.y
-                                                scaleX = 1.025f; scaleY = 1.025f; alpha = .92f
-                                            }
-                                        }
-                                        .pointerInput(widgetId) {
-                                            detectDragGesturesAfterLongPress(
-                                                onDragStart = { draggingWidgetId = widgetId; widgetDragPosition = widgetCenter.value },
-                                                onDrag = { change, amount -> change.consume(); widgetDragPosition += amount },
-                                                onDragEnd = { finishWidgetDrag() },
-                                                onDragCancel = { finishWidgetDrag() }
-                                            )
-                                        }
-                                )
-                            }
-                        }
-                    }
                     LazyVerticalGrid(
                         columns=GridCells.Fixed(columns),
+                        userScrollEnabled=false,
                         modifier=Modifier.weight(1f).fillMaxWidth()
                             .pointerInput(doubleTapLock) {
                                 detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
@@ -545,23 +486,87 @@ fun LauncherRoot(db: LauncherDb) {
                             .pointerInput(page, pageCount) {
                                 var horizontalDistance = 0f
                                 detectHorizontalDragGestures(
-                                    onHorizontalDrag={ change, amount ->
-                                        horizontalDistance += amount
-                                        change.consume()
-                                    },
+                                    onHorizontalDrag={ change, amount -> horizontalDistance += amount; change.consume() },
                                     onDragEnd={
-                                        if (kotlin.math.abs(horizontalDistance) > 70f) {
-                                            page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
-                                        }
+                                        if (kotlin.math.abs(horizontalDistance) > 70f) page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
                                         horizontalDistance = 0f
                                     },
                                     onDragCancel={ horizontalDistance = 0f }
                                 )
                             },
-                        verticalArrangement=Arrangement.spacedBy(18.dp),
+                        verticalArrangement=Arrangement.spacedBy(12.dp),
                         horizontalArrangement=Arrangement.spacedBy(10.dp),
-                        contentPadding=PaddingValues(bottom=12.dp)
+                        contentPadding=PaddingValues(top=12.dp, bottom=12.dp)
                     ) {
+                        if (targetPage == 0 && (showWeatherWidget || showTodayWidget)) {
+                            item(span={ GridItemSpan(maxLineSpan) }, key="builtin-summary-widgets") {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                                    if (showWeatherWidget) {
+                                        var center by remember { mutableStateOf(Offset.Zero) }
+                                        Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                            .pointerInput(Unit) {
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
+                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
+                                                )
+                                            }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648)) }
+                                    }
+                                    if (showTodayWidget) {
+                                        var center by remember { mutableStateOf(Offset.Zero) }
+                                        Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                            .pointerInput(Unit) {
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
+                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
+                                                )
+                                            }) {
+                                            HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
+                                                SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
+                                                Icons.Default.CalendarMonth, Modifier.fillMaxWidth(), Color(0xFFEF6375))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        homeWidgets.filter { it.second == targetPage }.forEach { (widgetId, _) ->
+                            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
+                            if (info != null) {
+                                val customSize = widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(180).dp to info.minHeight.coerceIn(110, 300).dp)
+                                item(span={ GridItemSpan(maxLineSpan) }, key="host-widget-$widgetId") {
+                                    Box(Modifier.fillMaxWidth().height(customSize.second).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot() }) {
+                                        AndroidView(
+                                            factory={ viewContext -> activity.widgetHost.createView(viewContext, widgetId, info) },
+                                            modifier=Modifier.fillMaxSize().pointerInput(widgetId) {
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart={ draggingWidgetId=widgetId; widgetDragPosition=widgetCanvasBounds.center },
+                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
+                                                )
+                                            }
+                                        )
+                                        Box(Modifier.align(Alignment.BottomEnd).size(28.dp).background(Color(0x88444444), CircleShape)
+                                            .pointerInput(widgetId) {
+                                                detectDragGestures(
+                                                    onDrag={ change, amount ->
+                                                        change.consume()
+                                                        val current=widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(180).dp to info.minHeight.coerceIn(110,300).dp)
+                                                        val w=(current.first+with(density){amount.x.toDp()}).coerceIn(140.dp, maxWidth)
+                                                        val h=(current.second+with(density){amount.y.toDp()}).coerceIn(100.dp, 420.dp)
+                                                        widgetSizes=widgetSizes+(widgetId to (w to h))
+                                                        db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
+                                                        try { activity.widgetHost.createView(context,widgetId,info).updateAppWidgetSize(null,w.value.toInt(),h.value.toInt(),w.value.toInt(),h.value.toInt()) } catch (_:Exception) { }
+                                                    }
+                                                )
+                                            }) {
+                                            Icon(Icons.Default.OpenInFull,null,tint=Color.White,modifier=Modifier.padding(5.dp).size(17.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
                             val isDragging = draggingApp?.packageName == app.packageName
                             val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
