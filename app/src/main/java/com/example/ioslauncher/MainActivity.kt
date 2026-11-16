@@ -339,8 +339,12 @@ fun LauncherRoot(db: LauncherDb) {
                     contentPadding=PaddingValues(bottom=12.dp)
                 ) {
                     itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
+                        val isDragging = draggingApp?.packageName == app.packageName
+                        val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
+                        val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
                         AppIcon(
                             app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
+                            dragTranslation=translation, isDragging=isDragging,
                             onBounds={ key, rect -> appBounds[key] = rect },
                             onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
                             onDrag={ delta -> dragPosition += delta },
@@ -539,6 +543,7 @@ private fun iconResourceForLabel(label:String):Int {
 @Composable
 fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
+    dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false,
     onBounds:(String,Rect)->Unit={}, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={},
     onDragEnd:()->Unit={}, onClick:()->Unit
 ) {
@@ -551,7 +556,13 @@ fun AppIcon(
     val fallbackBitmap = remember(app.packageName) { app.icon.toBitmap(192,192).asImageBitmap() }
     Column(
         horizontalAlignment=Alignment.CenterHorizontally,
-        modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }
+        modifier=Modifier.graphicsLayer {
+            translationX=dragTranslation.x
+            translationY=dragTranslation.y
+            scaleX=scale * if(isDragging) 1.10f else 1f
+            scaleY=scale * if(isDragging) 1.10f else 1f
+            this.alpha=if(isDragging) .88f else alpha
+        }
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
             .pointerInput(app.packageName) {
                 detectDragGesturesAfterLongPress(
