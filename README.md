@@ -48,3 +48,21 @@ The Home screen now includes animated horizontal page transitions, staggered ico
 The Home screen bundles selected iOS 18 icon PNGs from [SysAdminDoc/iOSIconPack](https://github.com/SysAdminDoc/iOSIconPack), released under the MIT License. Matching installed apps (Messages, Calendar, Photos, Camera, Weather, Clock, Settings, Notes, Maps, Music, Files, Health, Phone, Safari/Chrome, Amazon, Gmail, WhatsApp, YouTube, Calculator and App Store) use the themed artwork; unmatched apps keep their installed Android icon. The required MIT notice is in `THIRD_PARTY_LICENSES/iOSIconPack-MIT.txt`.
 
 **Lock-screen limitation:** Android's secure lock screen (PIN, pattern, fingerprint, notifications and keyguard) is owned by the operating system. This project provides an iOS-inspired in-launcher lock-screen-style overlay only; it does not replace or bypass Android's real lock screen.
+
+
+## POCO / MIUI-style Home screen settings and performance
+
+The Home screen settings now include:
+- Home screen mode: With App drawer / Without App drawer
+- Left-side screen: Google Discover / None (when enabled, the left page opens the installed Google app)
+- Home screen search style
+- Swipe-down action: App finder / Control Center / None
+- Animation speed: Fast / Normal / Slow
+- Double-tap empty Home area to show the launcher's lock overlay
+- Fill remaining grid cells, lock-layout preference, hide labels, and grid presets including 4×7
+- System navigation preference: Buttons / Gestures
+- Recents arrangement preference and a high-refresh-rate preference
+
+The launcher requests the highest display mode reported by Android when **Prefer highest supported refresh rate** is enabled, and caches fallback app icon bitmaps to reduce repeated work during Compose recomposition. Android may still cap refresh rate because of the phone's battery, thermal, display or per-app policies.
+
+**System-owned features:** The Buttons/Gestures choice opens Android Settings so the user can change the actual system navigation mode. A launcher cannot silently switch Android's navigation mode or draw over the system navigation controls. Similarly, Android owns the Recents screen; the Recents arrangement preference is saved in the launcher but cannot rearrange system Recents. The "Fill cells" preference fills unused cells on the last displayed grid page; it does not retain an app's old slot after uninstalling it.
