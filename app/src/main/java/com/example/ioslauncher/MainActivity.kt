@@ -765,16 +765,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             IosUtilityButton(Icons.Default.QrCodeScanner,"Code Scanner",Modifier.weight(1f)) { open(Intent(Settings.ACTION_SETTINGS)) }
             Spacer(Modifier.weight(3f))
         }
-        Spacer(Modifier.height(14.dp))
-        Surface(shape=RoundedCornerShape(22.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder),modifier=Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                Text("Internet: ${if(state.online) "Online" else "Offline"}",color=white.copy(alpha=.9f),fontSize=12.sp)
-                Text("Wi-Fi: ${state.wifiSsid}",color=white.copy(alpha=.9f),fontSize=12.sp)
-                Text("Bluetooth: ${state.bluetooth}",color=white.copy(alpha=.9f),fontSize=12.sp)
-                Text("Cellular: ${state.cellularType}",color=white.copy(alpha=.9f),fontSize=12.sp)
-            }
-        }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         Text("Swipe up to close",color=white.copy(alpha=.58f),fontSize=10.sp,modifier=Modifier.align(Alignment.CenterHorizontally))
     }
 }
