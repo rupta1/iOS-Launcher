@@ -2,6 +2,8 @@ package com.example.ioslauncher
 
 import android.Manifest
 import android.app.Activity
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
@@ -61,6 +63,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.isSystemInDarkTheme
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,10 +79,18 @@ data class InstalledApp(val label: String, val packageName: String, val icon: Dr
 
 class MainActivity : ComponentActivity() {
     private lateinit var db: LauncherDb
+    lateinit var widgetHost: AppWidgetHost
+        private set
+    private val widgetManager by lazy { AppWidgetManager.getInstance(this) }
+    private var pendingWidgetPage: Int = 0
+    private var pendingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
+    private val widgetPickRequest = 9101
+    private val widgetConfigureRequest = 9102
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
+        widgetHost = AppWidgetHost(this, 0x10A1)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
@@ -97,6 +109,58 @@ class MainActivity : ComponentActivity() {
     private fun applyPreferredRefreshRate() {
         if (db.get("high_refresh_rate", "true") == "true") requestHighestRefreshRate()
     }
+    fun addHomeWidget(page: Int) {
+        pendingWidgetPage = page.coerceAtLeast(0)
+        pendingWidgetId = widgetHost.allocateAppWidgetId()
+        val pick = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_HOST_ID, 0x10A1)
+        }
+        try { startActivityForResult(pick, widgetPickRequest) }
+        catch (_: Exception) { widgetHost.deleteAppWidgetId(pendingWidgetId); pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID }
+    }
+
+    @Deprecated("Deprecated in Android, retained for AppWidgetHost picker compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != widgetPickRequest && requestCode != widgetConfigureRequest) return
+        if (resultCode != Activity.RESULT_OK) {
+            if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) widgetHost.deleteAppWidgetId(pendingWidgetId)
+            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+            return
+        }
+        if (requestCode == widgetPickRequest) {
+            val selectedId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId) ?: pendingWidgetId
+            pendingWidgetId = selectedId
+            val info = widgetManager.getAppWidgetInfo(selectedId)
+            if (info?.configure != null) {
+                val configure = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                    component = info.configure
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, selectedId)
+                }
+                try { startActivityForResult(configure, widgetConfigureRequest) }
+                catch (_: Exception) { persistPickedWidget() }
+            } else persistPickedWidget()
+        } else persistPickedWidget()
+    }
+
+    private fun persistPickedWidget() {
+        if (pendingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
+        val current = db.get("home_widgets").split(",").filter { it.isNotBlank() }.toMutableList()
+        current.add(pendingWidgetId.toString() + ":" + pendingWidgetPage)
+        db.put("home_widgets", current.joinToString(","))
+        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    }
+
+    override fun onStart() { super.onStart(); try { widgetHost.startListening() } catch (_: Exception) { } }
+    override fun onStop() { try { widgetHost.stopListening() } catch (_: Exception) { }; super.onStop() }
+
+    fun removeHomeWidget(id: Int) {
+        val remaining = db.get("home_widgets").split(",").filter { it.isNotBlank() && it.substringBefore(":").toIntOrNull() != id }
+        db.put("home_widgets", remaining.joinToString(","))
+        try { widgetHost.deleteAppWidgetId(id) } catch (_: Exception) { }
+    }
+
     fun requestHighestRefreshRate() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             val mode = windowManager.defaultDisplay.supportedModes.maxByOrNull { it.refreshRate }
