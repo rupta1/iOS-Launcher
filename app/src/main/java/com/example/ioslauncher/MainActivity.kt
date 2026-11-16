@@ -26,6 +26,12 @@ import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +47,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,8 +66,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
-        window.statusBarColor = android.graphics.Color.rgb(242, 241, 247)
-        window.navigationBarColor = android.graphics.Color.rgb(242, 241, 247)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false }
+        applyPreferredRefreshRate()
         val needed = buildList {
             if (android.os.Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
             add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -71,6 +81,20 @@ class MainActivity : ComponentActivity() {
         setContent { LauncherRoot(db) }
     }
 
+    private fun applyPreferredRefreshRate() {
+        if (db.get("high_refresh_rate", "true") == "true") requestHighestRefreshRate()
+    }
+    fun requestHighestRefreshRate() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val mode = display?.supportedModes?.maxByOrNull { it.refreshRate }
+            if (mode != null) window.attributes = window.attributes.apply { preferredDisplayModeId = mode.modeId }
+        }
+    }
+    fun clearPreferredRefreshRate() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = 0 }
+        }
+    }
     @Suppress("DEPRECATION")
     fun loadApps(): List<InstalledApp> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -124,11 +148,25 @@ fun LauncherRoot(db: LauncherDb) {
     var labels by remember { mutableStateOf(db.get("show_labels", "true") == "true") }
     var dark by remember { mutableStateOf(db.get("dark_mode", "false") == "true") }
     var page by remember { mutableIntStateOf(0) }
+    var rows by remember { mutableIntStateOf(db.get("grid_rows", "7").toIntOrNull() ?: 7) }
+    var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "gestures")) }
+    var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Fast")) }
+    var homeStyle by remember { mutableStateOf(db.get("home_style", "With App drawer")) }
+    var minusScreen by remember { mutableStateOf(db.get("minus_screen", "Google Discover")) }
+    var searchStyle by remember { mutableStateOf(db.get("search_style", "Compact search")) }
+    var swipeDownAction by remember { mutableStateOf(db.get("swipe_down_action", "App finder")) }
+    var doubleTapLock by remember { mutableStateOf(db.get("double_tap_lock", "false") == "true") }
+    var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
+    var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
+    var hideText by remember { mutableStateOf(db.get("hide_text", "Off")) }
+    var recentsArrangement by remember { mutableStateOf(db.get("recents_arrangement", "Vertically")) }
+    var highRefreshRate by remember { mutableStateOf(db.get("high_refresh_rate", "true") == "true") }
     var locked by remember { mutableStateOf(db.get("launcher_unlocked", "false") != "true") }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
+    val showLabels = labels && hideText == "Off"
 
     LaunchedEffect(Unit) {
         while (true) {
