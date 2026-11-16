@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -479,6 +480,7 @@ private fun iconResourceForLabel(label:String):Int {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp, onLongClick:()->Unit={}, onClick:()->Unit) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
