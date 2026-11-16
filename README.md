@@ -59,7 +59,7 @@ The Home screen settings now include:
 - Swipe-down action: App finder / Control Center / None
 - Animation speed: Fast / Normal / Slow
 - Double-tap empty Home area to show the launcher's lock overlay
-- Fill remaining grid cells, lock-layout preference, hide labels, and grid presets including 4×7
+- Fill remaining grid cells, long-press to move apps left/right, lock-layout preference, hide labels, and grid presets including 4×7
 - System navigation preference: Buttons / Gestures
 - Recents arrangement preference and a high-refresh-rate preference
 
