@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
