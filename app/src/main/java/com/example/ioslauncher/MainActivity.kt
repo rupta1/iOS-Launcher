@@ -259,7 +259,9 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 } else LazyVerticalGrid(
                     columns=GridCells.Fixed(columns),
-                    modifier=Modifier.fillMaxSize(),
+                    modifier=Modifier.fillMaxSize().pointerInput(doubleTapLock) {
+                        detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
+                    },
                     verticalArrangement=Arrangement.spacedBy(18.dp),
                     horizontalArrangement=Arrangement.spacedBy(10.dp),
                     contentPadding=PaddingValues(bottom=12.dp)
@@ -297,9 +299,7 @@ fun LauncherRoot(db: LauncherDb) {
                     DockButton(Icons.Default.Settings,"Settings",fg) { settings=true }
                 }
             }
-            Box(Modifier.fillMaxWidth().padding(bottom=4.dp).pointerInput(doubleTapLock) {
-                detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
-            }, contentAlignment=Alignment.Center) {
+            Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
                 Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.5f)).clickable { if(homeStyle=="With App drawer") drawer=true })
             }
         }
