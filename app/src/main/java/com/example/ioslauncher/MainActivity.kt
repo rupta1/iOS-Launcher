@@ -240,6 +240,8 @@ fun LauncherRoot(db: LauncherDb) {
         if (id != null && widgetPage != null) id to widgetPage else null
     }) }
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
+    var showWeatherWidget by remember { mutableStateOf(db.get("show_weather_widget", "true") == "true") }
+    var showTodayWidget by remember { mutableStateOf(db.get("show_today_widget", "true") == "true") }
     var widgetDragPosition by remember { mutableStateOf(Offset.Zero) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -302,8 +304,14 @@ fun LauncherRoot(db: LauncherDb) {
     fun finishWidgetDrag() {
         val id = draggingWidgetId
         if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetDragPosition.y < uninstallDropZoneHeight) {
-            activity.removeHomeWidget(id)
-            homeWidgets = homeWidgets.filterNot { it.first == id }
+            when (id) {
+                -1001 -> { showWeatherWidget=false; db.put("show_weather_widget","false") }
+                -1002 -> { showTodayWidget=false; db.put("show_today_widget","false") }
+                else -> {
+                    activity.removeHomeWidget(id)
+                    homeWidgets = homeWidgets.filterNot { it.first == id }
+                }
+            }
         }
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
@@ -423,12 +431,36 @@ fun LauncherRoot(db: LauncherDb) {
                         Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
                     }
                 } else Column(Modifier.fillMaxSize()) {
-                    if (targetPage == 0) {
+                    if (targetPage == 0 && (showWeatherWidget || showTodayWidget)) {
                         Row(Modifier.fillMaxWidth().padding(top=18.dp, bottom=12.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                            HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.weight(1f), Color(0xFFFFB648))
-                            HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
-                                SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                Icons.Default.CalendarMonth, Modifier.weight(1f), Color(0xFFEF6375))
+                            if (showWeatherWidget) {
+                                var center by remember { mutableStateOf(Offset.Zero) }
+                                Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                    .pointerInput(Unit) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
+                                            onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                            onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
+                                        )
+                                    }) {
+                                    HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648))
+                                }
+                            }
+                            if (showTodayWidget) {
+                                var center by remember { mutableStateOf(Offset.Zero) }
+                                Box(Modifier.weight(1f).onGloballyPositioned { center=it.boundsInRoot().center }
+                                    .pointerInput(Unit) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
+                                            onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                            onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
+                                        )
+                                    }) {
+                                    HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
+                                        SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
+                                        Icons.Default.CalendarMonth, Modifier.fillMaxWidth(), Color(0xFFEF6375))
+                                }
+                            }
                         }
                     }
                     val pageWidgetIds = homeWidgets.filter { it.second == targetPage }.map { it.first }
