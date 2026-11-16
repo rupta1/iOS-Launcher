@@ -169,6 +169,7 @@ fun LauncherRoot(db: LauncherDb) {
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
     val showLabels = labels && hideText == "Off"
+    val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -198,7 +199,7 @@ fun LauncherRoot(db: LauncherDb) {
                     dy += delta.y
                     val threshold = viewConfiguration.touchSlop * 1.4f
                     if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f && !drawer && !controlCenter && !locked) {
-                        page = if (dx > 0 && page == 0 && minusScreen == "Google Discover") -1 else (page + if (dx < 0) 1 else -1).coerceIn(0, 2)
+                        page = if (dx > 0 && page == 0 && minusScreen == "Google Discover") -1 else (page + if (dx < 0) 1 else -1).coerceIn(0, pageCount - 1)
                         change.consume()
                         finished = true
                     } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
@@ -276,7 +277,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
-                repeat(((apps.size + columns*rows - 1) / (columns*rows)).coerceAtLeast(1)) { index ->
+                repeat(pageCount) { index ->
                     Box(Modifier.padding(horizontal=4.dp).size(if(page==index) 9.dp else 7.dp)
                         .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f)))
                 }
@@ -304,7 +305,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
 
         AnimatedVisibility(visible=drawer, enter=androidx.compose.animation.fadeIn(), exit=androidx.compose.animation.fadeOut()) {
-            AppDrawer(filtered, search, {search=it}, fg, bg, labels, {activity.launch(it)}, {drawer=false})
+            AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
             ControlCenter(deviceState, dark, { dark=it; db.put("dark_mode",it.toString()) }, {controlCenter=false})
@@ -604,7 +605,7 @@ fun SettingsScreen(
                 SettingChoice("Home screen",homeStyle,fg,muted) { choose("Home screen",homeStyle,listOf("With App drawer","Without App drawer"),onHomeStyle) }
                 SettingChoice("-1 screen",minusScreen,fg,muted) { choose("-1 screen",minusScreen,listOf("Google Discover","None"),onMinusScreen) }
                 SettingChoice("Home screen search",searchStyle,fg,muted) { choose("Home screen search",searchStyle,listOf("Compact search","Full screen search"),onSearchStyle) }
-                SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("App finder","Notification shade","Control Center","None"),onSwipeDown) }
+                SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("App finder","Control Center","None"),onSwipeDown) }
                 SettingChoice("Animation speed",animationSpeed,fg,muted) { choose("Animation speed",animationSpeed,listOf("Fast","Normal","Slow"),onAnimationSpeed) }
                 SettingSwitch("Double tap an empty spot on the Home screen to lock",doubleTapLock,fg,onDoubleTapLock)
             }
