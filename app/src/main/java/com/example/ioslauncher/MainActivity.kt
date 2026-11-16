@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
-import android.app.Activity
 import android.media.AudioManager
 import android.os.Bundle
 import android.provider.Settings
