@@ -258,6 +258,11 @@ fun LauncherRoot(db: LauncherDb) {
                             if (app.packageName == "internal:settings") settings = true else activity.launch(app)
                         }
                     }
+                    if (fillCells) {
+                        items((columns * rows - pageApps.size).coerceAtLeast(0)) {
+                            Spacer(Modifier.size(62.dp))
+                        }
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
@@ -274,14 +279,16 @@ fun LauncherRoot(db: LauncherDb) {
                         apps.firstOrNull { it.label.contains("Chrome",true) || it.label.contains("Browser",true) },
                         apps.firstOrNull { it.label.contains("Music",true) }
                     ).filterNotNull().distinctBy { it.packageName }.take(3)
-                    dock.forEach { item -> AppIcon(item,false,fg,0,52.dp) { activity.launch(item) } }
+                    dock.forEach { item -> AppIcon(item,false,fg,0,"Fast",52.dp) { activity.launch(item) } }
                     DockButton(Icons.Default.Message,"Messages",fg) {
                         apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
                     }
                 }
             }
-            Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
-                Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.5f)).clickable { drawer=true })
+            Box(Modifier.fillMaxWidth().padding(bottom=4.dp).pointerInput(doubleTapLock) {
+                detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
+            }, contentAlignment=Alignment.Center) {
+                Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.5f)).clickable { if(homeStyle=="With App drawer") drawer=true })
             }
         }
 
@@ -422,11 +429,12 @@ private fun iconResourceForLabel(label:String):Int {
 }
 
 @Composable
-fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, size:Dp=62.dp, onClick:()->Unit) {
+fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp, onClick:()->Unit) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
-    LaunchedEffect(app.packageName) { kotlinx.coroutines.delay(index.coerceAtMost(10)*28L); shown=true }
-    val scale by animateFloatAsState(if(shown) 1f else .72f, androidx.compose.animation.core.tween(360), label="icon-scale")
-    val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(300), label="icon-alpha")
+    LaunchedEffect(app.packageName) { shown=true }
+    val duration = when(animationSpeed) { "Slow" -> 300; "Normal" -> 210; else -> 140 }
+    val scale by animateFloatAsState(if(shown) 1f else .96f, spring(stiffness=androidx.compose.animation.core.Spring.StiffnessMediumLow), label="icon-scale")
+    val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(duration), label="icon-alpha")
     val iconRes=iconResourceForLabel(app.label)
     Column(horizontalAlignment=Alignment.CenterHorizontally,
         modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }) {
@@ -463,7 +471,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
         OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), placeholder={Text("Search apps")}, leadingIcon={Icon(Icons.Default.Search,null)}, singleLine=true)
         Spacer(Modifier.height(14.dp))
         LazyVerticalGrid(columns=GridCells.Fixed(4), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            items(apps, key={it.packageName}) { AppIcon(it, labels, fg, 0, 54.dp) { onLaunch(it) } }
+            items(apps, key={it.packageName}) { AppIcon(it, labels, fg, 0, "Fast", 54.dp) { onLaunch(it) } }
         }
     }
 }
