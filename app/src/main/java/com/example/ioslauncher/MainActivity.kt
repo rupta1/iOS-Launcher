@@ -6,6 +6,9 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.app.WallpaperManager
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.os.Handler
 import android.os.Looper
 import android.content.Intent
@@ -585,7 +588,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                             MotionEvent.ACTION_DOWN -> {
                                                                 downRawX=event.rawX; downRawY=event.rawY; dragging=false
                                                                 handler.removeCallbacks(beginDrag)
-                                                                handler.postDelayed(beginDrag, viewContext.resources.getInteger(android.R.integer.config_longPressTimeout).toLong())
+                                                                handler.postDelayed(beginDrag, ViewConfiguration.getLongPressTimeout().toLong())
                                                                 false
                                                             }
                                                             MotionEvent.ACTION_MOVE -> {
