@@ -234,6 +234,14 @@ fun LauncherRoot(db: LauncherDb) {
         })
     }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var homeWidgets by remember { mutableStateOf(db.get("home_widgets").split(",").mapNotNull { token ->
+        val parts = token.split(":")
+        val id = parts.getOrNull(0)?.toIntOrNull()
+        val widgetPage = parts.getOrNull(1)?.toIntOrNull()
+        if (id != null && widgetPage != null) id to widgetPage else null
+    }) }
+    var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
+    var widgetDragPosition by remember { mutableStateOf(Offset.Zero) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val density = LocalDensity.current
@@ -244,7 +252,9 @@ fun LauncherRoot(db: LauncherDb) {
     var search by remember { mutableStateOf("") }
     var columns by remember { mutableIntStateOf(db.get("grid_columns", "4").toIntOrNull() ?: 4) }
     var labels by remember { mutableStateOf(db.get("show_labels", "true") == "true") }
-    var dark by remember { mutableStateOf(db.get("dark_mode", "false") == "true") }
+    var themeMode by remember { mutableStateOf(db.get("theme_mode", "system")) }
+    val systemDark = isSystemInDarkTheme()
+    val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "7").toIntOrNull() ?: 7) }
     var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "buttons")) }
@@ -290,8 +300,18 @@ fun LauncherRoot(db: LauncherDb) {
         }
         draggingApp = null
     }
+    fun finishWidgetDrag() {
+        val id = draggingWidgetId
+        if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetDragPosition.y < uninstallDropZoneHeight) {
+            activity.removeHomeWidget(id)
+            homeWidgets = homeWidgets.filterNot { it.first == id }
+        }
+        draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    }
     val showLabels = labels && hideText == "Off"
-    val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
+    val appPageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
+    val widgetPageCount = (homeWidgets.maxOfOrNull { it.second + 1 } ?: 1)
+    val pageCount = maxOf(appPageCount, widgetPageCount).coerceAtLeast(1)
     SideEffect {
         activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
         activity.window.navigationBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
@@ -378,12 +398,6 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             Spacer(Modifier.height(24.dp))
-            Row(Modifier.fillMaxWidth().padding(top=18.dp, bottom=12.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.weight(1f), Color(0xFFFFB648))
-                HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
-                    SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                    Icons.Default.CalendarMonth, Modifier.weight(1f), Color(0xFFEF6375))
-            }
             AnimatedContent(
                 targetState = page,
                 modifier = Modifier.weight(1f),
