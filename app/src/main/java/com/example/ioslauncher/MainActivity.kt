@@ -109,37 +109,48 @@ class MainActivity : ComponentActivity() {
     private fun applyPreferredRefreshRate() {
         if (db.get("high_refresh_rate", "true") == "true") requestHighestRefreshRate()
     }
-    fun addHomeWidget(page: Int) {
+    fun availableHomeWidgets(): List<android.appwidget.AppWidgetProviderInfo> =
+        widgetManager.installedProviders.sortedWith(compareBy({ it.loadLabel(packageManager).toString().lowercase(Locale.getDefault()) }, { it.provider.packageName }))
+
+    fun addHomeWidget(page: Int, provider: android.appwidget.AppWidgetProviderInfo) {
         pendingWidgetPage = page.coerceAtLeast(0)
         pendingWidgetId = widgetHost.allocateAppWidgetId()
-        val pick = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+        val bound = try { widgetManager.bindAppWidgetIdIfAllowed(pendingWidgetId, provider.provider) } catch (_: Exception) { false }
+        if (bound) finishWidgetBinding(provider) else {
+            val bind = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider.provider)
+            }
+            try { startActivityForResult(bind, widgetBindRequest) }
+            catch (_: Exception) { widgetHost.deleteAppWidgetId(pendingWidgetId); pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID }
         }
-        try { startActivityForResult(pick, widgetPickRequest) }
-        catch (_: Exception) { widgetHost.deleteAppWidgetId(pendingWidgetId); pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID }
     }
 
-    @Deprecated("Deprecated in Android, retained for AppWidgetHost picker compatibility")
+    private val widgetBindRequest = 9103
+
+    private fun finishWidgetBinding(provider: android.appwidget.AppWidgetProviderInfo) {
+        if (provider.configure != null) {
+            val configure = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = provider.configure
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+            }
+            try { startActivityForResult(configure, widgetConfigureRequest) }
+            catch (_: Exception) { persistPickedWidget() }
+        } else persistPickedWidget()
+    }
+
+    @Deprecated("Deprecated in Android, retained for widget configuration compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != widgetPickRequest && requestCode != widgetConfigureRequest) return
+        if (requestCode != widgetBindRequest && requestCode != widgetConfigureRequest) return
         if (resultCode != Activity.RESULT_OK) {
             if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) widgetHost.deleteAppWidgetId(pendingWidgetId)
             pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
             return
         }
-        if (requestCode == widgetPickRequest) {
-            val selectedId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId) ?: pendingWidgetId
-            pendingWidgetId = selectedId
-            val info = widgetManager.getAppWidgetInfo(selectedId)
-            if (info?.configure != null) {
-                val configure = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-                    component = info.configure
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, selectedId)
-                }
-                try { startActivityForResult(configure, widgetConfigureRequest) }
-                catch (_: Exception) { persistPickedWidget() }
-            } else persistPickedWidget()
+        if (requestCode == widgetBindRequest) {
+            val provider = widgetManager.getAppWidgetInfo(pendingWidgetId)
+            if (provider != null) finishWidgetBinding(provider) else persistPickedWidget()
         } else persistPickedWidget()
     }
 
