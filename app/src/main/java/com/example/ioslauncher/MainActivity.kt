@@ -583,7 +583,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                         startCenter=widgetCanvasBounds.center
                                                         widgetDragPosition=startCenter
                                                     }
-                                                    setOnTouchListener { _, event ->
+                                                    val touchHandler: (View, MotionEvent) -> Boolean = { _, event ->
                                                         when(event.actionMasked) {
                                                             MotionEvent.ACTION_DOWN -> {
                                                                 downRawX=event.rawX; downRawY=event.rawY; dragging=false
@@ -605,6 +605,11 @@ fun LauncherRoot(db: LauncherDb) {
                                                             else -> dragging
                                                         }
                                                     }
+                                                    fun attachDragListener(view: View) {
+                                                        view.setOnTouchListener(touchHandler)
+                                                        if (view is ViewGroup) for (childIndex in 0 until view.childCount) attachDragListener(view.getChildAt(childIndex))
+                                                    }
+                                                    attachDragListener(this)
                                                 }
                                             },
                                             modifier=Modifier.fillMaxSize().graphicsLayer {
