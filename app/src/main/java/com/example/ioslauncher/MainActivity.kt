@@ -104,7 +104,11 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     private val wallpaperPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) try {
-            contentResolver.openInputStream(uri)?.use { WallpaperManager.getInstance(this).setStream(it) }
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bitmap = android.graphics.BitmapFactory.decodeStream(input)
+                if (bitmap != null) WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
+                else throw IllegalStateException("Unable to decode selected wallpaper")
+            }
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             db.put("custom_wallpaper_uri", uri.toString())
             wallpaperRevision++
@@ -296,6 +300,21 @@ fun LauncherRoot(db: LauncherDb) {
         if(id!=null && w!=null && h!=null) id to (w.dp to h.dp) else null
     }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
+    var dragEdgeDirection by remember { mutableIntStateOf(0) }
+    fun updateDragEdge(position: Offset) {
+        val widthPx = activity.window.decorView.width.toFloat()
+        val edgePx = with(density) { 34.dp.toPx() }
+        val direction = when {
+            position.x <= edgePx -> -1
+            position.x >= widthPx - edgePx -> 1
+            else -> 0
+        }
+        if (direction == 0) dragEdgeDirection = 0
+        else if (direction != dragEdgeDirection) {
+            page = (page + direction).coerceIn(0, pageCount - 1)
+            dragEdgeDirection = direction
+        }
+    }
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val density = LocalDensity.current
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
@@ -335,23 +354,24 @@ fun LauncherRoot(db: LauncherDb) {
         if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
             activity.uninstall(dragged)
             draggingApp = null
+            dragEdgeDirection = 0
             return
         }
+        val targetPage = page.coerceIn(0, pageCount - 1)
+        val visiblePackages = pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
         val target = appBounds.entries.firstOrNull { (key, rect) ->
-            key != dragged.packageName && rect.contains(dragPosition)
+            key != dragged.packageName && key in visiblePackages && rect.contains(dragPosition)
         }?.key
-        if (target != null) {
-            val list = apps.toMutableList()
-            val from = list.indexOfFirst { it.packageName == dragged.packageName }
-            val to = list.indexOfFirst { it.packageName == target }
-            if (from >= 0 && to >= 0 && from != to) {
-                val item = list.removeAt(from)
-                list.add(to, item)
-                apps = list
-                db.put("app_order", list.joinToString("|") { it.packageName })
-            }
-        }
+        val list = apps.toMutableList()
+        list.removeAll { it.packageName == dragged.packageName }
+        val targetIndex = target?.let { key -> list.indexOfFirst { it.packageName == key } } ?: -1
+        val pageStart = pageAppSlices.take(targetPage).sumOf { it.size }.coerceIn(0, list.size)
+        val insertAt = if (targetIndex >= 0) targetIndex else pageStart + pageAppSlices.getOrNull(targetPage).orEmpty().size.coerceAtMost(list.size - pageStart)
+        list.add(insertAt.coerceIn(0, list.size), dragged)
+        apps = list
+        db.put("app_order", list.joinToString("|") { it.packageName })
         draggingApp = null
+        dragEdgeDirection = 0
     }
     fun finishWidgetDrag() {
         val id = draggingWidgetId
@@ -366,6 +386,11 @@ fun LauncherRoot(db: LauncherDb) {
             }
             widgetPositions = widgetPositions - id
         } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetCanvasBounds.width > 0f) {
+            val destinationPage = page.coerceAtLeast(0)
+            if (id > 0) {
+                homeWidgets = homeWidgets.map { if (it.first == id) id to destinationPage else it }
+                db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString()+":"+it.second })
+            }
             val maxX = (widgetCanvasBounds.width - 1f).coerceAtLeast(1f)
             val maxY = (widgetCanvasBounds.height - 1f).coerceAtLeast(1f)
             val normalized = Offset(
@@ -376,6 +401,7 @@ fun LauncherRoot(db: LauncherDb) {
             db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
         }
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+        dragEdgeDirection = 0
     }
     val showLabels = labels && hideText == "Off"
     val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget) {
@@ -441,14 +467,12 @@ fun LauncherRoot(db: LauncherDb) {
     }
     Box(
         Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
+            if (systemWallpaper == null) Brush.verticalGradient(
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
-            )
-        ).drawBehind {
-            systemWallpaper?.let { drawImage(it, dstSize=androidx.compose.ui.unit.IntSize(size.width.toInt(),size.height.toInt()), alpha=.88f) }
-        }.pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
-            if (!drawer && !controlCenter && !settings && !locked) {
+            ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
+        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page, draggingApp, draggingWidgetId) {
+            if (!drawer && !controlCenter && !settings && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (appBounds.values.none { it.contains(down.position) }) {
@@ -488,6 +512,9 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
     ) {
+        if (systemWallpaper != null) {
+            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
+        }
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
             renderEffect = if (controlCenter && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(20f, 20f) else null
         }) {
@@ -528,9 +555,9 @@ fun LauncherRoot(db: LauncherDb) {
                             .pointerInput(doubleTapLock) {
                                 detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
                             }
-                            .pointerInput(page, pageCount) {
+                            .pointerInput(page, pageCount, draggingApp, draggingWidgetId) {
                                 var horizontalDistance = 0f
-                                detectHorizontalDragGestures(
+                                if (draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) detectHorizontalDragGestures(
                                     onHorizontalDrag={ change, amount -> horizontalDistance += amount; change.consume() },
                                     onDragEnd={
                                         if (kotlin.math.abs(horizontalDistance) > 70f) page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
@@ -552,7 +579,7 @@ fun LauncherRoot(db: LauncherDb) {
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
-                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount },
+                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
                                                     onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
                                                 )
                                             }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth(), Color(0xFFFFB648)) }
@@ -638,7 +665,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 dragTranslation=translation, isDragging=isDragging,
                                 onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
                                 onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
-                                onDrag={ delta -> dragPosition += delta },
+                                onDrag={ delta -> dragPosition += delta; updateDragEdge(dragPosition) },
                                 onDragEnd={ finishIconDrag() },
                                 onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
                             )
