@@ -537,30 +537,123 @@ fun SmallTile(icon:String,title:String,modifier:Modifier=Modifier,onClick:()->Un
 }
 
 @Composable
-fun SettingsScreen(fg:Color,bg:Color,columns:Int,labels:Boolean,dark:Boolean,onColumns:(Int)->Unit,onLabels:(Boolean)->Unit,onDark:(Boolean)->Unit,onClose:()->Unit,onDeviceSettings:()->Unit) {
-    Column(Modifier.fillMaxSize().background(bg).padding(WindowInsets.statusBars.asPaddingValues()).padding(18.dp)) {
-        Row(verticalAlignment=Alignment.CenterVertically) {
-            Text("Settings",fontSize=28.sp,fontWeight=FontWeight.Bold,color=fg,modifier=Modifier.weight(1f))
-            IconButton(onClick=onClose){Icon(Icons.Default.Close,null,tint=fg)}
+fun SettingsScreen(
+    columns:Int, rows:Int, labels:Boolean, hideText:String, dark:Boolean,
+    homeStyle:String, minusScreen:String, searchStyle:String, swipeDownAction:String,
+    animationSpeed:String, doubleTapLock:Boolean, fillCells:Boolean, lockLayout:Boolean,
+    navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
+    onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
+    onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
+    onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
+    onDoubleTapLock:(Boolean)->Unit, onFillCells:(Boolean)->Unit, onLockLayout:(Boolean)->Unit,
+    onNavigationMode:(String)->Unit, onRecentsArrangement:(String)->Unit, onHighRefreshRate:(Boolean)->Unit,
+    onClose:()->Unit, onDeviceSettings:()->Unit
+) {
+    var choiceTitle by remember { mutableStateOf<String?>(null) }
+    var choiceValue by remember { mutableStateOf("") }
+    var choiceOptions by remember { mutableStateOf(emptyList<String>()) }
+    var choiceAction by remember { mutableStateOf<(String)->Unit>({}) }
+    val card=Color(0xFF242424)
+    val fg=Color(0xFFF5F5F7)
+    val muted=Color(0xFF99999F)
+    fun choose(title:String,value:String,options:List<String>,action:(String)->Unit) {
+        choiceTitle=title; choiceValue=value; choiceOptions=options; choiceAction=action
+    }
+    Column(Modifier.fillMaxSize().background(Color.Black).padding(WindowInsets.statusBars.asPaddingValues()).padding(horizontal=18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top=4.dp), verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onClose) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
         }
-        Text("Customize your Home Screen",color=fg.copy(alpha=.65f),fontSize=13.sp)
-        Spacer(Modifier.height(18.dp))
-        Surface(shape=RoundedCornerShape(20.dp),color=Color.White,modifier=Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                Text("Home Screen",fontWeight=FontWeight.Bold,color=Color.DarkGray)
-                Text("Icon columns: $columns",color=Color.DarkGray)
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { listOf(3,4,5).forEach { n -> FilterChip(selected=columns==n,onClick={onColumns(n)},label={Text("$n")}) } }
-                Row(verticalAlignment=Alignment.CenterVertically) { Text("Show icon labels",Modifier.weight(1f),color=Color.DarkGray);Switch(labels,onLabels) }
-                Row(verticalAlignment=Alignment.CenterVertically) { Text("Dark appearance",Modifier.weight(1f),color=Color.DarkGray);Switch(dark,onDark) }
+        Text("Home screen",color=fg,fontSize=29.sp,fontWeight=FontWeight.Normal,modifier=Modifier.padding(top=18.dp,bottom=24.dp))
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(18.dp)) {
+            SettingsGroup("Home screen settings",card,muted) {
+                SettingChoice("Home screen",homeStyle,fg,muted) { choose("Home screen",homeStyle,listOf("With App drawer","Without App drawer"),onHomeStyle) }
+                SettingChoice("-1 screen",minusScreen,fg,muted) { choose("-1 screen",minusScreen,listOf("Google Discover","None"),onMinusScreen) }
+                SettingChoice("Home screen search",searchStyle,fg,muted) { choose("Home screen search",searchStyle,listOf("Compact search","Full screen search"),onSearchStyle) }
+                SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("App finder","Notification shade","Control Center","None"),onSwipeDown) }
+                SettingChoice("Animation speed",animationSpeed,fg,muted) { choose("Animation speed",animationSpeed,listOf("Fast","Normal","Slow"),onAnimationSpeed) }
+                SettingSwitch("Double tap an empty spot on the Home screen to lock",doubleTapLock,fg,onDoubleTapLock)
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        listOf("Wi-Fi, mobile network & Bluetooth","Display & brightness","Battery","Notifications","Privacy & security","Android system settings").forEach { item ->
-            Surface(onClick=onDeviceSettings,shape=RoundedCornerShape(15.dp),color=Color.White,modifier=Modifier.fillMaxWidth().padding(vertical=4.dp)) {
-                Row(Modifier.padding(15.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(item,color=Color.DarkGray,modifier=Modifier.weight(1f),fontSize=14.sp);Icon(Icons.Default.ChevronRight,null,tint=Color.Gray)
+            SettingsGroup("Home screen layout",card,muted) {
+                SettingSwitch("Fill cells of uninstalled apps",fillCells,fg,onFillCells)
+                SettingSwitch("Lock Home screen layout",lockLayout,fg,onLockLayout)
+                SettingChoice("Don't show text",hideText,fg,muted) { choose("Don't show text",hideText,listOf("Off","App names","All labels"),onHideText) }
+                SettingChoice("Home screen layout","${columns}×${rows}",fg,muted) {
+                    choose("Home screen layout","${columns}×${rows}",listOf("4×5","4×6","4×7","5×5","5×6","5×7","3×6"),{ v ->
+                        val parts=v.split("×"); onColumns(parts[0].toInt()); onRows(parts[1].toInt())
+                    })
                 }
             }
+            SettingsGroup("Other",card,muted) {
+                SettingChoice("System navigation",if(navigationMode=="buttons") "Buttons" else "Gestures",fg,muted) {
+                    choose("System navigation",if(navigationMode=="buttons") "Buttons" else "Gestures",listOf("Buttons","Gestures"),{ value ->
+                        onNavigationMode(value.lowercase())
+                        onDeviceSettings()
+                    })
+                }
+                SettingChoice("Arrange items in Recents",recentsArrangement,fg,muted) {
+                    choose("Arrange items in Recents",recentsArrangement,listOf("Vertically","Horizontally"),onRecentsArrangement)
+                }
+                SettingSwitch("Prefer highest supported refresh rate",highRefreshRate,fg,onHighRefreshRate)
+            }
+            Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                    Text("About system navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Buttons or gesture navigation is controlled by Android / MIUI / HyperOS. Choose a mode above, then finish the change in your phone's system settings. The launcher uses edge swipes for its own actions when Gestures is selected.",color=muted,fontSize=12.sp)
+                    Text("Recents layout is owned by the system launcher. This preference is saved here but cannot rearrange Android's system Recents screen.",color=muted,fontSize=12.sp)
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+    if(choiceTitle!=null) {
+        AlertDialog(
+            onDismissRequest={choiceTitle=null},
+            title={Text(choiceTitle!!)},
+            text={
+                Column {
+                    choiceOptions.forEach { option ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            choiceAction(option); choiceTitle=null
+                        }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                            RadioButton(selected=option.equals(choiceValue,true),onClick={
+                                choiceAction(option); choiceTitle=null
+                            })
+                            Spacer(Modifier.width(10.dp))
+                            Text(option)
+                        }
+                    }
+                }
+            },
+            confirmButton={ TextButton(onClick={choiceTitle=null}) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun SettingsGroup(title:String,card:Color,muted:Color,content:@Composable ColumnScope.()->Unit) {
+    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Text(title,color=Color(0xFF85859A),fontSize=13.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(start=16.dp,bottom=2.dp))
+        Surface(shape=RoundedCornerShape(20.dp),color=card,modifier=Modifier.fillMaxWidth()) {
+            Column(content=content)
         }
     }
 }
+
+@Composable
+private fun SettingChoice(title:String,value:String,fg:Color,muted:Color,onClick:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(horizontal=18.dp,vertical=17.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(title,color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
+        Text(value,color=muted,fontSize=13.sp,maxLines=1)
+        Spacer(Modifier.width(8.dp))
+        Icon(Icons.Default.ChevronRight,null,tint=muted,modifier=Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun SettingSwitch(title:String,checked:Boolean,fg:Color,onChange:(Boolean)->Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal=18.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(title,color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
+        Switch(checked=checked,onCheckedChange=onChange)
+    }
+}
+
