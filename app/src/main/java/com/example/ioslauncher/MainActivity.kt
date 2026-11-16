@@ -103,16 +103,19 @@ class MainActivity : ComponentActivity() {
     private val widgetConfigureRequest = 9102
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     private val wallpaperPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                val bitmap = android.graphics.BitmapFactory.decodeStream(input)
-                if (bitmap != null) WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
-                else throw IllegalStateException("Unable to decode selected wallpaper")
-            }
+        if (uri != null) {
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            // Keep the selected image as the launcher's own background even on devices
+            // that restrict writing the system wallpaper from a third-party launcher.
             db.put("custom_wallpaper_uri", uri.toString())
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(input)
+                    if (bitmap != null) WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
+                }
+            } catch (_: Exception) { }
             wallpaperRevision++
-        } catch (_: Exception) { }
+        }
     }
     fun chooseWallpaper() { wallpaperPicker.launch(arrayOf("image/*")) }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -400,7 +403,7 @@ fun LauncherRoot(db: LauncherDb) {
         fun capacityFor(index: Int): Int {
             val widgetRows = homeWidgets.count { it.second == index }
             val builtInRows = if ((showWeatherWidget && index == weatherWidgetPage) || (showTodayWidget && index == todayWidgetPage)) 1 else 0
-            return (columns * rows.coerceAtMost(4) - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
+            return (columns * rows.coerceAtLeast(1) - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
         }
         apps.forEach { app ->
             val explicitPage = appPageAssignments[app.packageName]
