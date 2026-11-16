@@ -448,6 +448,7 @@ fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSp
     val scale by animateFloatAsState(if(shown) 1f else .96f, spring(stiffness=androidx.compose.animation.core.Spring.StiffnessMediumLow), label="icon-scale")
     val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(duration), label="icon-alpha")
     val iconRes=iconResourceForLabel(app.label)
+    val fallbackBitmap = remember(app.packageName) { app.icon.toBitmap(192,192).asImageBitmap() }
     Column(horizontalAlignment=Alignment.CenterHorizontally,
         modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }) {
         Surface(onClick=onClick, modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
@@ -455,7 +456,7 @@ fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSp
             if(iconRes!=0) {
                 Image(painterResource(iconRes),null,Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)))
             } else {
-                Image(app.icon.toBitmap(192,192).asImageBitmap(),null,
+                Image(fallbackBitmap,null,
                     Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)).padding(1.dp))
             }
         }
