@@ -430,7 +430,10 @@ fun LauncherRoot(db: LauncherDb) {
                 onRecentsArrangement={recentsArrangement=it;db.put("recents_arrangement",it)},
                 onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
                 onClose={settings=false},
-                onDeviceSettings={context.startActivity(Intent(Settings.ACTION_SETTINGS))}
+                onDeviceSettings={
+                    try { context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
+                    catch (_: Exception) { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                }
             )
         }
         AnimatedVisibility(visible=locked, enter=fadeIn(tween(280)), exit=fadeOut(tween(300))) {
