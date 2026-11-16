@@ -211,7 +211,7 @@ fun LauncherRoot(db: LauncherDb) {
             Surface(shape=RoundedCornerShape(28.dp), color=Color.White.copy(alpha=if (dark) 0f else .48f), modifier=Modifier.fillMaxWidth().padding(bottom=18.dp)) {
                 Row(Modifier.padding(horizontal=10.dp, vertical=10.dp), horizontalArrangement=Arrangement.SpaceEvenly, verticalAlignment=Alignment.CenterVertically) {
                     val pinned = listOf("com.google.android.dialer","com.android.dialer","com.google.android.apps.messaging","com.android.messaging","com.android.chrome","com.google.android.googlequicksearchbox")
-                    pinned.mapNotNull { p -> apps.firstOrNull { it.packageName==p } }.distinctBy{it.packageName}.take(4).forEach { AppIcon(it, false, fg, 52.dp) { activity.launch(it) } }
+                    pinned.mapNotNull { p -> apps.firstOrNull { it.packageName==p } }.distinctBy{it.packageName}.take(4).forEach { AppIcon(it, false, fg, 0, 52.dp) { activity.launch(it) } }
                     DockButton(Icons.Default.Apps, "Apps", fg) { drawer=true }
                     DockButton(Icons.Default.Settings, "Settings", fg) { settings=true }
                 }
@@ -295,17 +295,77 @@ fun LauncherLockScreen(onUnlock:()->Unit) {
 }
 
 @Composable
-fun AppIcon(app: InstalledApp, labels: Boolean, fg: Color, size: Dp = 58.dp, onClick: () -> Unit) {
-    val bitmap = remember(app.packageName) { app.icon.toBitmap(144,144).asImageBitmap() }
-    Column(horizontalAlignment=Alignment.CenterHorizontally, modifier=Modifier.clickable { onClick() }) {
-        Image(bitmap, null, Modifier.size(size).clip(RoundedCornerShape(17.dp)).shadow(3.dp, RoundedCornerShape(17.dp)))
-        if (labels) {
-            Spacer(Modifier.height(5.dp))
-            Text(app.label, color=fg, fontSize=10.sp, maxLines=1, textAlign=TextAlign.Center)
+fun HomeWidget(kicker:String, value:String, subtitle:String, icon:ImageVector, modifier:Modifier, accent:Color) {
+    Surface(modifier.height(136.dp), shape=RoundedCornerShape(25.dp), color=Color.White.copy(alpha=.84f)) {
+        Column(Modifier.padding(15.dp), verticalArrangement=Arrangement.SpaceBetween) {
+            Text(kicker, color=Color(0xFF777781), fontSize=10.sp, fontWeight=FontWeight.Bold, letterSpacing=1.sp)
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text(value, color=accent, fontSize=33.sp, fontWeight=FontWeight.Light, modifier=Modifier.weight(1f))
+                Icon(icon, null, tint=accent, modifier=Modifier.size(28.dp))
+            }
+            Text(subtitle, color=Color(0xFF55555E), fontSize=12.sp, maxLines=1)
         }
     }
 }
 
+private data class IconVisual(val icon:ImageVector, val colors:List<Color>, val glyph:Color=Color.White, val calendar:Boolean=false)
+
+private fun iconVisual(label:String):IconVisual? {
+    val n=label.lowercase(Locale.getDefault())
+    return when {
+        "message" in n || "sms" in n -> IconVisual(Icons.Default.Message,listOf(Color(0xFF54DE83),Color(0xFF0AAE56)))
+        "calendar" in n -> IconVisual(Icons.Default.CalendarMonth,listOf(Color.White,Color(0xFFF5F4F7)),Color(0xFFEF5265),true)
+        "photo" in n || "gallery" in n -> IconVisual(Icons.Default.PhotoLibrary,listOf(Color.White,Color(0xFFF6F4FB)),Color(0xFF8A65D5))
+        "camera" in n -> IconVisual(Icons.Default.CameraAlt,listOf(Color(0xFF202127),Color(0xFF050506)))
+        "weather" in n -> IconVisual(Icons.Default.Cloud,listOf(Color(0xFF6EC8F8),Color(0xFF2879DF)))
+        "clock" in n -> IconVisual(Icons.Default.AccessTime,listOf(Color.White,Color(0xFFF4F4F4)),Color(0xFF22232A))
+        "setting" in n -> IconVisual(Icons.Default.Settings,listOf(Color(0xFFBFC5D0),Color(0xFF7D8798)))
+        "note" in n -> IconVisual(Icons.Default.Notes,listOf(Color(0xFFFFE58A),Color(0xFFFFC84E)),Color(0xFFB98C28))
+        "map" in n -> IconVisual(Icons.Default.Map,listOf(Color(0xFFE0F1D7),Color(0xFF9DCEA5)),Color(0xFFE6505C))
+        "music" in n || "podcast" in n -> IconVisual(Icons.Default.MusicNote,listOf(Color(0xFFFF7D9B),Color(0xFFD92369)))
+        "file" in n -> IconVisual(Icons.Default.Folder,listOf(Color(0xFF8BD2FA),Color(0xFF3B9CEB)))
+        "health" in n -> IconVisual(Icons.Default.Favorite,listOf(Color(0xFFFF6D79),Color(0xFFE52C50)))
+        "phone" in n || "dialer" in n -> IconVisual(Icons.Default.Phone,listOf(Color(0xFF46DA88),Color(0xFF09A95A)))
+        "safari" in n || "chrome" in n || "browser" in n -> IconVisual(Icons.Default.Explore,listOf(Color.White,Color(0xFFE6EFFB)),Color(0xFF2684E8))
+        else -> null
+    }
+}
+
+@Composable
+fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, size:Dp=62.dp, onClick:()->Unit) {
+    var shown by remember(app.packageName) { mutableStateOf(false) }
+    LaunchedEffect(app.packageName) { kotlinx.coroutines.delay(index.coerceAtMost(10)*28L); shown=true }
+    val scale by animateFloatAsState(if(shown) 1f else .72f, androidx.compose.animation.core.tween(360), label="icon-scale")
+    val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(300), label="icon-alpha")
+    val visual=iconVisual(app.label)
+    Column(horizontalAlignment=Alignment.CenterHorizontally,
+        modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }) {
+        Surface(onClick=onClick, modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
+            shape=RoundedCornerShape(21.dp), color=Color.White) {
+            if(visual!=null) {
+                Box(Modifier.fillMaxSize().background(Brush.linearGradient(visual.colors)), contentAlignment=Alignment.Center) {
+                    if(visual.calendar) {
+                        Column(Modifier.fillMaxSize()) {
+                            Box(Modifier.fillMaxWidth().height(14.dp).background(Color(0xFFE94F62)),contentAlignment=Alignment.Center) {
+                                Text("MON",color=Color.White,fontSize=8.sp,fontWeight=FontWeight.Bold)
+                            }
+                            Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+                                Text(SimpleDateFormat("d",Locale.getDefault()).format(Date()),color=Color(0xFF24242A),fontSize=28.sp)
+                            }
+                        }
+                    } else Icon(visual.icon,null,tint=visual.glyph,modifier=Modifier.fillMaxSize(.64f))
+                }
+            } else {
+                Image(app.icon.toBitmap(192,192).asImageBitmap(),null,
+                    Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)).padding(1.dp))
+            }
+        }
+        if(labels) {
+            Spacer(Modifier.height(6.dp))
+            Text(app.label,color=fg,fontSize=11.sp,maxLines=1,textAlign=TextAlign.Center)
+        }
+    }
+}
 @Composable
 fun DockButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, fg: Color, onClick: () -> Unit) {
     Column(Modifier.clickable { onClick() }.padding(horizontal=8.dp), horizontalAlignment=Alignment.CenterHorizontally) {
@@ -324,7 +384,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
         OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), placeholder={Text("Search apps")}, leadingIcon={Icon(Icons.Default.Search,null)}, singleLine=true)
         Spacer(Modifier.height(14.dp))
         LazyVerticalGrid(columns=GridCells.Fixed(4), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            items(apps, key={it.packageName}) { AppIcon(it, labels, fg, 54.dp) { onLaunch(it) } }
+            items(apps, key={it.packageName}) { AppIcon(it, labels, fg, 0, 54.dp) { onLaunch(it) } }
         }
     }
 }
