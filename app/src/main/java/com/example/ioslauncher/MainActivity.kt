@@ -375,7 +375,7 @@ fun LauncherRoot(db: LauncherDb) {
                         apps.firstOrNull { it.label.contains("Chrome",true) || it.label.contains("Browser",true) },
                         apps.firstOrNull { it.label.contains("Music",true) }
                     ).filterNotNull().distinctBy { it.packageName }.take(3)
-                    dock.forEach { item -> AppIcon(item,false,fg,0,"Fast",52.dp) { activity.launch(item) } }
+                    dock.forEach { item -> AppIcon(app=item,labels=false,fg=fg,index=0,animationSpeed="Fast",size=52.dp,onClick={activity.launch(item)}) }
                     DockButton(Icons.Default.Message,"Messages",fg) {
                         apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
                     }
