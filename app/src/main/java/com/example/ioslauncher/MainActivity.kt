@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
@@ -326,26 +327,30 @@ fun HomeWidget(kicker:String, value:String, subtitle:String, icon:ImageVector, m
     }
 }
 
-private data class IconVisual(val icon:ImageVector, val colors:List<Color>, val glyph:Color=Color.White, val calendar:Boolean=false)
-
-private fun iconVisual(label:String):IconVisual? {
+private fun iconResourceForLabel(label:String):Int {
     val n=label.lowercase(Locale.getDefault())
     return when {
-        "message" in n || "sms" in n -> IconVisual(Icons.Default.Message,listOf(Color(0xFF54DE83),Color(0xFF0AAE56)))
-        "calendar" in n -> IconVisual(Icons.Default.CalendarMonth,listOf(Color.White,Color(0xFFF5F4F7)),Color(0xFFEF5265),true)
-        "photo" in n || "gallery" in n -> IconVisual(Icons.Default.PhotoLibrary,listOf(Color.White,Color(0xFFF6F4FB)),Color(0xFF8A65D5))
-        "camera" in n -> IconVisual(Icons.Default.CameraAlt,listOf(Color(0xFF202127),Color(0xFF050506)))
-        "weather" in n -> IconVisual(Icons.Default.Cloud,listOf(Color(0xFF6EC8F8),Color(0xFF2879DF)))
-        "clock" in n -> IconVisual(Icons.Default.AccessTime,listOf(Color.White,Color(0xFFF4F4F4)),Color(0xFF22232A))
-        "setting" in n -> IconVisual(Icons.Default.Settings,listOf(Color(0xFFBFC5D0),Color(0xFF7D8798)))
-        "note" in n -> IconVisual(Icons.Default.Notes,listOf(Color(0xFFFFE58A),Color(0xFFFFC84E)),Color(0xFFB98C28))
-        "map" in n -> IconVisual(Icons.Default.Map,listOf(Color(0xFFE0F1D7),Color(0xFF9DCEA5)),Color(0xFFE6505C))
-        "music" in n || "podcast" in n -> IconVisual(Icons.Default.MusicNote,listOf(Color(0xFFFF7D9B),Color(0xFFD92369)))
-        "file" in n -> IconVisual(Icons.Default.Folder,listOf(Color(0xFF8BD2FA),Color(0xFF3B9CEB)))
-        "health" in n -> IconVisual(Icons.Default.Favorite,listOf(Color(0xFFFF6D79),Color(0xFFE52C50)))
-        "phone" in n || "dialer" in n -> IconVisual(Icons.Default.Phone,listOf(Color(0xFF46DA88),Color(0xFF09A95A)))
-        "safari" in n || "chrome" in n || "browser" in n -> IconVisual(Icons.Default.Explore,listOf(Color.White,Color(0xFFE6EFFB)),Color(0xFF2684E8))
-        else -> null
+        "calendar" in n -> R.drawable.ios18_calendar
+        "camera" in n -> R.drawable.ios18_camera
+        "message" in n || "sms" in n -> R.drawable.ios18_messages
+        "note" in n || "keep" in n -> R.drawable.ios18_notes
+        "safari" in n || "browser" in n -> R.drawable.ios18_safari
+        "chrome" in n -> R.drawable.ios18_chrome
+        "setting" in n -> R.drawable.ios18_settings
+        "weather" in n -> R.drawable.ios18_weather
+        "photo" in n || "gallery" in n -> R.drawable.ios18_photos
+        "file" in n -> R.drawable.ios18_files
+        "music" in n || "spotify" in n -> R.drawable.ios18_music
+        "phone" in n || "dialer" in n -> R.drawable.ios18_phone
+        "health" in n -> R.drawable.ios18_health
+        "map" in n -> R.drawable.ios18_maps
+        "amazon" in n -> R.drawable.ios18_amazon
+        "gmail" in n || "mail" in n -> R.drawable.ios18_gmail
+        "calculator" in n -> R.drawable.ios18_calculator
+        "youtube" in n -> R.drawable.ios18_youtube
+        "whatsapp" in n -> R.drawable.ios18_whatsapp
+        "app store" in n || "play store" in n -> R.drawable.ios18_appstore
+        else -> 0
     }
 }
 
@@ -355,24 +360,13 @@ fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, size:Dp=62.
     LaunchedEffect(app.packageName) { kotlinx.coroutines.delay(index.coerceAtMost(10)*28L); shown=true }
     val scale by animateFloatAsState(if(shown) 1f else .72f, androidx.compose.animation.core.tween(360), label="icon-scale")
     val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(300), label="icon-alpha")
-    val visual=iconVisual(app.label)
+    val iconRes=iconResourceForLabel(app.label)
     Column(horizontalAlignment=Alignment.CenterHorizontally,
         modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }) {
         Surface(onClick=onClick, modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
             shape=RoundedCornerShape(21.dp), color=Color.White) {
-            if(visual!=null) {
-                Box(Modifier.fillMaxSize().background(Brush.linearGradient(visual.colors)), contentAlignment=Alignment.Center) {
-                    if(visual.calendar) {
-                        Column(Modifier.fillMaxSize()) {
-                            Box(Modifier.fillMaxWidth().height(14.dp).background(Color(0xFFE94F62)),contentAlignment=Alignment.Center) {
-                                Text("MON",color=Color.White,fontSize=8.sp,fontWeight=FontWeight.Bold)
-                            }
-                            Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-                                Text(SimpleDateFormat("d",Locale.getDefault()).format(Date()),color=Color(0xFF24242A),fontSize=28.sp)
-                            }
-                        }
-                    } else Icon(visual.icon,null,tint=visual.glyph,modifier=Modifier.fillMaxSize(.64f))
-                }
+            if(iconRes!=0) {
+                Image(painterResource(iconRes),null,Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)))
             } else {
                 Image(app.icon.toBitmap(192,192).asImageBitmap(),null,
                     Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)).padding(1.dp))
