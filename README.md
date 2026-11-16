@@ -66,3 +66,13 @@ The Home screen settings now include:
 The launcher requests the highest display mode reported by Android when **Prefer highest supported refresh rate** is enabled, and caches fallback app icon bitmaps to reduce repeated work during Compose recomposition. Android may still cap refresh rate because of the phone's battery, thermal, display or per-app policies.
 
 **System-owned features:** The Buttons/Gestures choice opens Android Settings so the user can change the actual system navigation mode. A launcher cannot silently switch Android's navigation mode or draw over the system navigation controls. Similarly, Android owns the Recents screen; the Recents arrangement preference is saved in the launcher but cannot rearrange system Recents. The "Fill cells" preference fills unused cells on the last displayed grid page; it does not retain an app's old slot after uninstalling it.
+
+
+## Latest launcher interaction fixes
+
+- Swiping down over the Home screen no longer opens App Library. The Control Center opens from a downward swipe at the upper-right edge; choose **None** in Home screen settings to disable that shortcut.
+- The App Library's own scroll container is allowed to receive normal vertical swipes, without the Home screen gesture recognizer competing with it.
+- Back closes an open overlay (Control Center, App Library or launcher settings). When already on the Home screen, Back is consumed so it does not exit the selected launcher.
+- Selecting **Gestures** hides the launcher's navigation bar while the launcher is visible and allows Android to reveal transient bars with an edge swipe. For system-wide gesture navigation, the Android / MIUI navigation mode still has to be changed in device Settings; third-party apps cannot change that protected OS setting.
+- Control Center uses open-source Material Design vector icons, a 20%-transparent glass surface, a 20 dp blurred Home screen backdrop on Android 12+, and swipe-up dismissal.
+- Long-press and drag an app icon to reorder it anywhere on the visible Home page. Drag it to the red **Uninstall** target at the top to open Android's standard uninstall confirmation for that app. System apps and the launcher's built-in shortcuts cannot be uninstalled this way.
