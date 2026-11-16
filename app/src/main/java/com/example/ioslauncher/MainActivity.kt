@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.spring
@@ -141,7 +142,15 @@ class MainActivity : ComponentActivity() {
 fun LauncherRoot(db: LauncherDb) {
     val context = LocalContext.current
     val activity = context as MainActivity
-    var apps by remember { mutableStateOf(activity.loadApps()) }
+    var apps by remember {
+        val loaded = activity.loadApps()
+        val saved = db.get("app_order").split("|").filter { it.isNotBlank() }
+        mutableStateOf(if (saved.isEmpty()) loaded else loaded.sortedBy { app ->
+            val index = saved.indexOf(app.packageName)
+            if (index < 0) Int.MAX_VALUE else index
+        })
+    }
+    var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
     var drawer by remember { mutableStateOf(false) }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
@@ -168,6 +177,19 @@ fun LauncherRoot(db: LauncherDb) {
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
+    fun moveSelectedApp(delta:Int) {
+        val selected = selectedApp ?: return
+        val list = apps.toMutableList()
+        val from = list.indexOfFirst { it.packageName == selected.packageName }
+        val to = (from + delta).coerceIn(0, list.lastIndex)
+        if (from >= 0 && from != to) {
+            val item = list.removeAt(from)
+            list.add(to, item)
+            apps = list
+            db.put("app_order", list.joinToString("|") { it.packageName })
+        }
+        selectedApp = null
+    }
     val showLabels = labels && hideText == "Off"
     val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
@@ -268,7 +290,8 @@ fun LauncherRoot(db: LauncherDb) {
                     contentPadding=PaddingValues(bottom=12.dp)
                 ) {
                     itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
-                        AppIcon(app, labels && hideText == "Off", fg, index, animationSpeed) {
+                        AppIcon(app, labels && hideText == "Off", fg, index, animationSpeed,
+                            onLongClick = { if (!lockLayout) selectedApp = app }) {
                             if (app.packageName == "internal:settings") settings = true else activity.launch(app)
                         }
                     }
@@ -342,6 +365,20 @@ fun LauncherRoot(db: LauncherDb) {
                 locked = false
                 db.put("launcher_unlocked", "true")
             }
+        }
+        if (selectedApp != null) {
+            AlertDialog(
+                onDismissRequest={selectedApp=null},
+                title={Text("Arrange ${selectedApp!!.label}")},
+                text={Text("Move this app in your Home screen layout.")},
+                confirmButton={
+                    Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick={moveSelectedApp(-1)}) { Text("Move left") }
+                        TextButton(onClick={moveSelectedApp(1)}) { Text("Move right") }
+                        TextButton(onClick={selectedApp=null}) { Text("Done") }
+                    }
+                }
+            )
         }
     }
 }
@@ -442,7 +479,7 @@ private fun iconResourceForLabel(label:String):Int {
 }
 
 @Composable
-fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp, onClick:()->Unit) {
+fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp, onLongClick:()->Unit={}, onClick:()->Unit) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
     LaunchedEffect(app.packageName) { shown=true }
     val duration = when(animationSpeed) { "Slow" -> 300; "Normal" -> 210; else -> 140 }
@@ -451,8 +488,9 @@ fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSp
     val iconRes=iconResourceForLabel(app.label)
     val fallbackBitmap = remember(app.packageName) { app.icon.toBitmap(192,192).asImageBitmap() }
     Column(horizontalAlignment=Alignment.CenterHorizontally,
-        modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }) {
-        Surface(onClick=onClick, modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
+        modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }
+            .combinedClickable(onClick=onClick,onLongClick=onLongClick)) {
+        Surface(modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
             shape=RoundedCornerShape(21.dp), color=Color.White) {
             if(iconRes!=0) {
                 Image(painterResource(iconRes),null,Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)))
