@@ -277,6 +277,14 @@ fun LauncherRoot(db: LauncherDb) {
         val pageIndex=parts.getOrNull(1)?.toIntOrNull()
         if(!packageName.isNullOrBlank() && pageIndex!=null) packageName to pageIndex else null
     }.toMap()) }
+    var appSlotAssignments by remember { mutableStateOf(db.get("app_slots").split(";").mapNotNull { token ->
+        val parts=token.split(":")
+        val packageName=parts.getOrNull(0)
+        val slot=parts.getOrNull(1)?.toIntOrNull()
+        if(!packageName.isNullOrBlank() && slot!=null) packageName to slot else null
+    }.toMap()) }
+    var pendingDragPage by remember { mutableIntStateOf(0) }
+    var homeGridBounds by remember { mutableStateOf(Rect.Zero) }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var widgetPickerOpen by remember { mutableStateOf(false) }
     var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
@@ -359,7 +367,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
             widgetPositions = widgetPositions - id
         } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && (id < 0 || widgetCanvasBounds.width > 0f)) {
-            val destinationPage = page.coerceAtLeast(0)
+            val destinationPage = pendingDragPage.coerceAtLeast(0)
             when (id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page", destinationPage.toString()) }
                 -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page", destinationPage.toString()) }
@@ -382,6 +390,8 @@ fun LauncherRoot(db: LauncherDb) {
         extraHomePages = 0
         draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
         dragEdgeDirection = 0
+        page = destinationPage
+        pendingDragPage = page
     }
     val showLabels = labels && hideText == "Off"
     val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments) {
@@ -419,10 +429,12 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if (direction == 0) dragEdgeDirection = 0
         else if (direction != dragEdgeDirection) {
-            if (direction > 0 && page >= pageCount - 1) {
+            val currentPage = pendingDragPage.coerceAtLeast(0)
+            val lastPage = (pageCount - 1).coerceAtLeast(0)
+            if (direction > 0 && currentPage >= lastPage) {
                 extraHomePages += 1
-                page += 1
-            } else page = (page + direction).coerceIn(0, pageCount - 1)
+                pendingDragPage = currentPage + 1
+            } else pendingDragPage = (currentPage + direction).coerceAtLeast(0)
             dragEdgeDirection = direction
         }
     }
@@ -432,12 +444,13 @@ fun LauncherRoot(db: LauncherDb) {
             activity.uninstall(dragged)
             draggingApp = null
             dragEdgeDirection = 0
+            pendingDragPage = page.coerceAtLeast(0)
             return
         }
-        val targetPage = page.coerceAtLeast(0)
-        val visiblePackages = pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
+        val targetPage = pendingDragPage.coerceAtLeast(0)
+        val targetPageApps = pageAppSlices.getOrNull(targetPage).orEmpty()
         val target = appBounds.entries.firstOrNull { (key, rect) ->
-            key != dragged.packageName && key in visiblePackages && rect.contains(dragPosition)
+            key != dragged.packageName && targetPageApps.any { it.packageName == key } && rect.contains(dragPosition)
         }?.key
         val list = apps.toMutableList()
         list.removeAll { it.packageName == dragged.packageName }
@@ -445,13 +458,32 @@ fun LauncherRoot(db: LauncherDb) {
         if (targetIndex >= 0) list.add(targetIndex, dragged) else list.add(dragged)
         val stablePages = pageAppSlices.flatMapIndexed { pageIndex, pageApps -> pageApps.map { it.packageName to pageIndex } }.toMap()
         appPageAssignments = stablePages + (dragged.packageName to targetPage)
+        val slot = if (homeGridBounds.width > 0f) {
+            val colWidth = homeGridBounds.width / columns.coerceAtLeast(1)
+            val col = ((dragPosition.x - homeGridBounds.left) / colWidth).toInt().coerceIn(0, columns - 1)
+            val rowHeight = with(density) { 94.dp.toPx() }
+            val widgetRows = homeWidgets.count { it.second == targetPage } +
+                (if (showWeatherWidget && weatherWidgetPage == targetPage) 1 else 0) +
+                (if (showTodayWidget && todayWidgetPage == targetPage) 1 else 0)
+            val topInset = with(density) { (widgetRows * 148).dp.toPx() }
+            val row = ((dragPosition.y - homeGridBounds.top - topInset).coerceAtLeast(0f) / rowHeight).toInt()
+            row * columns + col
+        } else targetPageApps.size
+        val stableSlots = pageAppSlices.flatMapIndexed { pageIndex, pageApps ->
+            pageApps.mapIndexed { index, app -> app.packageName to (appSlotAssignments[app.packageName] ?: index) }
+        }.toMap()
+        appSlotAssignments = stableSlots + (dragged.packageName to slot)
         db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key+":"+it.value })
+        db.put("app_slots", appSlotAssignments.entries.joinToString(";") { it.key+":"+it.value })
         apps = list
         db.put("app_order", list.joinToString("|") { it.packageName })
+        page = targetPage
         extraHomePages = 0
         draggingApp = null
         dragEdgeDirection = 0
+        pendingDragPage = page
     }
+
     SideEffect {
         activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
         activity.window.navigationBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
@@ -501,7 +533,7 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page, draggingApp, draggingWidgetId) {
+        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
             if (!drawer && !controlCenter && !settings && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -581,7 +613,7 @@ fun LauncherRoot(db: LauncherDb) {
                     LazyVerticalGrid(
                         columns=GridCells.Fixed(columns),
                         userScrollEnabled=false,
-                        modifier=Modifier.weight(1f).fillMaxWidth()
+                        modifier=Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
                             .pointerInput(doubleTapLock) {
                                 detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
                             }
@@ -608,7 +640,7 @@ fun LauncherRoot(db: LauncherDb) {
                                         Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
-                                                    onDragStart={ draggingWidgetId=-1001; widgetDragPosition=center },
+                                                    onDragStart={ draggingWidgetId=-1001; pendingDragPage=page.coerceAtLeast(0); widgetDragPosition=center },
                                                     onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
                                                     onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
                                                 )
@@ -619,7 +651,7 @@ fun LauncherRoot(db: LauncherDb) {
                                         Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
                                             .pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
-                                                    onDragStart={ draggingWidgetId=-1002; widgetDragPosition=center },
+                                                    onDragStart={ draggingWidgetId=-1002; pendingDragPage=page.coerceAtLeast(0); widgetDragPosition=center },
                                                     onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
                                                     onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
                                                 )
@@ -694,7 +726,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
                                 dragTranslation=translation, isDragging=isDragging,
                                 onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
-                                onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
+                                onDragStart={ if (!lockLayout) { draggingApp=app; pendingDragPage=page.coerceAtLeast(0); dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
                                 onDrag={ delta -> dragPosition += delta; updateDragEdge(dragPosition) },
                                 onDragEnd={ finishIconDrag() },
                                 onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
