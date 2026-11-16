@@ -244,6 +244,8 @@ fun LauncherRoot(db: LauncherDb) {
         })
     }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var widgetPickerOpen by remember { mutableStateOf(false) }
+    var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
     var homeWidgets by remember { mutableStateOf(db.get("home_widgets").split(",").mapNotNull { token ->
         val parts = token.split(":")
         val id = parts.getOrNull(0)?.toIntOrNull()
@@ -601,7 +603,7 @@ fun LauncherRoot(db: LauncherDb) {
                 animationSpeed=animationSpeed, doubleTapLock=doubleTapLock, fillCells=fillCells, lockLayout=lockLayout,
                 navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
                 themeMode=themeMode, onThemeMode={ themeMode=it; db.put("theme_mode", it) },
-                onAddWidget={ activity.addHomeWidget(page) },
+                onAddWidget={ widgetProviders=activity.availableHomeWidgets(); widgetPickerOpen=true },
                 onColumns={columns=it;db.put("grid_columns",it.toString())},
                 onRows={rows=it;db.put("grid_rows",it.toString())},
                 onLabels={labels=it;db.put("show_labels",it.toString())},
@@ -630,6 +632,38 @@ fun LauncherRoot(db: LauncherDb) {
                 locked = false
                 db.put("launcher_unlocked", "true")
             }
+        }
+        if (widgetPickerOpen) {
+            AlertDialog(
+                onDismissRequest={ widgetPickerOpen=false },
+                title={ Text("Add widgets") },
+                text={
+                    if (widgetProviders.isEmpty()) Text("No compatible widgets are currently installed.")
+                    else Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState())) {
+                        widgetProviders.forEach { provider ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    widgetPickerOpen=false
+                                    activity.addHomeWidget(page, provider)
+                                }.padding(vertical=12.dp),
+                                verticalAlignment=Alignment.CenterVertically
+                            ) {
+                                val icon = try { context.packageManager.getApplicationIcon(provider.provider.packageName) } catch (_: Exception) { null }
+                                if (icon != null) Image(icon.toBitmap().asImageBitmap(), null, modifier=Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(provider.loadLabel(context.packageManager).toString(), fontWeight=FontWeight.SemiBold)
+                                    Text(provider.provider.packageName, fontSize=10.sp, color=Color.Gray, maxLines=1)
+                                    Text(provider.minWidth.toString() + " × " + provider.minHeight + " dp", fontSize=11.sp, color=Color.Gray)
+                                }
+                                Icon(Icons.Default.Add, null)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                },
+                confirmButton={ TextButton(onClick={widgetPickerOpen=false}) { Text("Close") } }
+            )
         }
         AnimatedVisibility(visible=draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
             Surface(shape=RoundedCornerShape(22.dp), color=Color(0xFFE5484D), shadowElevation=12.dp,
