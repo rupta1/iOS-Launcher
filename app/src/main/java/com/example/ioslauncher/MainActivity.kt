@@ -356,6 +356,7 @@ fun LauncherRoot(db: LauncherDb) {
 
     fun finishWidgetDrag() {
         val id = draggingWidgetId
+        val destinationPage = pendingDragPage.coerceAtLeast(0)
         if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetDragPosition.y < uninstallDropZoneHeight) {
             when (id) {
                 -1001 -> { showWeatherWidget=false; db.put("show_weather_widget","false") }
@@ -367,7 +368,6 @@ fun LauncherRoot(db: LauncherDb) {
             }
             widgetPositions = widgetPositions - id
         } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && (id < 0 || widgetCanvasBounds.width > 0f)) {
-            val destinationPage = pendingDragPage.coerceAtLeast(0)
             when (id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page", destinationPage.toString()) }
                 -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page", destinationPage.toString()) }
@@ -394,7 +394,7 @@ fun LauncherRoot(db: LauncherDb) {
         pendingDragPage = page
     }
     val showLabels = labels && hideText == "Off"
-    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments) {
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments) {
         val result = mutableMapOf<Int, MutableList<InstalledApp>>()
         var defaultPage = 0
         fun capacityFor(index: Int): Int {
@@ -416,7 +416,10 @@ fun LauncherRoot(db: LauncherDb) {
             if (showWeatherWidget) weatherWidgetPage else 0,
             if (showTodayWidget) todayWidgetPage else 0
         )
-        (0..maxPage).map { result[it]?.toList().orEmpty() }
+        (0..maxPage).map { pageIndex ->
+            val pageItems = result[pageIndex]?.toList().orEmpty()
+            pageItems.sortedBy { app -> appSlotAssignments[app.packageName] ?: pageItems.indexOf(app) }
+        }
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     fun updateDragEdge(position: Offset) {
@@ -519,12 +522,23 @@ fun LauncherRoot(db: LauncherDb) {
     // Re-read the system wallpaper whenever the launcher resumes. This keeps
     // the home screen in sync with changes made outside the launcher.
     val wallpaperRevision = activity.wallpaperRevision
-    val systemWallpaper = remember(dark, wallpaperRevision) {
+    val customWallpaperUri = db.get("custom_wallpaper_uri")
+    val systemWallpaper = remember(wallpaperRevision, customWallpaperUri) {
         try {
-            WallpaperManager.getInstance(context).drawable?.toBitmap(
-                (context.resources.displayMetrics.widthPixels / 2).coerceAtLeast(1),
-                (context.resources.displayMetrics.heightPixels / 2).coerceAtLeast(1)
-            )?.asImageBitmap()
+            val manager = WallpaperManager.getInstance(context)
+            val customBitmap = if (customWallpaperUri.isNotBlank()) {
+                try { context.contentResolver.openInputStream(android.net.Uri.parse(customWallpaperUri))?.use { android.graphics.BitmapFactory.decodeStream(it) } }
+                catch (_: Exception) { null }
+            } else null
+            val systemBitmap = if (customBitmap == null) {
+                try { manager.getWallpaperFile(WallpaperManager.FLAG_SYSTEM)?.use { android.graphics.BitmapFactory.decodeFileDescriptor(it.fileDescriptor) } }
+                catch (_: Exception) { null }
+            } else null
+            val fallbackBitmap = if (customBitmap == null && systemBitmap == null) {
+                try { manager.drawable?.toBitmap(context.resources.displayMetrics.widthPixels.coerceAtLeast(1), context.resources.displayMetrics.heightPixels.coerceAtLeast(1)) }
+                catch (_: Exception) { null }
+            } else null
+            (customBitmap ?: systemBitmap ?: fallbackBitmap)?.asImageBitmap()
         } catch (_: Exception) { null }
     }
     Box(
@@ -718,23 +732,39 @@ fun LauncherRoot(db: LauncherDb) {
                             }
                         }
 
-                        itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
-                            val isDragging = draggingApp?.packageName == app.packageName
-                            val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
-                            val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
-                            AppIcon(
-                                app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
-                                dragTranslation=translation, isDragging=isDragging,
-                                onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
-                                onDragStart={ if (!lockLayout) { draggingApp=app; pendingDragPage=page.coerceAtLeast(0); dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
-                                onDrag={ delta -> dragPosition += delta; updateDragEdge(dragPosition) },
-                                onDragEnd={ finishIconDrag() },
-                                onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
-                            )
+                        var nextSlot = 0
+                        pageApps.forEachIndexed { index, app ->
+                            val desiredSlot = (appSlotAssignments[app.packageName] ?: index).coerceAtLeast(nextSlot)
+                            while (nextSlot < desiredSlot) {
+                                val emptySlot = nextSlot
+                                item(key="empty-slot-" + targetPage + "-" + emptySlot) { Spacer(Modifier.size(62.dp)) }
+                                nextSlot++
+                            }
+                            item(key="app-" + app.packageName) {
+                                val isDragging = draggingApp?.packageName == app.packageName
+                                val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
+                                val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
+                                AppIcon(
+                                    app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
+                                    dragTranslation=translation, isDragging=isDragging,
+                                    onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
+                                    onDragStart={ if (!lockLayout) { draggingApp=app; pendingDragPage=page.coerceAtLeast(0); dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
+                                    onDrag={ delta -> dragPosition += delta; updateDragEdge(dragPosition) },
+                                    onDragEnd={ finishIconDrag() },
+                                    onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
+                                )
+                            }
+                            nextSlot = desiredSlot + 1
                         }
                         if (fillCells) {
-                            items((columns * rows - pageApps.size).coerceAtLeast(0)) {
-                                Spacer(Modifier.size(62.dp))
+                            val occupiedWidgetRows = homeWidgets.count { it.second == targetPage } +
+                                (if(showWeatherWidget && weatherWidgetPage == targetPage) 1 else 0) +
+                                (if(showTodayWidget && todayWidgetPage == targetPage) 1 else 0)
+                            val maxSlots = (columns * (rows.coerceAtLeast(1) - occupiedWidgetRows)).coerceAtLeast(0)
+                            while (nextSlot < maxSlots) {
+                                val emptySlot = nextSlot
+                                item(key="fill-slot-" + targetPage + "-" + emptySlot) { Spacer(Modifier.size(62.dp)) }
+                                nextSlot++
                             }
                         }
                     }
