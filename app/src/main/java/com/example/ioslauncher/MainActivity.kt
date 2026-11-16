@@ -12,6 +12,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -108,6 +119,7 @@ fun LauncherRoot(db: LauncherDb) {
     var labels by remember { mutableStateOf(db.get("show_labels", "true") == "true") }
     var dark by remember { mutableStateOf(db.get("dark_mode", "false") == "true") }
     var page by remember { mutableIntStateOf(0) }
+    var locked by remember { mutableStateOf(db.get("launcher_unlocked", "false") != "true") }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
@@ -216,6 +228,60 @@ fun LauncherRoot(db: LauncherDb) {
                 onClose={settings=false},
                 onDeviceSettings={ context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
             )
+        }
+        AnimatedVisibility(visible=locked, enter=fadeIn(tween(280)), exit=fadeOut(tween(300))) {
+            LauncherLockScreen {
+                locked = false
+                db.put("launcher_unlocked", "true")
+            }
+        }
+    }
+}
+
+@Composable
+fun LauncherLockScreen(onUnlock:()->Unit) {
+    var clock by remember { mutableStateOf(SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())) }
+    var date by remember { mutableStateOf(SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())) }
+    var drag by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
+            date = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
+            delay(1000)
+        }
+    }
+    Box(Modifier.fillMaxSize()
+        .background(Brush.linearGradient(listOf(Color(0xFF1E285A), Color(0xFF65518D), Color(0xFFB66D82), Color(0xFFDE9B79))))
+        .pointerInput(Unit) {
+            detectDragGestures(onDrag={ change, amount -> drag += amount.y; change.consume() },
+                onDragEnd={ if (drag < -65f) onUnlock(); drag=0f })
+        }) {
+        Column(Modifier.align(Alignment.TopCenter).padding(top=42.dp), horizontalAlignment=Alignment.CenterHorizontally) {
+            Box(Modifier.width(118.dp).height(34.dp).clip(CircleShape).background(Color.Black))
+            Spacer(Modifier.height(80.dp))
+            Text(date, color=Color.White, fontSize=20.sp)
+            Text(clock, color=Color.White, fontSize=76.sp, fontWeight=FontWeight.ExtraLight)
+            Spacer(Modifier.height(24.dp))
+            Text("☀  24°", color=Color.White, fontSize=22.sp)
+            Text("Mostly Sunny", color=Color.White.copy(alpha=.9f), fontSize=15.sp)
+        }
+        Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal=22.dp).padding(bottom=105.dp),
+            shape=RoundedCornerShape(24.dp), color=Color.White.copy(alpha=.8f)) {
+            Column(Modifier.padding(18.dp)) {
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Icon(Icons.Default.Message, null, tint=Color(0xFF2AC46D), modifier=Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Messages", color=Color(0xFF25252B), fontWeight=FontWeight.SemiBold, modifier=Modifier.weight(1f))
+                    Text("now", color=Color.Gray, fontSize=12.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Your launcher is ready. Swipe up to explore.", color=Color(0xFF35353D), fontSize=14.sp)
+            }
+        }
+        Column(Modifier.align(Alignment.BottomCenter).padding(bottom=26.dp), horizontalAlignment=Alignment.CenterHorizontally) {
+            Text("Swipe up to unlock", color=Color.White.copy(alpha=.8f), fontSize=13.sp)
+            Spacer(Modifier.height(18.dp))
+            Box(Modifier.width(110.dp).height(5.dp).clip(CircleShape).background(Color.White))
         }
     }
 }
