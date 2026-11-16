@@ -89,6 +89,14 @@ class MainActivity : ComponentActivity() {
     lateinit var widgetHost: AppWidgetHost
         private set
     private val widgetManager by lazy { AppWidgetManager.getInstance(this) }
+    var wallpaperRevision by mutableIntStateOf(0)
+        private set
+
+    override fun onResume() {
+        super.onResume()
+        // Pick up wallpaper changes made in Android's system wallpaper picker.
+        wallpaperRevision++
+    }
     private var pendingWidgetPage: Int = 0
     private var pendingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
     private val widgetPickRequest = 9101
@@ -99,6 +107,7 @@ class MainActivity : ComponentActivity() {
             contentResolver.openInputStream(uri)?.use { WallpaperManager.getInstance(this).setStream(it) }
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             db.put("custom_wallpaper_uri", uri.toString())
+            wallpaperRevision++
         } catch (_: Exception) { }
     }
     fun chooseWallpaper() { wallpaperPicker.launch(arrayOf("image/*")) }
@@ -419,7 +428,10 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
 
-    val systemWallpaper = remember(dark) {
+    // Re-read the system wallpaper whenever the launcher resumes. This keeps
+    // the home screen in sync with changes made outside the launcher.
+    val wallpaperRevision = activity.wallpaperRevision
+    val systemWallpaper = remember(dark, wallpaperRevision) {
         try {
             WallpaperManager.getInstance(context).drawable?.toBitmap(
                 (context.resources.displayMetrics.widthPixels / 2).coerceAtLeast(1),
@@ -571,54 +583,30 @@ fun LauncherRoot(db: LauncherDb) {
                                     Box(Modifier.fillMaxWidth().height(customSize.second).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot() }) {
                                         AndroidView(
                                             factory={ viewContext ->
-                                                activity.widgetHost.createView(viewContext, widgetId, info).apply {
-                                                    var downRawX=0f
-                                                    var downRawY=0f
-                                                    var startCenter=Offset.Zero
-                                                    var dragging=false
-                                                    val handler=Handler(Looper.getMainLooper())
-                                                    val beginDrag=Runnable {
-                                                        dragging=true
-                                                        draggingWidgetId=widgetId
-                                                        startCenter=widgetCanvasBounds.center
-                                                        widgetDragPosition=startCenter
-                                                    }
-                                                    val touchHandler: (View, MotionEvent) -> Boolean = { _, event ->
-                                                        when(event.actionMasked) {
-                                                            MotionEvent.ACTION_DOWN -> {
-                                                                downRawX=event.rawX; downRawY=event.rawY; dragging=false
-                                                                handler.removeCallbacks(beginDrag)
-                                                                handler.postDelayed(beginDrag, ViewConfiguration.getLongPressTimeout().toLong())
-                                                                false
-                                                            }
-                                                            MotionEvent.ACTION_MOVE -> {
-                                                                if (!dragging && (kotlin.math.abs(event.rawX-downRawX)>18f || kotlin.math.abs(event.rawY-downRawY)>18f)) handler.removeCallbacks(beginDrag)
-                                                                if (dragging) {
-                                                                    widgetDragPosition=startCenter+Offset(event.rawX-downRawX,event.rawY-downRawY)
-                                                                    true
-                                                                } else false
-                                                            }
-                                                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                                                handler.removeCallbacks(beginDrag)
-                                                                if (dragging) { finishWidgetDrag(); dragging=false; true } else false
-                                                            }
-                                                            else -> dragging
-                                                        }
-                                                    }
-                                                    fun attachDragListener(view: View) {
-                                                        view.setOnTouchListener(touchHandler)
-                                                        if (view is ViewGroup) for (childIndex in 0 until view.childCount) attachDragListener(view.getChildAt(childIndex))
-                                                    }
-                                                    attachDragListener(this)
-                                                }
+                                                activity.widgetHost.createView(viewContext, widgetId, info)
                                             },
-                                            modifier=Modifier.fillMaxSize().graphicsLayer {
-                                                if (draggingWidgetId == widgetId) {
-                                                    translationX=widgetDragPosition.x-widgetCanvasBounds.center.x
-                                                    translationY=widgetDragPosition.y-widgetCanvasBounds.center.y
-                                                    scaleX=1.04f; scaleY=1.04f; alpha=.92f
+                                            modifier=Modifier.fillMaxSize()
+                                                .pointerInput(widgetId) {
+                                                    detectDragGesturesAfterLongPress(
+                                                        onDragStart={
+                                                            draggingWidgetId=widgetId
+                                                            widgetDragPosition=widgetCanvasBounds.center
+                                                        },
+                                                        onDrag={ change, amount ->
+                                                            change.consume()
+                                                            widgetDragPosition += amount
+                                                        },
+                                                        onDragEnd={ finishWidgetDrag() },
+                                                        onDragCancel={ finishWidgetDrag() }
+                                                    )
                                                 }
-                                            }
+                                                .graphicsLayer {
+                                                    if (draggingWidgetId == widgetId) {
+                                                        translationX=widgetDragPosition.x-widgetCanvasBounds.center.x
+                                                        translationY=widgetDragPosition.y-widgetCanvasBounds.center.y
+                                                        scaleX=1.04f; scaleY=1.04f; alpha=.92f
+                                                    }
+                                                }
                                         )
                                         Box(Modifier.align(Alignment.BottomEnd).size(28.dp).background(Color(0x88444444), CircleShape)
                                             .pointerInput(widgetId) {
