@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
