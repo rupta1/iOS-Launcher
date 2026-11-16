@@ -85,12 +85,12 @@ The latest Control Center has been redesigned around the iOS Control Center comp
 
 ## Native Android widgets and appearance
 
-- The **Settings → Widgets** row launches Android's native App Widget picker, which lists widget providers installed by the system and third-party apps. Select a widget and it is placed on the currently selected Home page.
-- Widgets are hosted with Android `AppWidgetHost` / `AppWidgetHostView`; they remain interactive and are not screenshots or simulated cards. Provider configuration screens are launched when required.
+- The **Settings → Widgets** row opens an in-launcher provider browser listing installed system and third-party App Widget providers. Select a provider; Android's binding permission and provider configuration flows are invoked only when needed.
+- Widgets are hosted with Android `AppWidgetHost` / `AppWidgetHostView`; they remain interactive and are not screenshots or simulated cards. The in-launcher provider browser avoids a framework picker inflation crash on affected Android/OEM builds.
 - Widget IDs and page placement are persisted in `launcher_state.db`. The launcher restores them after restart.
-- Long-press and drag a hosted widget to the red **Remove** target at the top to remove it. The built-in Weather and Today cards can also be removed in the same way.
-- Home pages animate as a single page surface: the first-page Weather/Today cards, hosted widgets, and app grid move together when swiping horizontally. Hosted widgets are added to the page that was active when the picker was opened.
+- Long-press and drag a hosted widget to reposition it within the Home page widget canvas; its position is persisted. Drag it to the red **Remove** target at the top to remove it. The built-in Weather and Today cards can also be removed in the same way.
+- Home pages animate as a single page surface: the first-page Weather/Today cards, hosted widgets, and app grid move together when swiping horizontally. Hosted widgets are added to the page that was active when the provider browser was opened.
 - **Settings → Appearance** supports System, Light, and Dark. System follows Android's current UI mode; explicit Light/Dark choices override it. The Home screen, dock surface and launcher settings adapt to the selected mode.
 - Messages and Settings in the dock now use the bundled iOS-style icon artwork rather than generic Material glyphs.
 
-Widget availability, configuration and resize behaviour depend on each installed widget provider and Android/OEM restrictions. The native Android widget picker is used so both built-in and third-party providers can participate.
+Widget availability, configuration and resize behaviour depend on each installed widget provider and Android/OEM restrictions. Control Center can be dismissed by swiping upward anywhere on the overlay, in addition to using the system Back action. The native Android widget picker is used so both built-in and third-party providers can participate.
