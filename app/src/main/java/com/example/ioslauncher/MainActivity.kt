@@ -183,7 +183,7 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             )
-        ).pointerInput(drawer, controlCenter, locked, navigationMode, homeStyle, swipeDownAction, page) {
+        ).pointerInput(drawer, controlCenter, locked, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 var dx = 0f
@@ -198,7 +198,7 @@ fun LauncherRoot(db: LauncherDb) {
                     dy += delta.y
                     val threshold = viewConfiguration.touchSlop * 1.4f
                     if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f && !drawer && !controlCenter && !locked) {
-                        page = (page + if (dx < 0) 1 else -1).coerceIn(0, 2)
+                        page = if (dx > 0 && page == 0 && minusScreen == "Google Discover") -1 else (page + if (dx < 0) 1 else -1).coerceIn(0, 2)
                         change.consume()
                         finished = true
                     } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
@@ -242,13 +242,21 @@ fun LauncherRoot(db: LauncherDb) {
                 targetState = page,
                 modifier = Modifier.weight(1f),
                 transitionSpec = {
-                    (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(280)) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))) togetherWith
-                        (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)))
+                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=520f)) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=620f)) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
                 },
                 label = "home-pages"
             ) { targetPage ->
-                val pageApps = apps.chunked(columns*rows).getOrNull(targetPage).orEmpty()
-                LazyVerticalGrid(
+                val pageApps = if (targetPage < 0) emptyList() else apps.chunked(columns*rows).getOrNull(targetPage).orEmpty()
+                if (targetPage < 0 && minusScreen == "Google Discover") {
+                    val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
+                    Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
+                        Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                        Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
+                    }
+                } else LazyVerticalGrid(
                     columns=GridCells.Fixed(columns),
                     modifier=Modifier.fillMaxSize(),
                     verticalArrangement=Arrangement.spacedBy(18.dp),
@@ -268,7 +276,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
-                repeat(3) { index ->
+                repeat(((apps.size + columns*rows - 1) / (columns*rows)).coerceAtLeast(1)) { index ->
                     Box(Modifier.padding(horizontal=4.dp).size(if(page==index) 9.dp else 7.dp)
                         .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f)))
                 }
