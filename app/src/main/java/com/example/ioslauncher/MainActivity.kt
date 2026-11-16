@@ -333,7 +333,14 @@ fun LauncherRoot(db: LauncherDb) {
     LaunchedEffect(Unit) {
         while (true) {
             deviceState = DeviceStateReader.read(context)
-            kotlinx.coroutines.delay(4000)
+            val persistedWidgets = db.get("home_widgets").split(",").mapNotNull { token ->
+                val parts = token.split(":")
+                val id = parts.getOrNull(0)?.toIntOrNull()
+                val widgetPage = parts.getOrNull(1)?.toIntOrNull()
+                if (id != null && widgetPage != null) id to widgetPage else null
+            }
+            if (persistedWidgets != homeWidgets) homeWidgets = persistedWidgets
+            kotlinx.coroutines.delay(1200)
         }
     }
 
@@ -543,7 +550,7 @@ fun LauncherRoot(db: LauncherDb) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
-            ControlCenter(deviceState, dark, { dark=it; db.put("dark_mode",it.toString()) }, {controlCenter=false})
+            ControlCenter(deviceState, dark, { themeMode=if(it) "dark" else "light"; db.put("theme_mode",themeMode) }, {controlCenter=false})
         }
         AnimatedVisibility(visible=settings, enter=androidx.compose.animation.slideInHorizontally { it }, exit=androidx.compose.animation.slideOutHorizontally { it }) {
             SettingsScreen(
@@ -586,8 +593,8 @@ fun LauncherRoot(db: LauncherDb) {
             Surface(shape=RoundedCornerShape(22.dp), color=Color(0xFFE5484D), shadowElevation=12.dp,
                 modifier=Modifier.padding(top=18.dp).size(width=118.dp,height=72.dp)) {
                 Column(Modifier.fillMaxSize(), horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.Center) {
-                    Icon(Icons.Default.Delete, null, tint=Color.White, modifier=Modifier.size(25.dp))
-                    Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove widget" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
+                    Icon(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) Icons.Default.RemoveCircle else Icons.Default.Delete, null, tint=Color.White, modifier=Modifier.size(25.dp))
+                    Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
             }
         }
@@ -967,13 +974,13 @@ fun SettingsScreen(
     var choiceValue by remember { mutableStateOf("") }
     var choiceOptions by remember { mutableStateOf(emptyList<String>()) }
     var choiceAction by remember { mutableStateOf<(String)->Unit>({}) }
-    val card=Color(0xFF242424)
-    val fg=Color(0xFFF5F5F7)
-    val muted=Color(0xFF99999F)
+    val card=if(dark) Color(0xFF242424) else Color.White
+    val fg=if(dark) Color(0xFFF5F5F7) else Color(0xFF17171B)
+    val muted=if(dark) Color(0xFF99999F) else Color(0xFF777780)
     fun choose(title:String,value:String,options:List<String>,action:(String)->Unit) {
         choiceTitle=title; choiceValue=value; choiceOptions=options; choiceAction=action
     }
-    Column(Modifier.fillMaxSize().background(Color.Black).padding(WindowInsets.statusBars.asPaddingValues()).padding(horizontal=18.dp)) {
+    Column(Modifier.fillMaxSize().background(if(dark) Color.Black else Color(0xFFF3F2F7)).padding(WindowInsets.statusBars.asPaddingValues()).padding(horizontal=18.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=4.dp), verticalAlignment=Alignment.CenterVertically) {
             IconButton(onClick=onClose) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
         }
