@@ -138,7 +138,7 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFFDFE9F6), Color(0xFFF7F5FA), Color(0xFFDCE6F4))
             )
-        ).pointerInput(drawer, controlCenter) {
+        ).pointerInput(drawer, controlCenter, locked) {
             var start = Offset.Zero
             var totalX = 0f
             var totalY = 0f
