@@ -801,12 +801,14 @@ fun IosVerticalSlider(value:Float,onValue:(Float)->Unit,icon:ImageVector) {
     var sliderHeight by remember { mutableFloatStateOf(0f) }
     Box(Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha=.18f))
         .pointerInput(Unit) {
+            detectTapGestures(onTap={ offset -> onValue((1f-offset.y/size.height).coerceIn(0f,1f)) })
+        }
+        .pointerInput(Unit) {
             detectDragGestures(
                 onDragStart={ offset -> onValue((1f-offset.y/size.height).coerceIn(0f,1f)) },
                 onDrag={ change,_ -> change.consume(); onValue((1f-change.position.y/size.height).coerceIn(0f,1f)) }
             )
-        }
-        .clickable(interactionSource=remember { MutableInteractionSource() },indication=null) { },
+        },
         contentAlignment=Alignment.BottomCenter
     ) {
         Box(Modifier.fillMaxWidth().fillMaxHeight(value.coerceIn(.02f,1f)).clip(RoundedCornerShape(28.dp)).background(Color.White))
