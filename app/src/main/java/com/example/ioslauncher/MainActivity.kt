@@ -275,7 +275,7 @@ fun LauncherRoot(db: LauncherDb) {
                             finished = true
                         } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                             val topRightEdge = down.position.y < size.height * .16f && down.position.x > size.width * .62f
-                            if (dy > 0 && topRightEdge) {
+                            if (dy > 0 && topRightEdge && swipeDownAction == "Control Center") {
                                 controlCenter = true
                                 change.consume()
                                 finished = true
