@@ -301,20 +301,7 @@ fun LauncherRoot(db: LauncherDb) {
     }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     var dragEdgeDirection by remember { mutableIntStateOf(0) }
-    fun updateDragEdge(position: Offset) {
-        val widthPx = activity.window.decorView.width.toFloat()
-        val edgePx = with(density) { 34.dp.toPx() }
-        val direction = when {
-            position.x <= edgePx -> -1
-            position.x >= widthPx - edgePx -> 1
-            else -> 0
-        }
-        if (direction == 0) dragEdgeDirection = 0
-        else if (direction != dragEdgeDirection) {
-            page = (page + direction).coerceIn(0, pageCount - 1)
-            dragEdgeDirection = direction
-        }
-    }
+
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val density = LocalDensity.current
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
@@ -349,30 +336,7 @@ fun LauncherRoot(db: LauncherDb) {
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
-    fun finishIconDrag() {
-        val dragged = draggingApp ?: return
-        if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
-            activity.uninstall(dragged)
-            draggingApp = null
-            dragEdgeDirection = 0
-            return
-        }
-        val targetPage = page.coerceIn(0, pageCount - 1)
-        val visiblePackages = pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
-        val target = appBounds.entries.firstOrNull { (key, rect) ->
-            key != dragged.packageName && key in visiblePackages && rect.contains(dragPosition)
-        }?.key
-        val list = apps.toMutableList()
-        list.removeAll { it.packageName == dragged.packageName }
-        val targetIndex = target?.let { key -> list.indexOfFirst { it.packageName == key } } ?: -1
-        val pageStart = pageAppSlices.take(targetPage).sumOf { it.size }.coerceIn(0, list.size)
-        val insertAt = if (targetIndex >= 0) targetIndex else pageStart + pageAppSlices.getOrNull(targetPage).orEmpty().size.coerceAtMost(list.size - pageStart)
-        list.add(insertAt.coerceIn(0, list.size), dragged)
-        apps = list
-        db.put("app_order", list.joinToString("|") { it.packageName })
-        draggingApp = null
-        dragEdgeDirection = 0
-    }
+
     fun finishWidgetDrag() {
         val id = draggingWidgetId
         if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetDragPosition.y < uninstallDropZoneHeight) {
@@ -422,6 +386,44 @@ fun LauncherRoot(db: LauncherDb) {
         result
     }
     val pageCount = pageAppSlices.size.coerceAtLeast(1)
+    fun updateDragEdge(position: Offset) {
+        val widthPx = activity.window.decorView.width.toFloat()
+        val edgePx = with(density) { 34.dp.toPx() }
+        val direction = when {
+            position.x <= edgePx -> -1
+            position.x >= widthPx - edgePx -> 1
+            else -> 0
+        }
+        if (direction == 0) dragEdgeDirection = 0
+        else if (direction != dragEdgeDirection) {
+            page = (page + direction).coerceIn(0, pageCount - 1)
+            dragEdgeDirection = direction
+        }
+    }
+    fun finishIconDrag() {
+        val dragged = draggingApp ?: return
+        if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
+            activity.uninstall(dragged)
+            draggingApp = null
+            dragEdgeDirection = 0
+            return
+        }
+        val targetPage = page.coerceIn(0, pageCount - 1)
+        val visiblePackages = pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
+        val target = appBounds.entries.firstOrNull { (key, rect) ->
+            key != dragged.packageName && key in visiblePackages && rect.contains(dragPosition)
+        }?.key
+        val list = apps.toMutableList()
+        list.removeAll { it.packageName == dragged.packageName }
+        val targetIndex = target?.let { key -> list.indexOfFirst { it.packageName == key } } ?: -1
+        val pageStart = pageAppSlices.take(targetPage).sumOf { it.size }.coerceIn(0, list.size)
+        val insertAt = if (targetIndex >= 0) targetIndex else pageStart + pageAppSlices.getOrNull(targetPage).orEmpty().size.coerceAtMost(list.size - pageStart)
+        list.add(insertAt.coerceIn(0, list.size), dragged)
+        apps = list
+        db.put("app_order", list.joinToString("|") { it.packageName })
+        draggingApp = null
+        dragEdgeDirection = 0
+    }
     SideEffect {
         activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
         activity.window.navigationBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
