@@ -186,7 +186,10 @@ fun LauncherRoot(db: LauncherDb) {
     var homeStyle by remember { mutableStateOf(db.get("home_style", "With App drawer")) }
     var minusScreen by remember { mutableStateOf(db.get("minus_screen", "Google Discover")) }
     var searchStyle by remember { mutableStateOf(db.get("search_style", "Compact search")) }
-    var swipeDownAction by remember { mutableStateOf(db.get("swipe_down_action", "Control Center")) }
+    var swipeDownAction by remember {
+        val savedSwipeAction = db.get("swipe_down_action", "Control Center")
+        mutableStateOf(if (savedSwipeAction == "App finder") "Control Center" else savedSwipeAction)
+    }
     var doubleTapLock by remember { mutableStateOf(db.get("double_tap_lock", "false") == "true") }
     var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
     var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
