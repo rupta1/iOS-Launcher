@@ -63,7 +63,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.isSystemInDarkTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +114,6 @@ class MainActivity : ComponentActivity() {
         pendingWidgetId = widgetHost.allocateAppWidgetId()
         val pick = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_HOST_ID, 0x10A1)
         }
         try { startActivityForResult(pick, widgetPickRequest) }
         catch (_: Exception) { widgetHost.deleteAppWidgetId(pendingWidgetId); pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID }
