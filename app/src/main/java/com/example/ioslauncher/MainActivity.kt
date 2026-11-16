@@ -245,7 +245,7 @@ fun LauncherRoot(db: LauncherDb) {
                 },
                 label = "home-pages"
             ) { targetPage ->
-                val pageApps = apps.chunked(columns*3).getOrNull(targetPage).orEmpty()
+                val pageApps = apps.chunked(columns*rows).getOrNull(targetPage).orEmpty()
                 LazyVerticalGrid(
                     columns=GridCells.Fixed(columns),
                     modifier=Modifier.fillMaxSize(),
@@ -254,7 +254,7 @@ fun LauncherRoot(db: LauncherDb) {
                     contentPadding=PaddingValues(bottom=12.dp)
                 ) {
                     itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
-                        AppIcon(app, labels, fg, index) {
+                        AppIcon(app, labels && hideText == "Off", fg, index, animationSpeed) {
                             if (app.packageName == "internal:settings") settings = true else activity.launch(app)
                         }
                     }
@@ -293,12 +293,28 @@ fun LauncherRoot(db: LauncherDb) {
         }
         AnimatedVisibility(visible=settings, enter=androidx.compose.animation.slideInHorizontally { it }, exit=androidx.compose.animation.slideOutHorizontally { it }) {
             SettingsScreen(
-                fg, bg, columns, labels, dark,
+                columns=columns, rows=rows, labels=labels, hideText=hideText, dark=dark,
+                homeStyle=homeStyle, minusScreen=minusScreen, searchStyle=searchStyle, swipeDownAction=swipeDownAction,
+                animationSpeed=animationSpeed, doubleTapLock=doubleTapLock, fillCells=fillCells, lockLayout=lockLayout,
+                navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
                 onColumns={columns=it;db.put("grid_columns",it.toString())},
+                onRows={rows=it;db.put("grid_rows",it.toString())},
                 onLabels={labels=it;db.put("show_labels",it.toString())},
+                onHideText={hideText=it;db.put("hide_text",it)},
                 onDark={dark=it;db.put("dark_mode",it.toString())},
+                onHomeStyle={homeStyle=it;db.put("home_style",it)},
+                onMinusScreen={minusScreen=it;db.put("minus_screen",it)},
+                onSearchStyle={searchStyle=it;db.put("search_style",it)},
+                onSwipeDown={swipeDownAction=it;db.put("swipe_down_action",it)},
+                onAnimationSpeed={animationSpeed=it;db.put("animation_speed",it)},
+                onDoubleTapLock={doubleTapLock=it;db.put("double_tap_lock",it.toString())},
+                onFillCells={fillCells=it;db.put("fill_cells",it.toString())},
+                onLockLayout={lockLayout=it;db.put("lock_layout",it.toString())},
+                onNavigationMode={navigationMode=it;db.put("navigation_mode",it)},
+                onRecentsArrangement={recentsArrangement=it;db.put("recents_arrangement",it)},
+                onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
                 onClose={settings=false},
-                onDeviceSettings={ context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                onDeviceSettings={context.startActivity(Intent(Settings.ACTION_SETTINGS))}
             )
         }
         AnimatedVisibility(visible=locked, enter=fadeIn(tween(280)), exit=fadeOut(tween(300))) {
