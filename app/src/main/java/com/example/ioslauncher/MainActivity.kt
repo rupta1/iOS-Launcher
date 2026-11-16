@@ -280,8 +280,8 @@ fun LauncherRoot(db: LauncherDb) {
                 targetState = page,
                 modifier = Modifier.weight(1f),
                 transitionSpec = {
-                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=520f)) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
-                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=620f)) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
+                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=when(animationSpeed) { "Slow" -> 260f; "Normal" -> 430f; else -> 720f })) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=when(animationSpeed) { "Slow" -> 300f; "Normal" -> 500f; else -> 800f })) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
                 },
                 label = "home-pages"
             ) { targetPage ->
