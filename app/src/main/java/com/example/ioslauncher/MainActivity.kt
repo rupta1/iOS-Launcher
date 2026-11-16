@@ -10,6 +10,14 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -27,7 +35,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.verticalScroll
@@ -124,6 +131,13 @@ class MainActivity : ComponentActivity() {
             }.thenBy { it.label.lowercase(Locale.getDefault()) })
     }
 
+    fun uninstall(app: InstalledApp) {
+        if (app.packageName.startsWith("internal:")) return
+        try {
+            startActivity(Intent(Intent.ACTION_DELETE, android.net.Uri.parse("package:${app.packageName}")))
+        } catch (_: Exception) { }
+    }
+
     fun launch(app: InstalledApp) {
         try {
             when (app.packageName) {
@@ -152,7 +166,9 @@ fun LauncherRoot(db: LauncherDb) {
             if (index < 0) Int.MAX_VALUE else index
         })
     }
-    var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var dragPosition by remember { mutableStateOf(Offset.Zero) }
+    val appBounds = remember { mutableStateMapOf<String, Rect>() }
     var drawer by remember { mutableStateOf(false) }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
@@ -167,7 +183,7 @@ fun LauncherRoot(db: LauncherDb) {
     var homeStyle by remember { mutableStateOf(db.get("home_style", "With App drawer")) }
     var minusScreen by remember { mutableStateOf(db.get("minus_screen", "Google Discover")) }
     var searchStyle by remember { mutableStateOf(db.get("search_style", "Compact search")) }
-    var swipeDownAction by remember { mutableStateOf(db.get("swipe_down_action", "App finder")) }
+    var swipeDownAction by remember { mutableStateOf(db.get("swipe_down_action", "Control Center")) }
     var doubleTapLock by remember { mutableStateOf(db.get("double_tap_lock", "false") == "true") }
     var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
     var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
@@ -179,31 +195,43 @@ fun LauncherRoot(db: LauncherDb) {
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
-    fun moveSelectedApp(delta:Int) {
-        val selected = selectedApp ?: return
-        val list = apps.toMutableList()
-        val from = list.indexOfFirst { it.packageName == selected.packageName }
-        val to = (from + delta).coerceIn(0, list.lastIndex)
-        if (from >= 0 && from != to) {
-            val item = list.removeAt(from)
-            list.add(to, item)
-            apps = list
-            db.put("app_order", list.joinToString("|") { it.packageName })
+    fun finishIconDrag() {
+        val dragged = draggingApp ?: return
+        val dropZoneHeight = with(LocalDensity.current) { 112.dp.toPx() }
+        if (dragPosition.y < dropZoneHeight && !dragged.packageName.startsWith("internal:")) {
+            activity.uninstall(dragged)
+            draggingApp = null
+            return
         }
-        selectedApp = null
+        val target = appBounds.entries.firstOrNull { (key, rect) ->
+            key != dragged.packageName && rect.contains(dragPosition)
+        }?.key
+        if (target != null) {
+            val list = apps.toMutableList()
+            val from = list.indexOfFirst { it.packageName == dragged.packageName }
+            val to = list.indexOfFirst { it.packageName == target }
+            if (from >= 0 && to >= 0 && from != to) {
+                val item = list.removeAt(from)
+                list.add(to, item)
+                apps = list
+                db.put("app_order", list.joinToString("|") { it.packageName })
+            }
+        }
+        draggingApp = null
     }
     val showLabels = labels && hideText == "Off"
     val pageCount = ((apps.size + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
     SideEffect {
         activity.window.statusBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.rgb(37, 38, 94)
-        activity.window.navigationBarColor = when {
-            settings -> android.graphics.Color.BLACK
-            navigationMode == "buttons" -> android.graphics.Color.rgb(228, 161, 124)
-            else -> android.graphics.Color.TRANSPARENT
-        }
-        androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = navigationMode == "buttons" && !settings
+        activity.window.navigationBarColor = if (settings) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
+        val bars = androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+        bars.isAppearanceLightStatusBars = false
+        bars.isAppearanceLightNavigationBars = false
+        if (navigationMode == "gestures") {
+            bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+        } else {
+            bars.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
         }
     }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
@@ -221,44 +249,48 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             )
-        ).pointerInput(drawer, controlCenter, locked, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                var dx = 0f
-                var dy = 0f
-                var finished = false
-                while (!finished) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) break
-                    val delta = change.position - change.previousPosition
-                    dx += delta.x
-                    dy += delta.y
-                    val threshold = viewConfiguration.touchSlop * 1.4f
-                    if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f && !drawer && !controlCenter && !locked) {
-                        page = if (dx > 0 && page == 0 && minusScreen == "Google Discover") -1 else (page + if (dx < 0) 1 else -1).coerceIn(0, pageCount - 1)
-                        change.consume()
-                        finished = true
-                    } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
-                        if (dy < 0 && down.position.y > size.height * .78f && !drawer && !controlCenter && !locked && homeStyle == "With App drawer" && navigationMode == "gestures") {
-                            drawer = true; change.consume(); finished = true
-                        } else if (dy > 0 && down.position.y > size.height * .16f && down.position.y < size.height * .92f && !locked && swipeDownAction == "App finder") {
-                            drawer = true; search = ""; change.consume(); finished = true
-                        } else if (dy > 0 && down.position.y < size.height * .18f && !locked && swipeDownAction == "Control Center") {
-                            controlCenter = true; change.consume(); finished = true
-                        } else if (dy > 0 && drawer) {
-                            drawer = false; change.consume(); finished = true
-                        } else if (dy < 0 && controlCenter) {
-                            controlCenter = false; change.consume(); finished = true
-                        } else if (down.position.y > size.height * .18f && down.position.y < size.height * .78f) {
+        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
+            if (!drawer && !controlCenter && !settings && !locked) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var dx = 0f
+                    var dy = 0f
+                    var finished = false
+                    while (!finished) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val delta = change.position - change.previousPosition
+                        dx += delta.x
+                        dy += delta.y
+                        val threshold = viewConfiguration.touchSlop * 1.4f
+                        if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f) {
+                            if (dx > 0 && page == 0 && minusScreen == "Google Discover") page = -1
+                            else page = (page + if (dx < 0) 1 else -1).coerceIn(0, pageCount - 1)
+                            change.consume()
                             finished = true
+                        } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                            val topRightEdge = down.position.y < size.height * .16f && down.position.x > size.width * .62f
+                            if (dy > 0 && topRightEdge) {
+                                controlCenter = true
+                                change.consume()
+                                finished = true
+                            } else if (dy < 0 && down.position.y > size.height * .86f && homeStyle == "With App drawer") {
+                                drawer = true
+                                change.consume()
+                                finished = true
+                            } else {
+                                finished = true
+                            }
                         }
                     }
                 }
             }
         }
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
+            renderEffect = if (controlCenter && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(20f, 20f) else null
+        }) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
@@ -304,10 +336,14 @@ fun LauncherRoot(db: LauncherDb) {
                     contentPadding=PaddingValues(bottom=12.dp)
                 ) {
                     itemsIndexed(pageApps, key={ _, app -> app.packageName }) { index, app ->
-                        AppIcon(app, labels && hideText == "Off", fg, index, animationSpeed,
-                            onLongClick = { if (!lockLayout) selectedApp = app }) {
-                            if (app.packageName == "internal:settings") settings = true else activity.launch(app)
-                        }
+                        AppIcon(
+                            app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
+                            onBounds={ key, rect -> appBounds[key] = rect },
+                            onDragStart={ if (!lockLayout) { draggingApp=app; dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
+                            onDrag={ delta -> dragPosition += delta },
+                            onDragEnd={ finishIconDrag() },
+                            onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
+                        )
                     }
                     if (fillCells) {
                         items((columns * rows - pageApps.size).coerceAtLeast(0)) {
@@ -342,6 +378,15 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
 
+        BackHandler(enabled=true) {
+            when {
+                controlCenter -> controlCenter=false
+                drawer -> drawer=false
+                settings -> settings=false
+                draggingApp != null -> draggingApp=null
+                else -> Unit
+            }
+        }
         AnimatedVisibility(visible=drawer, enter=androidx.compose.animation.fadeIn(), exit=androidx.compose.animation.fadeOut()) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
         }
@@ -380,19 +425,14 @@ fun LauncherRoot(db: LauncherDb) {
                 db.put("launcher_unlocked", "true")
             }
         }
-        if (selectedApp != null) {
-            AlertDialog(
-                onDismissRequest={selectedApp=null},
-                title={Text("Arrange ${selectedApp!!.label}")},
-                text={Text("Move this app in your Home screen layout.")},
-                confirmButton={
-                    Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                        TextButton(onClick={moveSelectedApp(-1)}) { Text("Move left") }
-                        TextButton(onClick={moveSelectedApp(1)}) { Text("Move right") }
-                        TextButton(onClick={selectedApp=null}) { Text("Done") }
-                    }
+        AnimatedVisibility(visible=draggingApp != null, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
+            Surface(shape=RoundedCornerShape(22.dp), color=Color(0xFFE5484D), shadowElevation=12.dp,
+                modifier=Modifier.padding(top=18.dp).size(width=118.dp,height=72.dp)) {
+                Column(Modifier.fillMaxSize(), horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.Center) {
+                    Icon(Icons.Default.Delete, null, tint=Color.White, modifier=Modifier.size(25.dp))
+                    Text("Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
-            )
+            }
         }
     }
 }
@@ -492,9 +532,12 @@ private fun iconResourceForLabel(label:String):Int {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp, onLongClick:()->Unit={}, onClick:()->Unit) {
+fun AppIcon(
+    app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
+    onBounds:(String,Rect)->Unit={}, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={},
+    onDragEnd:()->Unit={}, onClick:()->Unit
+) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
     LaunchedEffect(app.packageName) { shown=true }
     val duration = when(animationSpeed) { "Slow" -> 300; "Normal" -> 210; else -> 140 }
@@ -502,16 +545,26 @@ fun AppIcon(app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSp
     val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(duration), label="icon-alpha")
     val iconRes=iconResourceForLabel(app.label)
     val fallbackBitmap = remember(app.packageName) { app.icon.toBitmap(192,192).asImageBitmap() }
-    Column(horizontalAlignment=Alignment.CenterHorizontally,
+    Column(
+        horizontalAlignment=Alignment.CenterHorizontally,
         modifier=Modifier.graphicsLayer { scaleX=scale; scaleY=scale; this.alpha=alpha }
-            .combinedClickable(onClick=onClick,onLongClick=onLongClick)) {
+            .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
+            .pointerInput(app.packageName) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart={ onDragStart() },
+                    onDrag={ change, amount -> change.consume(); onDrag(amount) },
+                    onDragEnd=onDragEnd,
+                    onDragCancel=onDragEnd
+                )
+            }
+            .clickable(onClick=onClick)
+    ) {
         Surface(modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
             shape=RoundedCornerShape(21.dp), color=Color.White) {
             if(iconRes!=0) {
                 Image(painterResource(iconRes),null,Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)))
             } else {
-                Image(fallbackBitmap,null,
-                    Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)).padding(1.dp))
+                Image(fallbackBitmap,null,Modifier.fillMaxSize().clip(RoundedCornerShape(21.dp)).padding(1.dp))
             }
         }
         if(labels) {
@@ -538,7 +591,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
         OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), placeholder={Text("Search apps")}, leadingIcon={Icon(Icons.Default.Search,null)}, singleLine=true)
         Spacer(Modifier.height(14.dp))
         LazyVerticalGrid(columns=GridCells.Fixed(4), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            items(apps, key={it.packageName}) { AppIcon(it, labels, fg, 0, "Fast", 54.dp) { onLaunch(it) } }
+            items(apps, key={it.packageName}) { AppIcon(app=it,labels=labels,fg=fg,index=0,animationSpeed="Fast",size=54.dp,onClick={onLaunch(it)}) }
         }
     }
 }
@@ -546,30 +599,36 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
 @Composable
 fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onClose:()->Unit) {
     val context= LocalContext.current
-    val bg=Color(0xFFE8E9EF)
-    Column(Modifier.fillMaxSize().background(bg.copy(alpha=.98f)).padding(WindowInsets.statusBars.asPaddingValues()).padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
-            Text("Control Center", fontSize=25.sp, fontWeight=FontWeight.Bold, color=Color(0xFF17191F), modifier=Modifier.weight(1f))
-            IconButton(onClick=onClose) { Icon(Icons.Default.Close,null) }
+    val bg=Color(0xFFE9EAF0)
+    Column(
+        Modifier.fillMaxSize()
+            .background(bg.copy(alpha=.80f))
+            .padding(WindowInsets.statusBars.asPaddingValues())
+            .padding(horizontal=16.dp, vertical=10.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(Modifier.fillMaxWidth().padding(bottom=10.dp), verticalAlignment=Alignment.CenterVertically) {
+            Text("Control Center", fontSize=27.sp, fontWeight=FontWeight.Bold, color=Color(0xFF17191F), modifier=Modifier.weight(1f))
+            IconButton(onClick=onClose) { Icon(Icons.Default.Close,null,tint=Color(0xFF17191F)) }
         }
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1.1f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                ControlTile("✈","Airplane mode","Open system setting") { context.startActivity(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) }
-                ControlTile("▥","${state.transport}","${if(state.online) "Connected" else "Offline"}") { context.startActivity(Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)) }
-                ControlTile("ᛒ","Bluetooth",state.bluetooth) { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            Column(Modifier.weight(1.08f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
+                ControlTile(Icons.Default.AirplanemodeActive,"Airplane mode","Open system setting") { context.startActivity(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) }
+                ControlTile(Icons.Default.Wifi,"Wi-Fi",if(state.transport=="Wi-Fi") "Connected" else state.transport) { context.startActivity(Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)) }
+                ControlTile(Icons.Default.Bluetooth,"Bluetooth",state.bluetooth) { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
             }
-            Column(Modifier.weight(.9f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                ControlTile("♫","Not Playing","Media controls") { }
-                ControlTile("☾","Focus","Do Not Disturb settings") { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) }
+            Column(Modifier.weight(.92f), verticalArrangement=Arrangement.spacedBy(9.dp)) {
+                ControlTile(Icons.Default.MusicNote,"Not Playing","Media controls") { context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
+                ControlTile(Icons.Default.Bedtime,"Focus","Do Not Disturb settings") { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) }
             }
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            SliderTile("☼","Brightness", Modifier.weight(1f)) { value ->
+            SliderTile(Icons.Default.Brightness6,"Brightness", Modifier.weight(1f)) { value ->
                 val activity = context as? Activity
                 activity?.window?.attributes = activity.window.attributes.apply { screenBrightness = value }
             }
-            SliderTile("♫","Volume", Modifier.weight(1f)) { value ->
+            SliderTile(Icons.Default.VolumeUp,"Volume", Modifier.weight(1f)) { value ->
                 val audio = context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
                 val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 audio.setStreamVolume(AudioManager.STREAM_MUSIC, (value * max).toInt(), 0)
@@ -577,52 +636,56 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            SmallTile("▣","Rotation", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
-            SmallTile("▰","Low Power", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) }
-            SmallTile("◐","Dark Mode", Modifier.weight(1f)) { onDark(!dark) }
+            SmallTile(Icons.Default.ScreenRotation,"Rotation", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+            SmallTile(Icons.Default.BatteryChargingFull,"Low Power", Modifier.weight(1f)) { context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) }
+            SmallTile(Icons.Default.DarkMode,"Dark Mode", Modifier.weight(1f)) { onDark(!dark) }
         }
         Spacer(Modifier.height(16.dp))
-        Text("DEVICE STATUS", color=Color.Gray, fontSize=11.sp, fontWeight=FontWeight.Bold)
-        Surface(shape=RoundedCornerShape(18.dp), color=Color.White, modifier=Modifier.fillMaxWidth().padding(top=8.dp)) {
-            Column(Modifier.padding(14.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                Text("Internet: ${if(state.online) "Online" else "Offline"}", color=Color.DarkGray, fontSize=13.sp)
-                Text("Network: ${state.transport}", color=Color.DarkGray, fontSize=13.sp)
-                Text("Wi-Fi SSID: ${state.wifiSsid}", color=Color.DarkGray, fontSize=13.sp)
-                Text("Bluetooth: ${state.bluetooth}", color=Color.DarkGray, fontSize=13.sp)
-                Text("Cellular: ${state.cellularType}", color=Color.DarkGray, fontSize=13.sp)
+        Text("DEVICE STATUS", color=Color(0xFF777982), fontSize=11.sp, fontWeight=FontWeight.Bold)
+        Surface(shape=RoundedCornerShape(22.dp), color=Color.White.copy(alpha=.88f), modifier=Modifier.fillMaxWidth().padding(top=8.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                Text("Internet: ${if(state.online) "Online" else "Offline"}", color=Color(0xFF45464D), fontSize=13.sp)
+                Text("Network: ${state.transport}", color=Color(0xFF45464D), fontSize=13.sp)
+                Text("Wi-Fi SSID: ${state.wifiSsid}", color=Color(0xFF45464D), fontSize=13.sp)
+                Text("Bluetooth: ${state.bluetooth}", color=Color(0xFF45464D), fontSize=13.sp)
+                Text("Cellular: ${state.cellularType}", color=Color(0xFF45464D), fontSize=13.sp)
             }
         }
-        Spacer(Modifier.weight(1f))
-        Text("Some controls open Android system panels; Android restricts direct toggling by third-party launchers.", color=Color.Gray, fontSize=10.sp)
+        Spacer(Modifier.height(20.dp))
+        Text("Some controls open Android system panels; Android restricts direct toggling by third-party launchers.", color=Color(0xFF777982), fontSize=10.sp)
     }
 }
 
 @Composable
-fun ControlTile(icon:String,title:String,subtitle:String,onClick:()->Unit) {
-    Surface(onClick=onClick, shape=RoundedCornerShape(20.dp), color=Color.White, modifier=Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment=Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF1685F8)), contentAlignment=Alignment.Center) { Text(icon,color=Color.White,fontSize=18.sp) }
-            Spacer(Modifier.width(8.dp))
-            Column { Text(title,fontSize=12.sp,fontWeight=FontWeight.SemiBold,color=Color.DarkGray);Text(subtitle,fontSize=9.sp,color=Color.Gray) }
+fun ControlTile(icon:ImageVector,title:String,subtitle:String,onClick:()->Unit) {
+    Surface(onClick=onClick, shape=RoundedCornerShape(23.dp), color=Color.White.copy(alpha=.90f), modifier=Modifier.fillMaxWidth().heightIn(min=78.dp)) {
+        Row(Modifier.padding(horizontal=12.dp,vertical=13.dp), verticalAlignment=Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF1685F8)), contentAlignment=Alignment.Center) {
+                Icon(icon,null,tint=Color.White,modifier=Modifier.size(21.dp))
+            }
+            Spacer(Modifier.width(9.dp))
+            Column { Text(title,fontSize=12.sp,fontWeight=FontWeight.SemiBold,color=Color(0xFF363840));Text(subtitle,fontSize=9.sp,color=Color(0xFF7A7C84),maxLines=1) }
         }
     }
 }
 @Composable
-fun SliderTile(icon:String,title:String,modifier:Modifier=Modifier,onChange:(Float)->Unit) {
-    var value by remember { mutableFloatStateOf(.65f) }
-    Surface(modifier, shape=RoundedCornerShape(20.dp), color=Color.White) {
-        Column(Modifier.padding(12.dp), horizontalAlignment=Alignment.CenterHorizontally) {
-            Text(icon,fontSize=20.sp,color=Color.DarkGray)
-            Slider(value,{value=it;onChange(it)})
-            Text(title,fontSize=10.sp,color=Color.Gray)
+fun SliderTile(icon:ImageVector,title:String,modifier:Modifier=Modifier,onChange:(Float)->Unit) {
+    var value by remember(title) { mutableFloatStateOf(.65f) }
+    Surface(modifier.height(148.dp), shape=RoundedCornerShape(24.dp), color=Color.White.copy(alpha=.91f)) {
+        Column(Modifier.padding(horizontal=10.dp,vertical=12.dp), horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.SpaceBetween) {
+            Icon(icon,null,tint=Color(0xFF565861),modifier=Modifier.size(22.dp))
+            Slider(value,{value=it;onChange(it)},colors=SliderDefaults.colors(thumbColor=Color(0xFF6952A3),activeTrackColor=Color(0xFF6952A3),inactiveTrackColor=Color(0xFFDCD5EE)))
+            Text(title,fontSize=10.sp,color=Color(0xFF85868D))
         }
     }
 }
 @Composable
-fun SmallTile(icon:String,title:String,modifier:Modifier=Modifier,onClick:()->Unit) {
-    Surface(onClick=onClick,modifier=modifier,shape=RoundedCornerShape(18.dp),color=Color.White) {
-        Column(Modifier.padding(vertical=14.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-            Text(icon,fontSize=22.sp,color=Color.DarkGray);Text(title,fontSize=10.sp,color=Color.Gray)
+fun SmallTile(icon:ImageVector,title:String,modifier:Modifier=Modifier,onClick:()->Unit) {
+    Surface(onClick=onClick,modifier=modifier.height(88.dp),shape=RoundedCornerShape(22.dp),color=Color.White.copy(alpha=.90f)) {
+        Column(Modifier.padding(vertical=13.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+            Icon(icon,null,tint=Color(0xFF4C4E56),modifier=Modifier.size(22.dp))
+            Spacer(Modifier.height(5.dp))
+            Text(title,fontSize=10.sp,color=Color(0xFF85868D))
         }
     }
 }
@@ -660,7 +723,7 @@ fun SettingsScreen(
                 SettingChoice("Home screen",homeStyle,fg,muted) { choose("Home screen",homeStyle,listOf("With App drawer","Without App drawer"),onHomeStyle) }
                 SettingChoice("-1 screen",minusScreen,fg,muted) { choose("-1 screen",minusScreen,listOf("Google Discover","None"),onMinusScreen) }
                 SettingChoice("Home screen search",searchStyle,fg,muted) { choose("Home screen search",searchStyle,listOf("Compact search","Full screen search"),onSearchStyle) }
-                SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("App finder","Control Center","None"),onSwipeDown) }
+                SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("Control Center","None"),onSwipeDown) }
                 SettingChoice("Animation speed",animationSpeed,fg,muted) { choose("Animation speed",animationSpeed,listOf("Fast","Normal","Slow"),onAnimationSpeed) }
                 SettingSwitch("Double tap an empty spot on the Home screen to lock",doubleTapLock,fg,onDoubleTapLock)
             }
