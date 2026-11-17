@@ -456,6 +456,12 @@ fun LauncherRoot(db: LauncherDb) {
         val id=draggingWidgetId
         val destinationPage=pendingDragPage.coerceAtLeast(0)
         if(id==AppWidgetManager.INVALID_APPWIDGET_ID) return
+        fun persistWidgetPositions() {
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
+            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("home_widgets",homeWidgets.joinToString(","){it.first.toString()+":"+it.second})
+        }
         if(widgetDragPosition.y<uninstallDropZoneHeight) {
             when(id) {
                 -1001 -> { showWeatherWidget=false; db.put("show_weather_widget","false") }
@@ -463,29 +469,40 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> { activity.removeHomeWidget(id); homeWidgets=homeWidgets.filterNot { it.first==id } }
             }
             widgetSlotAssignments=widgetSlotAssignments-id
-            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
             widgetPositions=widgetPositions-id
         } else {
-            val targetApp=appBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
             val oldWidgetSlot=widgetSlotAssignments[id] ?: slotAt(widgetCanvasBounds.center)
-            val newSlot=if(targetApp!=null) (appSlotAssignments[targetApp] ?: oldWidgetSlot) else slotAt(widgetDragPosition)
-            if(targetApp!=null) {
-                appSlotAssignments=appSlotAssignments+(targetApp to oldWidgetSlot)
-                appPageAssignments=appPageAssignments+(targetApp to destinationPage)
-                db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
-                db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            val targetApp=appBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
+            val targetWidget=widgetBounds.entries.firstOrNull { it.key!=id && it.value.contains(widgetDragPosition) }?.key
+            val targetFolder=folderBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
+            when {
+                targetApp!=null -> {
+                    val appSlot=appSlotAssignments[targetApp] ?: slotAt(appBounds[targetApp]?.center ?: widgetDragPosition)
+                    appSlotAssignments=appSlotAssignments+(targetApp to oldWidgetSlot)
+                    appPageAssignments=appPageAssignments+(targetApp to destinationPage)
+                    widgetSlotAssignments=widgetSlotAssignments+(id to appSlot)
+                }
+                targetWidget!=null -> {
+                    val otherSlot=widgetSlotAssignments[targetWidget] ?: slotAt(widgetBounds[targetWidget]?.center ?: widgetDragPosition)
+                    widgetSlotAssignments=widgetSlotAssignments+(id to otherSlot)+(targetWidget to oldWidgetSlot)
+                }
+                targetFolder!=null -> {
+                    val folder=folders.firstOrNull { it.id==targetFolder }
+                    if(folder!=null) {
+                        widgetSlotAssignments=widgetSlotAssignments+(id to folder.slot)
+                        folders=folders.map { if(it.id==folder.id) it.copy(slot=oldWidgetSlot,page=destinationPage) else it }
+                        persistFolders()
+                    } else widgetSlotAssignments=widgetSlotAssignments+(id to slotAt(widgetDragPosition))
+                }
+                else -> widgetSlotAssignments=widgetSlotAssignments+(id to slotAt(widgetDragPosition))
             }
-            widgetSlotAssignments=widgetSlotAssignments+(id to newSlot)
-            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
             when(id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
                 -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page",destinationPage.toString()) }
-                else -> {
-                    homeWidgets=homeWidgets.map { if(it.first==id) id to destinationPage else it }
-                    db.put("home_widgets",homeWidgets.joinToString(","){it.first.toString()+":"+it.second})
-                }
+                else -> homeWidgets=homeWidgets.map { if(it.first==id) id to destinationPage else it }
             }
         }
+        persistWidgetPositions()
         extraHomePages=0
         draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
         dragEdgeDirection=0
