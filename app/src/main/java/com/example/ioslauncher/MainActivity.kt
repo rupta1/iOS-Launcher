@@ -1682,6 +1682,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
     var volume by remember { mutableFloatStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()/maxVolume) }
     var brightness by remember { mutableFloatStateOf(.72f) }
     var torchOn by remember { mutableStateOf(false) }
+    fun open(action:Intent) { try { context.startActivity(action) } catch (_:Exception) { } }
     val cameraManager = remember { context.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager }
     fun toggleTorch() {
         val cameraId = try { cameraManager.cameraIdList.firstOrNull { id ->
@@ -1699,7 +1700,6 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
     val panel=Color(0xFF5B6477).copy(alpha=.48f)
     val panelBorder=Color.White.copy(alpha=.16f)
     val blue=Color(0xFF168AF4)
-    fun open(action:Intent) { try { context.startActivity(action) } catch (_:Exception) { } }
     fun mediaKey(code:Int) {
         val eventTime=android.os.SystemClock.uptimeMillis()
         audio.dispatchMediaKeyEvent(android.view.KeyEvent(eventTime,eventTime,android.view.KeyEvent.ACTION_DOWN,code,0))
