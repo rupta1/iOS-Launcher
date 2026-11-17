@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -911,7 +912,7 @@ fun LauncherRoot(db: LauncherDb) {
             Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
         }
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
-            renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
+            renderEffect = if ((drawer || controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1023,7 +1024,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-y")
                                 Box(Modifier.offset(x=wx,y=wy) .size(cellW*minOf(2,columns),cellH*minOf(2,effectiveRows)).graphicsLayer { alpha=if(draggingWidgetId==-1001) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[-1001]=it.boundsInRoot(); if(draggingWidgetId==-1001) widgetCanvasBounds=it.boundsInRoot() }) {
-                                HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth(),Color(0xFFFFB648))
+                                HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth().padding(end=8.dp),Color(0xFFFFB648))
                                 }
                             }
                         }
@@ -1036,7 +1037,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 .onGloballyPositioned { widgetBounds[-1002]=it.boundsInRoot(); if(draggingWidgetId==-1002) widgetCanvasBounds=it.boundsInRoot() }) {
                                 HomeWidget("TODAY",SimpleDateFormat("d",Locale.getDefault()).format(Date()),
                                     SimpleDateFormat("EEEE",Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                    Icons.Default.CalendarMonth,Modifier.fillMaxWidth(),Color(0xFFEF6375))
+                                    Icons.Default.CalendarMonth,Modifier.fillMaxWidth().padding(start=8.dp),Color(0xFFEF6375))
                                 }
                             }
                         }
@@ -1158,7 +1159,11 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> Unit
             }
         }
-        AnimatedVisibility(visible=drawer, enter=androidx.compose.animation.fadeIn(), exit=androidx.compose.animation.fadeOut()) {
+        AnimatedVisibility(
+            visible=drawer,
+            enter=fadeIn(tween(180))+androidx.compose.animation.slideInVertically(initialOffsetY={ it/5 },animationSpec=tween(260))+scaleIn(initialScale=.97f,animationSpec=tween(260)),
+            exit=fadeOut(tween(140))+androidx.compose.animation.slideOutVertically(targetOffsetY={ it/6 },animationSpec=tween(180))+scaleOut(targetScale=.985f,animationSpec=tween(180))
+        ) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
@@ -1415,7 +1420,7 @@ fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
     dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false, draggableEnabled:Boolean=true,
     onBounds:(String,Rect)->Unit={ _, _ -> }, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={ _ -> },
-    onDragEnd:()->Unit={}, onClick:()->Unit
+    onDragEnd:()->Unit={}, onLongClick:(()->Unit)?=null, onClick:()->Unit
 ) {
     var shown by remember(app.packageName) { mutableStateOf(false) }
     LaunchedEffect(app.packageName) { shown=true }
@@ -1442,10 +1447,11 @@ fun AppIcon(
                     onDragCancel=onDragEnd
                 )
             } else Modifier)
-            .clickable(
+            .combinedClickable(
                 interactionSource=remember { MutableInteractionSource() },
                 indication=null,
-                onClick=onClick
+                onClick=onClick,
+                onLongClick=onLongClick
             )
     ) {
         Surface(modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
@@ -1507,15 +1513,121 @@ fun DockButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: Str
 
 @Composable
 fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit, fg: Color, bg: Color, labels: Boolean, onLaunch: (InstalledApp)->Unit, onClose:()->Unit) {
-    Column(Modifier.fillMaxSize().background(bg.copy(alpha=.98f)).padding(horizontal=18.dp).padding(top=32.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
-            Text("App Library", color=fg, fontSize=27.sp, fontWeight=FontWeight.Bold, modifier=Modifier.weight(1f))
-            IconButton(onClick=onClose) { Icon(Icons.Default.Close, null, tint=fg) }
+    val context=LocalContext.current
+    val density=LocalDensity.current
+    var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var selectedBounds by remember { mutableStateOf(Rect.Zero) }
+    val appBounds=remember { mutableStateMapOf<String,Rect>() }
+    val gridState=rememberLazyGridState()
+    Box(Modifier.fillMaxSize().background(Color(0xFF101724).copy(alpha=.30f))) {
+        Column(
+            Modifier.fillMaxSize()
+                .background(Color.Transparent)
+                .padding(horizontal=18.dp)
+                .padding(top=WindowInsets.statusBars.asPaddingValues().calculateTopPadding()+12.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("App Library",color=Color.White,fontSize=28.sp,fontWeight=FontWeight.Bold)
+                    Text("${apps.size} apps",color=Color.White.copy(alpha=.66f),fontSize=12.sp)
+                }
+                IconButton(onClick=onClose) {
+                    Icon(Icons.Default.Close,null,tint=Color.White,modifier=Modifier.size(24.dp))
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Surface(
+                modifier=Modifier.fillMaxWidth().height(52.dp),
+                shape=RoundedCornerShape(17.dp),
+                color=Color.White.copy(alpha=.13f),
+                border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.18f))
+            ) {
+                Row(Modifier.padding(horizontal=14.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search,null,tint=Color.White.copy(alpha=.72f))
+                    Spacer(Modifier.width(10.dp))
+                    androidx.compose.foundation.text.BasicTextField(
+                        value=search,onValueChange={ onSearch(it); selectedApp=null },
+                        modifier=Modifier.weight(1f),
+                        singleLine=true,
+                        textStyle=androidx.compose.ui.text.TextStyle(color=Color.White,fontSize=15.sp),
+                        cursorBrush=SolidColor(Color.White),
+                        decorationBox={ inner ->
+                            Box {
+                                if(search.isEmpty()) Text("Search apps",color=Color.White.copy(alpha=.58f),fontSize=15.sp)
+                                inner()
+                            }
+                        }
+                    )
+                    if(search.isNotEmpty()) {
+                        IconButton(onClick={onSearch("");selectedApp=null},modifier=Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close,null,tint=Color.White.copy(alpha=.75f),modifier=Modifier.size(17.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            LazyVerticalGrid(
+                state=gridState,
+                columns=GridCells.Fixed(4),
+                modifier=Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement=Arrangement.spacedBy(22.dp),
+                horizontalArrangement=Arrangement.spacedBy(8.dp),
+                contentPadding=PaddingValues(top=4.dp,bottom=30.dp)
+            ) {
+                items(apps,key={it.packageName}) { app ->
+                    AppIcon(
+                        app=app,labels=true,fg=Color.White,index=0,animationSpeed="Fast",size=54.dp,
+                        draggableEnabled=false,
+                        onBounds={ key,rect ->
+                            appBounds[key]=rect
+                            if(selectedApp?.packageName==key) selectedBounds=rect
+                        },
+                        onLongClick={
+                            if(!app.packageName.startsWith("internal:")) {
+                                selectedApp=app
+                                selectedBounds=appBounds[app.packageName] ?: Rect.Zero
+                            }
+                        },
+                        onClick={ selectedApp=null; onLaunch(app) }
+                    )
+                }
+            }
         }
-        OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), placeholder={Text("Search apps")}, leadingIcon={Icon(Icons.Default.Search,null)}, singleLine=true)
-        Spacer(Modifier.height(14.dp))
-        LazyVerticalGrid(columns=GridCells.Fixed(4), modifier=Modifier.weight(1f).fillMaxWidth(), verticalArrangement=Arrangement.spacedBy(20.dp), horizontalArrangement=Arrangement.spacedBy(8.dp), contentPadding=PaddingValues(bottom=24.dp)) {
-            items(apps, key={it.packageName}) { AppIcon(app=it,labels=labels,fg=fg,index=0,animationSpeed="Fast",size=54.dp,onClick={onLaunch(it)}) }
+        val chosen=selectedApp
+        if(chosen!=null && selectedBounds.width>0f && selectedBounds.height>0f) {
+            val offsetX=(selectedBounds.center.x-with(density){58.dp.toPx()}).toInt().coerceAtLeast(8)
+            val offsetY=(selectedBounds.bottom+with(density){7.dp.toPx()}).toInt()
+            Popup(
+                alignment=Alignment.TopStart,
+                offset=IntOffset(offsetX,offsetY),
+                onDismissRequest={selectedApp=null}
+            ) {
+                Surface(
+                    modifier=Modifier.clickable {
+                        selectedApp=null
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data=android.net.Uri.parse("package:${chosen.packageName}")
+                                }
+                            )
+                        } catch (_:Exception) { }
+                    },
+                    shape=RoundedCornerShape(20.dp,20.dp,20.dp,7.dp),
+                    color=Color(0xF4F7F8FC),
+                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.9f)),
+                    shadowElevation=18.dp
+                ) {
+                    Row(
+                        Modifier.padding(horizontal=15.dp,vertical=11.dp),
+                        verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Info,null,tint=Color(0xFF247DE3),modifier=Modifier.size(18.dp))
+                        Text("App info",color=Color(0xFF202631),fontSize=13.sp,fontWeight=FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     }
 }
