@@ -1225,7 +1225,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
         BackHandler(enabled=true) {
             when {
-                controlCenter -> controlCenter=false
+                controlCenter -> Unit
                 openFolderId!=null -> openFolderId=null
                 drawer -> drawer=false
                 settings -> settings=false
