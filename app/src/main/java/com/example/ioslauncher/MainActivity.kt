@@ -441,6 +441,10 @@ fun LauncherRoot(db: LauncherDb) {
     var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
     var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
     var hideText by remember { mutableStateOf(db.get("hide_text", "Off")) }
+    val minHomeCellHeightDp = if(labels && hideText=="Off") 78f else 66f
+    val screenHeightDp = context.resources.displayMetrics.heightPixels / density.density
+    val availableGridHeightDp = (screenHeightDp - 250f).coerceAtLeast(minHomeCellHeightDp)
+    val effectiveRows = minOf(rows,(availableGridHeightDp/minHomeCellHeightDp).toInt().coerceAtLeast(1))
     var recentsArrangement by remember { mutableStateOf(db.get("recents_arrangement", "Vertically")) }
     var highRefreshRate by remember { mutableStateOf(db.get("high_refresh_rate", "true") == "true") }
     var locked by remember { mutableStateOf(db.get("launcher_unlocked", "false") != "true") }
@@ -453,19 +457,19 @@ fun LauncherRoot(db: LauncherDb) {
     fun persistFolders() { db.put("home_folders", encodeHomeFolders(folders)) }
     fun slotAt(position:Offset):Int {
         val cellW=(homeGridBounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(homeGridBounds.height / rows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(homeGridBounds.height / effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val col=((position.x-homeGridBounds.left)/cellW).toInt().coerceIn(0,columns-1)
-        val row=((position.y-homeGridBounds.top)/cellH).toInt().coerceIn(0,rows-1)
+        val row=((position.y-homeGridBounds.top)/cellH) .toInt().coerceIn(0,effectiveRows-1)
         return row*columns+col
     }
     fun widgetSlotAt(position:Offset,id:Int):Int {
         val cellW=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(homeGridBounds.height/rows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val bounds=widgetCanvasBounds
         val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/cellW).toInt().coerceIn(1,columns) else 1
-        val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/cellH).toInt().coerceIn(1,rows) else 1
+        val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/cellH) .toInt().coerceIn(1,effectiveRows) else 1
         val col=(((position.x-homeGridBounds.left)/cellW).toInt()).coerceIn(0,(columns-spanX).coerceAtLeast(0))
-        val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(rows-spanY).coerceAtLeast(0))
+        val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(effectiveRows-spanY).coerceAtLeast(0))
         return row*columns+col
     }
     fun finishWidgetDrag() {
@@ -527,25 +531,24 @@ fun LauncherRoot(db: LauncherDb) {
     }
     val showLabels = labels && hideText == "Off"
     val folderPackages = remember(folders) { folders.flatMap { it.packages }.toSet() }
-    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments, folders, dockPackages) {
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, effectiveRows, showLabels, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments, folders, dockPackages) {
         val result = mutableMapOf<Int, MutableList<InstalledApp>>()
         var defaultPage = 0
         fun capacityFor(index: Int): Int {
             val densityScale=context.resources.displayMetrics.density.coerceAtLeast(1f)
             val screenWidthDp=context.resources.displayMetrics.widthPixels/densityScale
-            val screenHeightDp=context.resources.displayMetrics.heightPixels/densityScale
             val cellWidth=(screenWidthDp/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-            val cellHeight=(screenHeightDp/rows.coerceAtLeast(1)).coerceAtLeast(1f)
+            val cellHeight=(availableGridHeightDp/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
             val widgetCells=homeWidgets.filter { it.second==index }.sumOf { (id,_) ->
                 val info=AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
                 if(info==null) 4 else {
                     val spanX=kotlin.math.ceil(info.minWidth.coerceAtLeast(110)/cellWidth).toInt().coerceIn(1,columns)
-                    val spanY=kotlin.math.ceil(info.minHeight.coerceAtLeast(90)/cellHeight).toInt().coerceIn(1,rows)
+                    val spanY=kotlin.math.ceil(info.minHeight.coerceAtLeast(90)/cellHeight) .toInt().coerceIn(1,effectiveRows)
                     spanX*spanY
                 }
             }
-            val builtInCells=(if(showWeatherWidget && weatherWidgetPage==index) 4 else 0)+(if(showTodayWidget && todayWidgetPage==index) 4 else 0)
-            return (columns*rows.coerceAtLeast(1)-widgetCells-builtInCells-folders.count { it.page==index }).coerceAtLeast(1)
+            val builtInCells=(if(showWeatherWidget && weatherWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)+(if(showTodayWidget && todayWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)
+            return (columns*effectiveRows.coerceAtLeast(1)-widgetCells-builtInCells-folders.count { it.page==index }).coerceAtLeast(1)
         }
         apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
             var destination=(appPageAssignments[app.packageName] ?: defaultPage).coerceAtLeast(0)
@@ -928,7 +931,7 @@ fun LauncherRoot(db: LauncherDb) {
 
                     ) {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
-                        val cellH=maxHeight/rows.coerceAtLeast(1)
+                        val cellH=maxHeight/effectiveRows.coerceAtLeast(1)
                         val visibleFolders=folders.filter { it.page==targetPage }
                         val widgetInfoMap=homeWidgets.filter { it.second==targetPage }.mapNotNull { (id,_) ->
                             AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let { id to it }
@@ -938,16 +941,16 @@ fun LauncherRoot(db: LauncherDb) {
                                 add(HomeGridTile("app:"+app.packageName,appSlotAssignments[app.packageName] ?: index))
                             }
                             visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,folder.slot)) }
-                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),2))
+                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
                             if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),2))
                             widgetInfoMap.forEach { (id,info) ->
                                 val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-                                val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
+                                val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)) .toInt().coerceIn(1,effectiveRows)
                                 add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
                             }
                         }
-                        val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,rows,fillCells) }
+                        val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
                         LaunchedEffect(targetPage,gridCells,fillCells) {
                             if(fillCells) {
                                 val appUpdates=mutableMapOf<String,Int>()
@@ -1000,7 +1003,7 @@ fun LauncherRoot(db: LauncherDb) {
                             if(cell!=null) {
                                 val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-x")
                                 val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-y")
-                                Box(Modifier.offset(x=wx,y=wy).size(cellW*2,cellH*2).graphicsLayer { alpha=if(draggingWidgetId==-1001) .12f else 1f }
+                                Box(Modifier.offset(x=wx,y=wy) .size(cellW*minOf(2,columns),cellH*minOf(2,effectiveRows)).graphicsLayer { alpha=if(draggingWidgetId==-1001) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[-1001]=it.boundsInRoot(); if(draggingWidgetId==-1001) widgetCanvasBounds=it.boundsInRoot() }) {
                                 HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth(),Color(0xFFFFB648))
                                 }
@@ -1044,7 +1047,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                 change.consume()
                                                 val current=widgetSizes[widgetId] ?: (custom.first to custom.second)
                                                 val maxWidth=cellW*(columns-cell.column).coerceAtLeast(1)
-                                                val maxHeight=cellH*(rows-cell.row).coerceAtLeast(1)
+                                                val maxHeight=cellH*(effectiveRows-cell.row).coerceAtLeast(1)
                                                 val w=(current.first+with(density){amount.x.toDp()}).coerceIn(110.dp,maxWidth.coerceAtLeast(110.dp))
                                                 val h=(current.second+with(density){amount.y.toDp()}).coerceIn(90.dp,maxHeight.coerceAtLeast(90.dp))
                                                 widgetSizes=widgetSizes+(widgetId to (w to h))
