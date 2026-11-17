@@ -838,7 +838,10 @@ fun LauncherRoot(db: LauncherDb) {
                         onDragStart={ local ->
                             val global=local
                             val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                            val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) && widgetResizeHandleBounds[it.key]?.contains(global)!=true }?.key
+                            val widgetKey=widgetBounds.entries.firstOrNull { entry ->
+                                entry.value.contains(global) && widgetResizeHandleBounds[entry.key]?.contains(global)!=true &&
+                                    (entry.key<0 || widgetHandleBounds[entry.key]?.contains(global)==true)
+                            }?.key
                             when {
                                 appKey!=null -> {
                                     val app=apps.firstOrNull { it.packageName==appKey }
@@ -1030,24 +1033,7 @@ fun LauncherRoot(db: LauncherDb) {
                                     Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp)
                                         .onGloballyPositioned { widgetHandleBounds[widgetId]=it.boundsInRoot() }
                                         .clip(CircleShape).background(Color(0x88333333))
-                                        .pointerInput(widgetId) {
-                                            detectDragGesturesAfterLongPress(
-                                                onDragStart={ local ->
-                                                    val handle=widgetHandleBounds[widgetId] ?: widgetBounds[widgetId] ?: Rect.Zero
-                                                    draggingWidgetId=widgetId
-                                                    widgetCanvasBounds=widgetBounds[widgetId] ?: Rect.Zero
-                                                    widgetDragPosition=Offset(handle.left+local.x,handle.top+local.y)
-                                                    pendingDragPage=page
-                                                },
-                                                onDrag={ change,amount ->
-                                                    change.consume()
-                                                    widgetDragPosition+=amount
-                                                    updateDragEdge(widgetDragPosition)
-                                                },
-                                                onDragEnd={ finishWidgetDrag() },
-                                                onDragCancel={ draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID; dragEdgeDirection=0; pendingDragPage=page }
-                                            )
-                                        },
+
                                     contentAlignment=Alignment.Center
                                 ) { Text("⠿",color=Color.White,fontSize=19.sp) }
                                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp)
