@@ -430,6 +430,8 @@ fun LauncherRoot(db: LauncherDb) {
     var folders by remember { mutableStateOf(decodeHomeFolders(db.get("home_folders"))) }
     var openFolderId by remember { mutableStateOf<String?>(null) }
     var lastOpenedFolderId by remember { mutableStateOf<String?>(null) }
+    var renamingFolderId by remember { mutableStateOf<String?>(null) }
+    var renameFolderText by remember { mutableStateOf("") }
     LaunchedEffect(openFolderId) { if(openFolderId!=null) lastOpenedFolderId=openFolderId }
     var dockPackages by remember {
         val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }.distinct()
@@ -813,13 +815,17 @@ fun LauncherRoot(db: LauncherDb) {
         bars.isAppearanceLightStatusBars = false
         bars.isAppearanceLightNavigationBars = false
     }
-    LaunchedEffect(navigationMode, settings) {
-        // Navigation mode belongs to Android/MIUI/HyperOS. Do not hide the system
-        // navigation bar here: the OS must retain ownership of Home, Back and Recents
-        // gestures and dispatch them to the currently selected HOME activity.
+    LaunchedEffect(settings, drawer, controlCenter, openFolderId) {
+        // Keep Android in three-button navigation mode. Hide the navigation bar
+        // while the launcher is visible; a bottom-edge swipe reveals the system
+        // buttons transiently so they remain available without occupying screen space.
         val bars = androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
-        bars.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+        bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (settings || drawer || controlCenter || openFolderId != null) {
+            bars.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+        } else {
+            bars.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+        }
     }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
     LaunchedEffect(page) { appBounds.clear(); widgetBounds.clear(); folderBounds.clear() }
@@ -1318,6 +1324,9 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         Column(Modifier.padding(horizontal=20.dp,vertical=18.dp)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                                 Text(folder.title,color=Color(0xFF20242C),fontSize=21.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                IconButton(onClick={ renameFolderText=folder.title; renamingFolderId=folder.id }) {
+                                    Icon(Icons.Default.Edit,null,tint=Color(0xFF59616D))
+                                }
                                 IconButton(onClick={openFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
                             }
                             Spacer(Modifier.height(12.dp))
@@ -1359,6 +1368,35 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     }
                 }
             }
+        }
+        if (renamingFolderId != null) {
+            AlertDialog(
+                onDismissRequest = { renamingFolderId = null },
+                title = { Text("Rename folder") },
+                text = {
+                    OutlinedTextField(
+                        value = renameFolderText,
+                        onValueChange = { renameFolderText = it },
+                        singleLine = true,
+                        label = { Text("Folder name") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val newTitle = renameFolderText.trim()
+                        if (newTitle.isNotEmpty()) {
+                            folders = folders.map { folder ->
+                                if (folder.id == renamingFolderId) folder.copy(title = newTitle) else folder
+                            }
+                            persistFolders()
+                        }
+                        renamingFolderId = null
+                    }) { Text("Save") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renamingFolderId = null }) { Text("Cancel") }
+                }
+            )
         }
         draggingApp?.let { dragged ->
             val bitmap=remember(dragged.packageName) { dragged.icon.toBitmap(144,144).asImageBitmap() }
