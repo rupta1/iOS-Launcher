@@ -65,7 +65,7 @@ private fun IosPhoneScreen() {
     }
     LaunchedEffect(hasPermission) { if(hasPermission) contacts=loadPhoneContacts(context) }
     BackHandler(enabled=number.isNotEmpty()) { number=number.dropLast(1) }
-    val visibleContacts=contacts.filter { it.name.contains(query,true) || it.number.contains(query,true) }
+    val visibleContacts=contacts.filter { (tab!="Favorites" || it.starred) && (it.name.contains(query,true) || it.number.contains(query,true)) }
     fun dial(value:String) {
         if(value.isNotBlank()) try {
             context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value))))
@@ -178,8 +178,6 @@ private fun loadPhoneContacts(context:android.content.Context):List<PhoneContact
 
 @Composable
 fun IosBootScreen() {
-    val transition= androidx.compose.animation.core.rememberInfiniteTransition(label="boot")
-    val rotation by transition.animateFloat(initialValue=0f,targetValue=360f,animationSpec=androidx.compose.animation.core.infiniteRepeatable(animation=androidx.compose.animation.core.tween(1150,easing=androidx.compose.animation.core.LinearEasing)),label="boot-ring")
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF08090D),Color(0xFF151923)))),
         horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
         Box(Modifier.size(92.dp),contentAlignment=Alignment.Center) {
