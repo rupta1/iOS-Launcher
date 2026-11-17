@@ -408,6 +408,7 @@ fun LauncherRoot(db: LauncherDb) {
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
     val widgetHandleBounds = remember { mutableStateMapOf<Int, Rect>() }
+    val widgetResizeHandleBounds = remember { mutableStateMapOf<Int, Rect>() }
     val folderBounds = remember { mutableStateMapOf<String, Rect>() }
     val folderMemberBounds = remember { mutableStateMapOf<String, Rect>() }
     var dockBounds by remember { mutableStateOf(Rect.Zero) }
@@ -831,13 +832,13 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
-            .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings, locked, resizingWidgetId) {
+             .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings, locked) {
                 if (!drawer && !controlCenter && !settings && openFolderId==null && !locked) {
                     detectDragGesturesAfterLongPress(
                         onDragStart={ local ->
                             val global=local
                             val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                            val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                            val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) && widgetResizeHandleBounds[it.key]?.contains(global)!=true }?.key
                             when {
                                 appKey!=null -> {
                                     val app=apps.firstOrNull { it.packageName==appKey }
@@ -1049,8 +1050,9 @@ fun LauncherRoot(db: LauncherDb) {
                                         },
                                     contentAlignment=Alignment.Center
                                 ) { Text("⠿",color=Color.White,fontSize=19.sp) }
-                                Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp).clip(CircleShape)
-                                    .background(Color(0x88333333)).pointerInput(widgetId,cell) {
+                                Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp)
+                                    .onGloballyPositioned { widgetResizeHandleBounds[widgetId]=it.boundsInRoot() }
+                                    .clip(CircleShape).background(Color(0x88333333)).pointerInput(widgetId,cell) {
                                         detectDragGesturesAfterLongPress(
                                             onDragStart={ resizingWidgetId=widgetId },
                                             onDrag={ change,amount ->
