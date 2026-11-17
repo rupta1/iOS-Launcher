@@ -34,6 +34,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -56,6 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,21 +68,25 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.SideEffect
 import android.graphics.drawable.ColorDrawable
+import android.graphics.BitmapFactory
+import android.content.ClipboardManager
+import android.content.ClipData
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.isSystemInDarkTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private data class DialContact(val id:Long,val name:String,val number:String,val starred:Boolean)
+private data class DialContact(val id:Long,val name:String,val number:String,val starred:Boolean,val photoUri:String?=null)
 private data class DialCall(val id:Long,val name:String,val number:String,val type:Int,val date:Long,val duration:Long,val account:String)
 private data class DialSim(val id:Int,val name:String,val accountId:String?)
-private data class DialContactDetail(val id:Long,val name:String,val phones:List<Pair<String,String>>,val emails:List<Pair<String,String>>,val addresses:List<Pair<String,String>>,val birthday:String?)
+private data class DialContactDetail(val id:Long,val name:String,val phones:List<Pair<String,String>>,val emails:List<Pair<String,String>>,val addresses:List<Pair<String,String>>,val birthday:String?,val photoUri:String?=null,val starred:Boolean=false)
 
 class PhoneActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
@@ -169,7 +176,8 @@ private fun IosDialer() {
     }
     fun showContact(id:Long) { selectedContact=readDialContact(ctx,id);page="contact";allHistory=false }
     fun showCall(c:DialCall) { selectedCall=c;page="call_detail";allHistory=false }
-    fun key(k:String) { dial+=k;if(keypadSound) playDialTone(k) }
+    val toneScope=rememberCoroutineScope()
+    fun key(k:String) { dial+=k;if(keypadSound) toneScope.launch(Dispatchers.Default) { playDialTone(k) } }
 
     BackHandler(enabled=page!="main" || simChooser || noteDialog || dialogTitle.isNotBlank() || keypadOpen) {
         when {
@@ -639,6 +647,20 @@ private fun IosModal(
 }
 
 @Composable
+private fun ContactAvatar(photoUri:String?,name:String,size:androidx.compose.ui.unit.Dp,dark:Boolean,fg:Color,fontSize:androidx.compose.ui.unit.TextUnit) {
+    val ctx=LocalContext.current
+    val bitmap=remember(photoUri) { try { photoUri?.let { ctx.contentResolver.openInputStream(Uri.parse(it))?.use { stream -> BitmapFactory.decodeStream(stream) } } } catch (_:Exception) { null } }
+    Box(Modifier.size(size).clip(CircleShape).background(if(dark) Color(0xFF343438) else Color(0xFFE7E7EC)),contentAlignment=Alignment.Center) {
+        if(bitmap!=null) Image(bitmap.asImageBitmap(),contentDescription=name,modifier=Modifier.fillMaxSize(),contentScale=androidx.compose.ui.layout.ContentScale.Crop)
+        else Icon(Icons.Default.Person,null,tint=fg.copy(alpha=.86f),modifier=Modifier.size(size*.58f))
+    }
+}
+private fun copyPhoneNumber(ctx:Context,number:String) {
+    if(number.isBlank()) return
+    try { (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Phone number",number)) } catch (_:Exception) {}
+}
+
+@Composable
 private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
     onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
     var menu by remember { mutableStateOf(false) }
@@ -648,7 +670,7 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
         Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
             IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBackIosNew,null,tint=fg) }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick=onFavorite) { Icon(Icons.Default.FavoriteBorder,null,tint=fg) }
+            IconButton(onClick=onFavorite) { Icon(if(c.starred) Icons.Default.Favorite else Icons.Default.FavoriteBorder,null,tint=if(c.starred) Color(0xFFFF375F) else fg) }
             IconButton(onClick=onEdit) { Icon(Icons.Default.Edit,null,tint=fg) }
             Box {
                 IconButton(onClick={menu=true}) { Icon(Icons.Default.MoreHoriz,null,tint=fg) }
@@ -663,9 +685,7 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
             item {
                 AnimatedVisibility(visible=true,enter=fadeIn(tween(260))+scaleIn(tween(260,delayMillis=30))) {
                     Column(Modifier.fillMaxWidth().padding(top=8.dp,bottom=20.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                        Box(Modifier.size(104.dp).clip(CircleShape).background(if(dark) Color(0xFF3B3A42) else Color(0xFFE8E8EF)),contentAlignment=Alignment.Center) {
-                            Text(c.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",fontSize=43.sp,fontWeight=FontWeight.Light,color=fg)
-                        }
+                        ContactAvatar(c.photoUri,c.name,104.dp,dark,fg,43.sp)
                         Spacer(Modifier.height(14.dp))
                         Text(c.name,fontSize=28.sp,fontWeight=FontWeight.SemiBold,color=fg,textAlign=TextAlign.Center)
                         Text(c.phones.firstOrNull()?.first ?: "No phone number",fontSize=14.sp,color=muted,modifier=Modifier.padding(top=4.dp))
@@ -680,7 +700,7 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
                 ContactSectionCard(panel,dark) {
                     c.phones.forEachIndexed { index,p ->
                         Row(Modifier.fillMaxWidth().padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
+                            Column(Modifier.weight(1f).combinedClickable(onClick={},onLongClick={copyPhoneNumber(LocalContext.current,p.first)})) {
                                 Text(p.first,color=blue,fontSize=16.sp,fontWeight=FontWeight.Medium)
                                 Text(p.second.ifBlank{"mobile"}.replaceFirstChar{it.uppercase()},color=muted,fontSize=12.sp,modifier=Modifier.padding(top=3.dp))
                             }
@@ -763,7 +783,7 @@ private fun ContactSectionCard(panel:Color,dark:Boolean,content:@Composable Colu
 
 @Composable
 private fun CallHistoryPage(call:DialCall,history:List<DialCall>,fg:Color,muted:Color,card:Color,green:Color,red:Color,onBack:()->Unit,onCall:()->Unit,onNote:()->Unit,onRecordings:()->Unit,onDelete:()->Unit) {
-    val dark=fg.red<.5f
+    val dark=fg.red>.5f
     val panel=if(dark) Color(0xFF242428) else Color.White
     val callType=when(call.type) {
         CallLog.Calls.MISSED_TYPE->"Missed call"
@@ -899,10 +919,9 @@ private fun RecentRow(c:DialCall,dark:Boolean,fg:Color,muted:Color,line:Color,gr
 }
 @Composable
 private fun ContactRow(c:DialContact,dark:Boolean,fg:Color,muted:Color,line:Color,onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(if(dark) Color(0xFF343438) else Color(0xFFE7E7EC)),contentAlignment=Alignment.Center) {
-            Text(c.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",color=muted,fontSize=18.sp,fontWeight=FontWeight.SemiBold)
-        }
+    val ctx=LocalContext.current
+    Row(Modifier.fillMaxWidth().combinedClickable(onClick=onClick,onLongClick={copyPhoneNumber(ctx,c.number)}).padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        ContactAvatar(c.photoUri,c.name,44.dp,dark,muted,18.sp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) { Text(c.name,color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium);Text(c.number,color=muted,fontSize=12.sp) }
         if(c.starred) Icon(Icons.Default.Star,null,tint=Color(0xFFFFB52E),modifier=Modifier.size(18.dp))
@@ -925,7 +944,7 @@ private fun PermissionPanel(message:String,button:String,muted:Color,onClick:()-
 }
 @Composable
 private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String)->Unit,onDelete:()->Unit,onCall:()->Unit,sims:List<DialSim>) {
-    val keyBg=if(fg.red<0.5f) Color(0xFFE5E5EA) else Color(0xFF2C2C2E)
+    val keyBg=if(fg.red>0.5f) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
     Column(
         Modifier.fillMaxWidth().padding(top=8.dp,bottom=8.dp),
         horizontalAlignment=Alignment.CenterHorizontally
@@ -994,7 +1013,7 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
                                 "7"->"PQRS";"8"->"TUV";"9"->"WXYZ";"0"->"+"
                                 else->""
                             },
-                            fontSize=8.sp,color=if(fg.red<0.5f) Color(0xFF66666D) else Color(0xFFB7B7BC),
+                            fontSize=8.sp,color=if(fg.red>0.5f) Color(0xFFB7B7BC) else Color(0xFF66666D),
                             letterSpacing=1.sp
                         )
                     }
@@ -1049,10 +1068,11 @@ private fun callSummary(c:DialCall):String {
     val duration=if(c.duration>0) (c.duration/60).toString()+"m "+(c.duration%60)+"s" else "Didn't connect"
     return type+" · "+duration+" · "+c.account
 }
+private val sharedDialTone:ToneGenerator by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { ToneGenerator(AudioManager.STREAM_DTMF,70) }
 private fun playDialTone(key:String) {
     try {
         val tone=when(key){"*"->ToneGenerator.TONE_DTMF_S;"#"->ToneGenerator.TONE_DTMF_P;else->ToneGenerator.TONE_DTMF_0+(key.firstOrNull()?.digitToIntOrNull()?:0)}
-        val tg=ToneGenerator(AudioManager.STREAM_DTMF,70);tg.startTone(tone,100);Handler(Looper.getMainLooper()).postDelayed({try{tg.release()}catch(_:Exception){}},140)
+        sharedDialTone.startTone(tone,90)
     } catch (_:Exception) {}
 }
 private fun startDialCall(ctx:Context,n:String,sim:DialSim?) {
@@ -1093,18 +1113,18 @@ private fun readDialContacts(ctx:Context):List<DialContact> {
     if(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED) return emptyList()
     val out=mutableListOf<DialContact>()
     try {
-        ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.Contacts.STARRED),null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC")?.use { c ->
+        ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.Contacts.STARRED,ContactsContract.Contacts.PHOTO_URI),null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC")?.use { c ->
             val id=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID);val name=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-            val num=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);val star=c.getColumnIndex(ContactsContract.Contacts.STARRED)
-            while(c.moveToNext()) out.add(DialContact(c.getLong(id),c.getString(name).orEmpty(),c.getString(num).orEmpty(),c.getInt(star)==1))
+            val num=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);val star=c.getColumnIndex(ContactsContract.Contacts.STARRED);val photo=c.getColumnIndex(ContactsContract.Contacts.PHOTO_URI)
+            while(c.moveToNext()) out.add(DialContact(c.getLong(id),c.getString(name).orEmpty(),c.getString(num).orEmpty(),c.getInt(star)==1,c.getString(photo)))
         }
     } catch (_:Exception) {}
     return out.distinctBy{it.id}
 }
 private fun readDialContact(ctx:Context,id:Long):DialContactDetail {
-    var name="Contact";val phones=mutableListOf<Pair<String,String>>();val emails=mutableListOf<Pair<String,String>>();val addresses=mutableListOf<Pair<String,String>>();var birthday:String?=null
+    var name="Contact";var photoUri:String?=null;var starred=false;val phones=mutableListOf<Pair<String,String>>();val emails=mutableListOf<Pair<String,String>>();val addresses=mutableListOf<Pair<String,String>>();var birthday:String?=null
     try {
-        ctx.contentResolver.query(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,id),arrayOf(ContactsContract.Contacts.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())name=it.getString(0).orEmpty()}
+        ctx.contentResolver.query(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,id),arrayOf(ContactsContract.Contacts.DISPLAY_NAME,ContactsContract.Contacts.PHOTO_URI,ContactsContract.Contacts.STARRED),null,null,null)?.use{if(it.moveToFirst()){name=it.getString(0).orEmpty();photoUri=it.getString(1);starred=it.getInt(2)==1}}
         ctx.contentResolver.query(ContactsContract.Data.CONTENT_URI,arrayOf(ContactsContract.Data.MIMETYPE,ContactsContract.Data.DATA1,ContactsContract.Data.DATA2,ContactsContract.Data.DATA3),ContactsContract.Data.CONTACT_ID+"=?",arrayOf(id.toString()),null)?.use { c ->
             while(c.moveToNext()) {
                 val mime=c.getString(0);val value=c.getString(1).orEmpty();val type=c.getInt(2)
@@ -1118,7 +1138,7 @@ private fun readDialContact(ctx:Context,id:Long):DialContactDetail {
             }
         }
     } catch (_:Exception) {}
-    return DialContactDetail(id,name,phones.distinctBy{it.first.filter(Char::isDigit)},emails.distinctBy{it.first.lowercase(Locale.getDefault())},addresses.distinctBy{it.first},birthday)
+    return DialContactDetail(id,name,phones.distinctBy{it.first.filter(Char::isDigit)},emails.distinctBy{it.first.lowercase(Locale.getDefault())},addresses.distinctBy{it.first},birthday,photoUri,starred)
 }
 private fun readDialGroups(ctx:Context):List<String> {
     val out=mutableListOf<String>()
