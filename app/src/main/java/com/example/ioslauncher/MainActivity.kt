@@ -1290,7 +1290,12 @@ fun LauncherRoot(db: LauncherDb) {
                 onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
                 onClose={settings=false},
                 onDeviceSettings={
-                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                    // Android requires users to approve restricted settings themselves
+                    // for sideloaded apps before enabling an Accessibility service.
+                    val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = android.net.Uri.parse("package:${context.packageName}")
+                    }
+                    try { context.startActivity(appInfo) }
                     catch (_: Exception) { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
                 }
             )
@@ -1971,7 +1976,7 @@ fun SettingsScreen(
                 }
             }
             SettingsGroup("Other",card,muted) {
-                SettingChoice("System-wide gestures","Configure",fg,muted) {
+                SettingChoice("Allow gesture access","Open app info",fg,muted) {
                     onDeviceSettings()
                 }
                 SettingChoice("Arrange items in Recents",recentsArrangement,fg,muted) {
@@ -1986,7 +1991,7 @@ fun SettingsScreen(
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Text("System-wide gesture navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
-                    Text("Enable iOS Launcher gestures in Android Accessibility settings. The service adds edge-swipe Back and bottom-swipe Home / hold-for-Recents gestures across apps. Android will ask you to enable this service manually.",color=muted,fontSize=12.sp)
+                    Text("For a sideloaded install, first open App info, tap the three-dot menu, and choose Allow restricted settings (if Android shows it). Then open Android Settings > Accessibility > Downloaded apps > iOS Launcher gestures and enable the service. Android requires this approval from you; the launcher cannot grant it automatically.",color=muted,fontSize=12.sp)
                     Text("This is an accessibility-based gesture bridge, not Xiaomi's privileged native gesture engine. Keep the system navigation buttons available as a fallback; gesture availability and edge behavior can vary by device.",color=muted,fontSize=12.sp)
                 }
             }
