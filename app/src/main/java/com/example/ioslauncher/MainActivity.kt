@@ -510,7 +510,6 @@ fun LauncherRoot(db: LauncherDb) {
         val savedSwipeAction = db.get("swipe_down_action", "Control Center")
         mutableStateOf(if (savedSwipeAction == "App finder") "Control Center" else savedSwipeAction)
     }
-    var doubleTapLock by remember { mutableStateOf(db.get("double_tap_lock", "false") == "true") }
     var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
     var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
     var hideText by remember { mutableStateOf(db.get("hide_text", "Off")) }
@@ -1248,7 +1247,7 @@ fun LauncherRoot(db: LauncherDb) {
             SettingsScreen(
                 columns=columns, rows=rows, labels=labels, hideText=hideText, dark=dark,
                 homeStyle=homeStyle, minusScreen=minusScreen, searchStyle=searchStyle, swipeDownAction=swipeDownAction,
-                animationSpeed=animationSpeed, doubleTapLock=doubleTapLock, fillCells=fillCells, lockLayout=lockLayout,
+                animationSpeed=animationSpeed, fillCells=fillCells, lockLayout=lockLayout,
                 navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
                 themeMode=themeMode, onThemeMode={ themeMode=it; db.put("theme_mode", it) },
                 drawerTransparency=drawerTransparency, onDrawerTransparency={ drawerTransparency=it; db.put("drawer_transparency",it.toString()) },
@@ -1265,7 +1264,6 @@ fun LauncherRoot(db: LauncherDb) {
                 onSearchStyle={searchStyle=it;db.put("search_style",it)},
                 onSwipeDown={swipeDownAction=it;db.put("swipe_down_action",it)},
                 onAnimationSpeed={animationSpeed=it;db.put("animation_speed",it)},
-                onDoubleTapLock={doubleTapLock=it;db.put("double_tap_lock",it.toString())},
                 onFillCells={fillCells=it;db.put("fill_cells",it.toString())},
                 onLockLayout={lockLayout=it;db.put("lock_layout",it.toString())},
                 onNavigationMode={navigationMode=it;db.put("navigation_mode",it)},
@@ -1691,8 +1689,9 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         } } catch (_:Exception) { null }
         if(cameraId != null) try { cameraManager.setTorchMode(cameraId,!torchOn); torchOn=!torchOn } catch (_:Exception) { open(Intent(Settings.ACTION_SETTINGS)) }
     }
-    var wifiOn by remember { mutableStateOf(state.transport=="Wi-Fi") }
-    var bluetoothOn by remember { mutableStateOf(state.bluetooth=="On") }
+    val wifiOn = state.transport=="Wi-Fi"
+    val bluetoothOn = state.bluetooth=="On"
+    val airplaneOn = try { android.provider.Settings.Global.getInt(context.contentResolver,android.provider.Settings.Global.AIRPLANE_MODE_ON,0)==1 } catch (_:Exception) { false }
     val white=Color.White
     val panel=Color(0xFF5B6477).copy(alpha=.48f)
     val panelBorder=Color.White.copy(alpha=.16f)
@@ -1876,7 +1875,7 @@ fun IosUtilityButton(icon:ImageVector,label:String,modifier:Modifier=Modifier,on
 fun SettingsScreen(
     columns:Int, rows:Int, labels:Boolean, hideText:String, dark:Boolean,
     homeStyle:String, minusScreen:String, searchStyle:String, swipeDownAction:String,
-    animationSpeed:String, doubleTapLock:Boolean, fillCells:Boolean, lockLayout:Boolean,
+    animationSpeed:String, fillCells:Boolean, lockLayout:Boolean,
     navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
     themeMode:String, onThemeMode:(String)->Unit,
     drawerTransparency:Float, onDrawerTransparency:(Float)->Unit, drawerBlur:Float, onDrawerBlur:(Float)->Unit,
@@ -1884,7 +1883,7 @@ fun SettingsScreen(
     onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
     onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
     onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
-    onDoubleTapLock:(Boolean)->Unit, onFillCells:(Boolean)->Unit, onLockLayout:(Boolean)->Unit,
+    onFillCells:(Boolean)->Unit, onLockLayout:(Boolean)->Unit,
     onNavigationMode:(String)->Unit, onRecentsArrangement:(String)->Unit, onHighRefreshRate:(Boolean)->Unit,
     onClose:()->Unit, onDeviceSettings:()->Unit
 ) {
@@ -1910,7 +1909,6 @@ fun SettingsScreen(
                 SettingChoice("Home screen search",searchStyle,fg,muted) { choose("Home screen search",searchStyle,listOf("Compact search","Full screen search"),onSearchStyle) }
                 SettingChoice("Swipe down on the Home screen",swipeDownAction,fg,muted) { choose("Swipe down on the Home screen",swipeDownAction,listOf("Control Center","None"),onSwipeDown) }
                 SettingChoice("Animation speed",animationSpeed,fg,muted) { choose("Animation speed",animationSpeed,listOf("Fast","Normal","Slow"),onAnimationSpeed) }
-                SettingSwitch("Double tap an empty spot on the Home screen to lock",doubleTapLock,fg,onDoubleTapLock)
             }
             SettingsGroup("Personalization",card,muted) {
                 SettingChoice("Wallpaper","Choose wallpaper",fg,muted) { onChooseWallpaper() }
