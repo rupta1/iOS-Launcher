@@ -865,18 +865,25 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             Surface(shape=RoundedCornerShape(30.dp), color=Color.White.copy(alpha=if (dark) .16f else .52f),
-                modifier=Modifier.fillMaxWidth().padding(bottom=16.dp).border(1.dp,Color.White.copy(alpha=.45f),RoundedCornerShape(30.dp))) {
-                Row(Modifier.padding(horizontal=12.dp, vertical=12.dp), horizontalArrangement=Arrangement.SpaceEvenly, verticalAlignment=Alignment.CenterVertically) {
-                    val dock = listOf(
-                        apps.firstOrNull { it.label.contains("Phone",true) || it.label.contains("Dialer",true) },
-                        apps.firstOrNull { it.label.contains("Chrome",true) || it.label.contains("Browser",true) },
-                        apps.firstOrNull { it.label.contains("Music",true) }
-                    ).filterNotNull().distinctBy { it.packageName }.take(3)
-                    dock.forEach { item -> AppIcon(app=item,labels=false,fg=fg,index=0,animationSpeed="Fast",size=52.dp,onClick={activity.launch(item)}) }
-                    DockIosIcon(R.drawable.ios18_messages, "Messages", fg) {
-                        apps.firstOrNull { it.label.contains("Message",true) || it.label.contains("SMS",true) }?.let { activity.launch(it) }
+                modifier=Modifier.fillMaxWidth().padding(bottom=16.dp).border(1.dp,Color.White.copy(alpha=.45f),RoundedCornerShape(30.dp))
+                    .onGloballyPositioned { dockBounds=it.boundsInRoot() }) {
+                Row(Modifier.padding(horizontal=8.dp, vertical=10.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
+                    dockPackages.forEach { packageName ->
+                        val dockApp=apps.firstOrNull { it.packageName==packageName }
+                        if(dockApp!=null) {
+                            AppIcon(
+                                app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
+                                onBounds={ key,rect -> dockAppBounds[key]=rect },
+                                onDragStart={ draggingApp=dockApp; draggingFromDock=true; dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center; pendingDragPage=page },
+                                onDrag={ delta -> dragPosition+=delta },
+                                onDragEnd={ finishIconDrag() },
+                                onClick={ activity.launch(dockApp) }
+                            )
+                        }
                     }
-                    DockIosIcon(R.drawable.ios18_settings, "Settings", fg) { settings=true }
+                    if(dockPackages.isEmpty()) {
+                        Text("Hold an app and drag it here",color=fg.copy(alpha=.6f),fontSize=10.sp)
+                    }
                 }
             }
             Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
@@ -1081,7 +1088,7 @@ private fun iconResourceForLabel(label:String, packageName:String = ""):Int {
 @Composable
 fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
-    dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false,
+    dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false, draggableEnabled:Boolean=true,
     onBounds:(String,Rect)->Unit={ _, _ -> }, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={ _ -> },
     onDragEnd:()->Unit={}, onClick:()->Unit
 ) {
@@ -1102,14 +1109,14 @@ fun AppIcon(
             this.alpha=if(isDragging) .88f else alpha
         }
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
-            .pointerInput(app.packageName) {
+            .then(if(draggableEnabled) Modifier.pointerInput(app.packageName) {
                 detectDragGesturesAfterLongPress(
                     onDragStart={ onDragStart() },
                     onDrag={ change, amount -> change.consume(); onDrag(amount) },
                     onDragEnd=onDragEnd,
                     onDragCancel=onDragEnd
                 )
-            }
+            } else Modifier)
             .clickable(
                 interactionSource=remember { MutableInteractionSource() },
                 indication=null,
@@ -1130,6 +1137,31 @@ fun AppIcon(
         }
     }
 }
+
+@Composable
+fun FolderTile(folder:HomeFolder, apps:List<InstalledApp>, fg:Color, onClick:()->Unit) {
+    val members=folder.packages.mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }.take(4)
+    Column(Modifier.fillMaxWidth().clickable(onClick=onClick),horizontalAlignment=Alignment.CenterHorizontally) {
+        Surface(shape=RoundedCornerShape(17.dp),color=Color.White.copy(alpha=.78f),modifier=Modifier.size(62.dp)) {
+            Column(Modifier.padding(7.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                repeat(2) { row ->
+                    Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                        repeat(2) { col ->
+                            val member=members.getOrNull(row*2+col)
+                            if(member!=null) {
+                                val icon=remember(member.packageName) { member.icon.toBitmap(72,72).asImageBitmap() }
+                                Image(icon,contentDescription=member.label,modifier=Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(6.dp)))
+                            } else Spacer(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(Color.LightGray.copy(alpha=.35f)))
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(folder.title,color=fg,fontSize=10.sp,maxLines=1,textAlign=TextAlign.Center)
+    }
+}
+
 @Composable
 fun DockIosIcon(resId:Int, label:String, fg:Color, onClick:()->Unit) {
     Column(Modifier.clickable(
