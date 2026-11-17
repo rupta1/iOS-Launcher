@@ -781,48 +781,7 @@ fun LauncherRoot(db: LauncherDb) {
             Spacer(Modifier.height(24.dp))
             AnimatedContent(
                 targetState = page,
-                modifier = Modifier.weight(1f).pointerInput(Unit) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart={ local ->
-                                        val global=Offset(homeGridBounds.left+local.x,homeGridBounds.top+local.y)
-                                        val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                                        val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                                        val folderKey=folderBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                                        when {
-                                            appKey!=null -> {
-                                                draggingApp=apps.firstOrNull { it.packageName==appKey }
-                                                draggingFromDock=false
-                                                dragPosition=global
-                                                pendingDragPage=page.coerceAtLeast(0)
-                                            }
-                                            widgetKey!=null -> {
-                                                draggingWidgetId=widgetKey
-                                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
-                                                widgetDragPosition=global
-                                                pendingDragPage=page.coerceAtLeast(0)
-                                            }
-                                            folderKey!=null -> {
-                                                val folder=folders.firstOrNull { it.id==folderKey }
-                                                if(folder!=null) openFolderId=folder.id
-                                            }
-                                        }
-                                    },
-                                    onDrag={ change, amount ->
-                                        if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
-                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
-                                    },
-                                    onDragEnd={
-                                        if(draggingApp!=null) finishIconDrag()
-                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
-                                    },
-                                    onDragCancel={
-                                        draggingApp=null
-                                        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
-                                        dragEdgeDirection=0
-                                        pendingDragPage=page
-                                    }
-                                )
-                            },
+                modifier = Modifier.weight(1f,
                 transitionSpec = {
                     (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=when(animationSpeed) { "Slow" -> 260f; "Normal" -> 430f; else -> 720f })) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
                         (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=when(animationSpeed) { "Slow" -> 300f; "Normal" -> 500f; else -> 800f })) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
@@ -842,8 +801,72 @@ fun LauncherRoot(db: LauncherDb) {
                                         BoxWithConstraints(
                         Modifier.weight(1f).fillMaxWidth()
                             .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
-                            
-                    ) {
+                            .pointerInput(page, apps, folders) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart={ local ->
+                                        val global=Offset(homeGridBounds.left+local.x,homeGridBounds.top+local.y)
+                                        val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                                        val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                                        when {
+                                            appKey!=null -> {
+                                                val app=apps.firstOrNull { it.packageName==appKey }
+                                                if(app!=null) {
+                                                    draggingApp=app
+                                                    draggingFromDock=false
+                                                    draggingFromFolder=false
+                                                    dragSourceFolderId=null
+                                                    dragPosition=global
+                                                    dragOriginBounds=appBounds[appKey] ?: Rect.Zero
+                                                    dragOriginPage=page
+                                                    dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
+                                                    pendingDragPage=page
+                                                }
+                                            }
+                                            widgetKey!=null -> {
+                                                draggingWidgetId=widgetKey
+                                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
+                                                widgetDragPosition=global
+                                                pendingDragPage=page
+                                            }
+                                        }
+                                    },
+                                    onDrag={ change, amount ->
+                                        if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
+                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
+                                    },
+                                    onDragEnd={
+                                        if(draggingApp!=null) finishIconDrag()
+                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
+                                    },
+                                    onDragCancel={
+                                        draggingApp=null
+                                        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                                        draggingFromDock=false
+                                        draggingFromFolder=false
+                                        dragSourceFolderId=null
+                                        dragEdgeDirection=0
+                                        pendingDragPage=page
+                                    }
+                                )
+                            }
+                            .pointerInput(page, pageCount) {
+                                var totalDrag=0f
+                                detectHorizontalDragGestures(
+                                    onHorizontalDragStart={ totalDrag=0f },
+                                    onHorizontalDrag={ change, amount ->
+                                        totalDrag+=amount
+                                        if(kotlin.math.abs(totalDrag)>with(density){12.dp.toPx()}) change.consume()
+                                    },
+                                    onHorizontalDragEnd={
+                                        val threshold=with(density){52.dp.toPx()}
+                                        if(kotlin.math.abs(totalDrag)>threshold) {
+                                            page=(page+if(totalDrag<0f) 1 else -1).coerceIn(0,(pageCount-1).coerceAtLeast(0))
+                                        }
+                                    },
+                                    onHorizontalDragCancel={ totalDrag=0f }
+                                )
+                            }
+                     {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
                         val cellH=maxHeight/rows.coerceAtLeast(1)
                         val visibleFolders=folders.filter { it.page==targetPage }
