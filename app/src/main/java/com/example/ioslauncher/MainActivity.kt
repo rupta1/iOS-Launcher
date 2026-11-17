@@ -403,6 +403,7 @@ fun LauncherRoot(db: LauncherDb) {
 
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
+    val widgetHandleBounds = remember { mutableStateMapOf<Int, Rect>() }
     val folderBounds = remember { mutableStateMapOf<String, Rect>() }
     val folderMemberBounds = remember { mutableStateMapOf<String, Rect>() }
     var dockBounds by remember { mutableStateOf(Rect.Zero) }
@@ -1010,6 +1011,30 @@ fun LauncherRoot(db: LauncherDb) {
                             Box(Modifier.offset(x=wx,y=wy).size(cellW*spanX,cellH*spanY).graphicsLayer { alpha=if(draggingWidgetId==widgetId) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[widgetId]=it.boundsInRoot(); if(draggingWidgetId==widgetId) widgetCanvasBounds=it.boundsInRoot() }) {
                                 AndroidView(factory={ activity.widgetHost.createView(it,widgetId,info) },modifier=Modifier.fillMaxSize())
+                                Box(
+                                    Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp)
+                                        .onGloballyPositioned { widgetHandleBounds[widgetId]=it.boundsInRoot() }
+                                        .clip(CircleShape).background(Color(0x88333333))
+                                        .pointerInput(widgetId) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart={ local ->
+                                                    val handle=widgetHandleBounds[widgetId] ?: widgetBounds[widgetId] ?: Rect.Zero
+                                                    draggingWidgetId=widgetId
+                                                    widgetCanvasBounds=widgetBounds[widgetId] ?: Rect.Zero
+                                                    widgetDragPosition=Offset(handle.left+local.x,handle.top+local.y)
+                                                    pendingDragPage=page
+                                                },
+                                                onDrag={ change,amount ->
+                                                    change.consume()
+                                                    widgetDragPosition+=amount
+                                                    updateDragEdge(widgetDragPosition)
+                                                },
+                                                onDragEnd={ finishWidgetDrag() },
+                                                onDragCancel={ draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID; dragEdgeDirection=0; pendingDragPage=page }
+                                            )
+                                        },
+                                    contentAlignment=Alignment.Center
+                                ) { Text("⠿",color=Color.White,fontSize=19.sp) }
                                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp).clip(CircleShape)
                                     .background(Color(0x88333333)).pointerInput(widgetId) {
                                         detectDragGestures(
@@ -1150,7 +1175,7 @@ fun LauncherRoot(db: LauncherDb) {
                 db.put("launcher_unlocked", "true")
             }
         }
-        if(openFolderId!=null) {
+        AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(spring(dampingRatio=.78f,stiffness=460f),initialScale=.84f),exit=fadeOut(tween(110))+scaleOut(tween(110)),modifier=Modifier.fillMaxSize()) {
             val folder=folders.firstOrNull { it.id==openFolderId }
             if(folder==null) openFolderId=null else {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha=.22f)).clickable(
