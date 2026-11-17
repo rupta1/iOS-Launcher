@@ -16,6 +16,7 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -143,6 +144,64 @@ private fun encodeHomeFolders(folders:List<HomeFolder>):String = org.json.JSONAr
 }.toString()
 
 data class InstalledApp(val label: String, val packageName: String, val icon: Drawable)
+
+class LauncherWelcomeActivity : ComponentActivity() {
+    private lateinit var homeRoleRequest: androidx.activity.result.ActivityResultLauncher<Intent>
+    private var waitingForHomeSettings = false
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
+        homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val manager = getSystemService(android.app.role.RoleManager::class.java)
+            if (Build.VERSION.SDK_INT >= 29 && manager?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true) finishAndRemoveTask()
+        }
+        setContent { MaterialTheme { LauncherWelcomeScreen(onStart = ::requestHomeRole) } }
+    }
+    private fun requestHomeRole() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val manager = getSystemService(android.app.role.RoleManager::class.java)
+            if (manager != null && manager.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME))
+                homeRoleRequest.launch(manager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
+            else startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        } else {
+            waitingForHomeSettings = true
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        }
+    }
+    override fun onResume() {
+        super.onResume()
+        if (waitingForHomeSettings) { waitingForHomeSettings = false; finishAndRemoveTask() }
+    }
+}
+
+@Composable
+private fun LauncherWelcomeScreen(onStart: () -> Unit) {
+    val background = Brush.linearGradient(listOf(Color(0xFF101827), Color(0xFF273B65), Color(0xFF111827)))
+    Box(Modifier.fillMaxSize().background(background).padding(28.dp),contentAlignment=Alignment.Center) {
+        Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+            Box(Modifier.size(112.dp).clip(RoundedCornerShape(32.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF9C78F5),Color(0xFF526DE8)))),contentAlignment=Alignment.Center) {
+                Icon(Icons.Default.Layers,null,tint=Color.White,modifier=Modifier.size(58.dp))
+            }
+            Spacer(Modifier.height(34.dp))
+            Text("A fresh home.",color=Color.White,fontSize=32.sp,fontWeight=FontWeight.Bold,textAlign=TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text("A clean, fluid home screen inspired by the simplicity of iOS.",color=Color.White.copy(alpha=.72f),
+                fontSize=15.sp,textAlign=TextAlign.Center,lineHeight=23.sp)
+            Spacer(Modifier.height(42.dp))
+            Button(onClick=onStart,modifier=Modifier.fillMaxWidth().height(58.dp),shape=RoundedCornerShape(20.dp),
+                colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF8B6AE8),contentColor=Color.White)) {
+                Text("Start Launcher",fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                Spacer(Modifier.width(10.dp))
+                Icon(Icons.Default.ArrowForward,null)
+            }
+            Spacer(Modifier.height(18.dp))
+            Text("Choose it as your default Home app",color=Color.White.copy(alpha=.55f),fontSize=12.sp)
+        }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     private lateinit var db: LauncherDb
@@ -426,7 +485,7 @@ fun LauncherRoot(db: LauncherDb) {
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
     var drawer by remember { mutableStateOf(false) }
     var drawerTransparency by remember { mutableFloatStateOf(db.get("drawer_transparency","0.30").toFloatOrNull()?.coerceIn(0f,.80f) ?: .30f) }
-    var drawerBlur by remember { mutableFloatStateOf(db.get("drawer_blur","0").toFloatOrNull()?.coerceIn(0f,32f) ?: 0f) }
+    var drawerBlur by remember { mutableFloatStateOf(db.get("drawer_blur","20").toFloatOrNull()?.coerceIn(0f,32f) ?: 20f) }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -437,12 +496,12 @@ fun LauncherRoot(db: LauncherDb) {
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
     var extraHomePages by remember { mutableIntStateOf(0) }
-    var rows by remember { mutableIntStateOf(db.get("grid_rows", "7").toIntOrNull() ?: 7) }
-    var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "buttons")) }
-    var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Fast")) }
+    var rows by remember { mutableIntStateOf(db.get("grid_rows", "5").toIntOrNull() ?: 5) }
+    var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "gestures")) }
+    var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Slow")) }
     var homeStyle by remember { mutableStateOf(db.get("home_style", "With App drawer")) }
     var minusScreen by remember { mutableStateOf(db.get("minus_screen", "Google Discover")) }
-    var searchStyle by remember { mutableStateOf(db.get("search_style", "Compact search")) }
+    var searchStyle by remember { mutableStateOf(db.get("search_style", "Full screen search")) }
     var swipeDownAction by remember {
         val savedSwipeAction = db.get("swipe_down_action", "Control Center")
         mutableStateOf(if (savedSwipeAction == "App finder") "Control Center" else savedSwipeAction)
@@ -1577,24 +1636,21 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                 }
             }
             Spacer(Modifier.height(18.dp))
-            LazyColumn(
-                state=gridState,
+            LazyVerticalGrid(
+                columns=GridCells.Fixed(4),
+                state=rememberLazyGridState(),
                 modifier=Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement=Arrangement.spacedBy(22.dp),
+                horizontalArrangement=Arrangement.spacedBy(8.dp),
                 contentPadding=PaddingValues(top=4.dp,bottom=30.dp)
             ) {
-                items(appRows,key={ row -> row.firstOrNull()?.packageName ?: "empty-row" }) { row ->
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        row.forEach { app ->
-                            DrawerAppIcon(
-                                app=app,labels=true,modifier=Modifier.weight(1f),
-                                onBounds={ rect -> if(selectedApp?.packageName==app.packageName && selectedBounds!=rect) selectedBounds=rect },
-                                onLongClick={ if(!app.packageName.startsWith("internal:")) selectedApp=app },
-                                onClick={ selectedApp=null; onLaunch(app) }
-                            )
-                        }
-                        repeat(4-row.size) { Spacer(Modifier.weight(1f)) }
-                    }
+                items(items=apps,key={ app -> app.packageName },contentType={ "app-icon" }) { app ->
+                    DrawerAppIcon(
+                        app=app,labels=true,
+                        onBounds={ rect -> if(selectedApp?.packageName==app.packageName && selectedBounds!=rect) selectedBounds=rect },
+                        onLongClick={ if(!app.packageName.startsWith("internal:")) selectedApp=app },
+                        onClick={ selectedApp=null; onLaunch(app) }
+                    )
                 }
             }
         }
