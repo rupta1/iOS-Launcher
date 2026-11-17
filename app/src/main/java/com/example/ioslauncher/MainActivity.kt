@@ -1111,7 +1111,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 },
                                 onDrag={ delta -> dragPosition+=delta },
                                 onDragEnd={ finishIconDrag() },
-                                onClick={ activity.launch(dockApp) }
+                                onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
                             )
                         }
                     }
