@@ -262,18 +262,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
-        // Apply the bundled powder wallpaper once for this asset version.
-        // It is also rendered directly by the launcher if the OS blocks wallpaper writes.
-        if (db.get("default_wallpaper_applied") != "powder_wallpaper_v3") {
-            try {
-                val bitmap = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.launcher_default_wallpaper)
-                if (bitmap != null) {
-                    WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
-                    db.put("default_wallpaper_applied", "powder_wallpaper_v3")
-                    wallpaperRevision++
-                }
-            } catch (_: Exception) { }
-        }
+        // Let Android draw the device's live wallpaper behind the launcher window.
+        window.setBackgroundDrawableResource(android.R.color.transparent)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         widgetHost = AppWidgetHost(this, 0x10A1)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
@@ -875,38 +866,10 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
 
-    // Re-read the system wallpaper whenever the launcher resumes. This keeps
-    // the home screen in sync with changes made outside the launcher.
-    val wallpaperRevision = activity.wallpaperRevision
-    val customWallpaperUri = db.get("custom_wallpaper_uri")
-    val systemWallpaper = remember(wallpaperRevision, customWallpaperUri) {
-        try {
-            val manager = WallpaperManager.getInstance(context)
-            val customBitmap = if (customWallpaperUri.isNotBlank()) {
-                try { context.contentResolver.openInputStream(android.net.Uri.parse(customWallpaperUri))?.use { android.graphics.BitmapFactory.decodeStream(it) } }
-                catch (_: Exception) { null }
-            } else null
-            val bundledDefault = try {
-                android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.launcher_default_wallpaper)
-            } catch (_: Exception) { null }
-            val systemBitmap = if (customBitmap == null && bundledDefault == null) {
-                try { manager.getWallpaperFile(WallpaperManager.FLAG_SYSTEM)?.use { android.graphics.BitmapFactory.decodeFileDescriptor(it.fileDescriptor) } }
-                catch (_: Exception) { null }
-            } else null
-            val fallbackBitmap = if (customBitmap == null && bundledDefault == null && systemBitmap == null) {
-                try { manager.drawable?.toBitmap(context.resources.displayMetrics.widthPixels.coerceAtLeast(1), context.resources.displayMetrics.heightPixels.coerceAtLeast(1)) }
-                catch (_: Exception) { null }
-            } else null
-            (customBitmap ?: bundledDefault ?: systemBitmap ?: fallbackBitmap)?.asImageBitmap()
-        } catch (_: Exception) { null }
-    }
+    // Keep the launcher surface transparent so only the Android system wallpaper is visible.
     Box(
-        Modifier.fillMaxSize().background(
-            if (systemWallpaper == null) Brush.verticalGradient(
-                if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
-                else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
-            ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        ) .pointerInput(drawer, controlCenter, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
+        Modifier.fillMaxSize().background(Color.Transparent)
+        .pointerInput(drawer, controlCenter, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
             if (!drawer && !controlCenter && !settings && openFolderId==null && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -1017,12 +980,6 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
     ) {
-        if (systemWallpaper != null) {
-            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop,
-                modifier=Modifier.fillMaxSize().graphicsLayer {
-                    renderEffect = if (drawer && drawerBlur > 0f && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(drawerBlur,drawerBlur) else null
-                })
-        }
         if (!drawer) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
             renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
