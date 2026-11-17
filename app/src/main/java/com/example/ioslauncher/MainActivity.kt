@@ -1637,6 +1637,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DrawerAppIcon(
     app:InstalledApp, labels:Boolean, modifier:Modifier=Modifier,
