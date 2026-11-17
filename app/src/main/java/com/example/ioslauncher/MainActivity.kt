@@ -1697,6 +1697,12 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
     val panelBorder=Color.White.copy(alpha=.16f)
     val blue=Color(0xFF168AF4)
     fun open(action:Intent) { try { context.startActivity(action) } catch (_:Exception) { } }
+    fun mediaKey(code:Int) {
+        val eventTime=android.os.SystemClock.uptimeMillis()
+        audio.dispatchMediaKeyEvent(android.view.KeyEvent(eventTime,eventTime,android.view.KeyEvent.ACTION_DOWN,code,0))
+        audio.dispatchMediaKeyEvent(android.view.KeyEvent(eventTime,eventTime,android.view.KeyEvent.ACTION_UP,code,0))
+    }
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxSize()
             .background(Color(0xFF101724).copy(alpha=.30f))
@@ -1749,9 +1755,9 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
                     }
                     Text("Not Playing",color=white,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Default.SkipPrevious,null,tint=white.copy(alpha=.55f),modifier=Modifier.size(24.dp))
-                        Icon(Icons.Default.PlayArrow,null,tint=white,modifier=Modifier.size(34.dp))
-                        Icon(Icons.Default.SkipNext,null,tint=white.copy(alpha=.55f),modifier=Modifier.size(24.dp))
+                        IconButton(onClick={mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS)}) { Icon(Icons.Default.SkipPrevious,null,tint=white,modifier=Modifier.size(24.dp)) }
+                        IconButton(onClick={mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)}) { Icon(Icons.Default.PlayArrow,null,tint=white,modifier=Modifier.size(34.dp)) }
+                        IconButton(onClick={mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_NEXT)}) { Icon(Icons.Default.SkipNext,null,tint=white,modifier=Modifier.size(24.dp)) }
                     }
                 }
             }
@@ -1798,12 +1804,16 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth()) {
-            IosUtilityButton(Icons.Default.QrCodeScanner,"Code Scanner",Modifier.weight(1f)) { open(Intent(Settings.ACTION_SETTINGS)) }
+            IosUtilityButton(Icons.Default.QrCodeScanner,"Code Scanner",Modifier.weight(1f)) {
+                try { context.startActivity(Intent("com.google.zxing.client.android.SCAN")) }
+                catch (_:Exception) { open(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)) }
+            }
             Spacer(Modifier.weight(3f))
         }
         Spacer(Modifier.height(20.dp))
+    }
         Box(
-            Modifier.fillMaxWidth().height(46.dp).pointerInput(onClose) {
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(54.dp).pointerInput(onClose) {
                 var upward=0f
                 detectDragGestures(
                     onDragStart={ upward=0f },
