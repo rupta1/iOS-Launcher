@@ -91,6 +91,7 @@ import java.util.*
 private data class HomeFolder(val id:String, val title:String, val packages:List<String>, val page:Int, val slot:Int)
 private data class HomeGridTile(val key:String, val slot:Int, val spanX:Int=1, val spanY:Int=1)
 private data class HomeGridCell(val column:Int, val row:Int)
+private data class DragGridPlacement(val key:String,val slot:Int,val spanX:Int=1,val spanY:Int=1)
 
 private fun calculateHomeGridCells(tiles:List<HomeGridTile>, columns:Int, rows:Int, compact:Boolean):Map<String,HomeGridCell> {
     val cols=columns.coerceAtLeast(1)
@@ -494,6 +495,7 @@ fun LauncherRoot(db: LauncherDb) {
     }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     var dragEdgeDirection by remember { mutableIntStateOf(0) }
+    var dragPreviewSlots by remember { mutableStateOf<Map<String,Int>>(emptyMap()) }
 
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
@@ -567,6 +569,39 @@ fun LauncherRoot(db: LauncherDb) {
         val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(effectiveRows-spanY).coerceAtLeast(0))
         return row*columns+col
     }
+    fun updateGridDragPreview(position:Offset,movingKey:String,movingSpanX:Int=1,movingSpanY:Int=1) {
+        if(homeGridBounds.width<=0f || homeGridBounds.height<=0f) return
+        val cw=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val ch=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val items=mutableListOf<DragGridPlacement>()
+        appBounds.forEach { (k,b) -> if(b.width>0f && b.height>0f && "app:"+k!=movingKey) items.add(DragGridPlacement("app:"+k,appSlotAssignments[k] ?: slotAt(b.center))) }
+        folders.filter { it.page==pendingDragPage }.forEach { folder -> if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot)) }
+        widgetBounds.forEach { (id,b) -> if("widget:"+id!=movingKey && b.width>0f && b.height>0f) items.add(DragGridPlacement("widget:"+id,widgetSlotAssignments[id] ?: slotAt(b.center),kotlin.math.ceil(b.width/cw).toInt().coerceIn(1,columns),kotlin.math.ceil(b.height/ch).toInt().coerceIn(1,effectiveRows))) }
+        val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1) else slotAt(position)
+        val moving=DragGridPlacement(movingKey,slot,movingSpanX.coerceIn(1,columns),movingSpanY.coerceIn(1,effectiveRows))
+        val ordered=items.sortedWith(compareBy<DragGridPlacement>{it.slot}.thenBy{it.key}).toMutableList()
+        val col=slot%columns.coerceAtLeast(1); val row=slot/columns.coerceAtLeast(1)
+        val hit=ordered.indexOfFirst { col>=it.slot%columns && col<it.slot%columns+it.spanX && row>=it.slot/columns && row<it.slot/columns+it.spanY }
+        val at=if(hit>=0) { val item=ordered[hit]; val cx=item.slot%columns+(item.spanX-1)/2; val cy=item.slot/columns+(item.spanY-1)/2
+            val after=if(kotlin.math.abs(row-cy)>kotlin.math.abs(col-cx)) row>cy else col>cx
+            (hit+if(after) 1 else 0).coerceIn(0,ordered.size)
+        } else ordered.indexOfFirst { it.slot>slot }.let { if(it<0) ordered.size else it }
+        ordered.add(at,moving)
+        dragPreviewSlots=ordered.mapIndexed { i,item -> item.key to i }.toMap()
+    }
+    fun applyGridDragPreview(destinationPage:Int) {
+        val preview=dragPreviewSlots
+        preview.forEach { (key,slot) -> when {
+            key.startsWith("app:") -> { val pkg=key.substringAfter("app:"); appSlotAssignments=appSlotAssignments+(pkg to slot); appPageAssignments=appPageAssignments+(pkg to destinationPage) }
+            key.startsWith("widget:") -> { val id=key.substringAfter("widget:").toIntOrNull() ?: return@forEach; widgetSlotAssignments=widgetSlotAssignments+(id to slot) }
+            key.startsWith("folder:") -> { val id=key.substringAfter("folder:"); folders=folders.map { if(it.id==id) it.copy(slot=slot,page=destinationPage) else it } }
+        } }
+        if(preview.keys.any { it.startsWith("folder:") }) persistFolders()
+        db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+        db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+        db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
+        dragPreviewSlots=emptyMap()
+    }
     fun finishWidgetDrag() {
         val id=draggingWidgetId
         val destinationPage=pendingDragPage.coerceAtLeast(0)
@@ -586,40 +621,18 @@ fun LauncherRoot(db: LauncherDb) {
             widgetSlotAssignments=widgetSlotAssignments-id
             widgetPositions=widgetPositions-id
         } else {
-            val oldWidgetSlot=widgetSlotAssignments[id] ?: slotAt(widgetCanvasBounds.center)
-            val targetApp=appBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
-            val targetWidget=widgetBounds.entries.firstOrNull { it.key!=id && it.value.contains(widgetDragPosition) }?.key
-            val targetFolder=folderBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
-            when {
-                targetApp!=null -> {
-                    val appSlot=appSlotAssignments[targetApp] ?: slotAt(appBounds[targetApp]?.center ?: widgetDragPosition)
-                    appSlotAssignments=appSlotAssignments+(targetApp to oldWidgetSlot)
-                    appPageAssignments=appPageAssignments+(targetApp to destinationPage)
-                    widgetSlotAssignments=widgetSlotAssignments+(id to appSlot)
-                }
-                targetWidget!=null -> {
-                    val otherSlot=widgetSlotAssignments[targetWidget] ?: slotAt(widgetBounds[targetWidget]?.center ?: widgetDragPosition)
-                    widgetSlotAssignments=widgetSlotAssignments+(id to otherSlot)+(targetWidget to oldWidgetSlot)
-                }
-                targetFolder!=null -> {
-                    val folder=folders.firstOrNull { it.id==targetFolder }
-                    if(folder!=null) {
-                        widgetSlotAssignments=widgetSlotAssignments+(id to folder.slot)
-                        folders=folders.map { if(it.id==folder.id) it.copy(slot=oldWidgetSlot,page=destinationPage) else it }
-                        persistFolders()
-                    } else widgetSlotAssignments=widgetSlotAssignments+(id to slotAt(widgetDragPosition))
-                }
-                else -> widgetSlotAssignments=widgetSlotAssignments+(id to widgetSlotAt(widgetDragPosition,id))
-            }
+            applyGridDragPreview(destinationPage)
             when(id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
                 -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page",destinationPage.toString()) }
                 else -> homeWidgets=homeWidgets.map { if(it.first==id) id to destinationPage else it }
             }
         }
+        if(dragPreviewSlots.isNotEmpty()) applyGridDragPreview(destinationPage)
         persistWidgetPositions()
         extraHomePages=0
         draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+        dragPreviewSlots=emptyMap()
         dragEdgeDirection=0
         page=destinationPage
         pendingDragPage=page
@@ -763,49 +776,29 @@ fun LauncherRoot(db: LauncherDb) {
                     val targetPageOld=appPageAssignments[targetApp] ?: targetPage
                     val targetSlotOld=appSlotAssignments[targetApp] ?: slotAt(targetBounds.center)
                     folders=folders.map { folder -> folder.copy(packages=folder.packages.filterNot { it==dragged.packageName }) }
-                    if(existingFolder!=null) {
-                        folders=folders.map { folder ->
-                            if(folder.id==existingFolder.id) folder.copy(packages=(folder.packages+dragged.packageName).distinct()) else folder
-                        }
-                    } else {
-                        val targetModel=apps.firstOrNull { it.packageName==targetApp }
-                        folders=folders+HomeFolder("folder:"+targetApp,targetModel?.label ?: "Folder",listOf(targetApp,dragged.packageName).distinct(),targetPageOld,targetSlotOld)
-                    }
+                    if(existingFolder!=null) folders=folders.map { folder -> if(folder.id==existingFolder.id) folder.copy(packages=(folder.packages+dragged.packageName).distinct()) else folder }
+                    else { val targetModel=apps.firstOrNull { it.packageName==targetApp }; folders=folders+HomeFolder("folder:"+targetApp,targetModel?.label ?: "Folder",listOf(targetApp,dragged.packageName).distinct(),targetPageOld,targetSlotOld) }
                     folders=folders.filter { it.packages.isNotEmpty() }.distinctBy { it.id }
                     persistFolders()
                     appPageAssignments=appPageAssignments-dragged.packageName-targetApp
                     appSlotAssignments=appSlotAssignments-dragged.packageName-targetApp
                 } else {
                     removeFromSourceFolder()
-                    val targetPageOld=appPageAssignments[targetApp] ?: targetPage
-                    val targetSlotOld=appSlotAssignments[targetApp] ?: slotAt(targetBounds.center)
-                    if(draggingFromDock) {
-                        val dockIndex=dockPackages.indexOf(dragged.packageName)
-                        val updatedDock=dockPackages.toMutableList()
-                        if(dockIndex>=0) updatedDock[dockIndex]=targetApp
-                        dockPackages=updatedDock.distinct()
-                        appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)-targetApp
-                        appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)-targetApp
-                    } else {
-                        appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)+(targetApp to dragOriginPage)
-                        appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)+(targetApp to dragOriginSlot)
-                    }
+                    applyGridDragPreview(targetPage)
+                    appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
                 }
+            }
             } else {
-                val targetWidget=widgetBounds.entries.firstOrNull { it.value.contains(dragPosition) }?.key
                 removeFromSourceFolder()
-                val newSlot=slotAt(dragPosition)
-                if(targetWidget!=null) {
-                    widgetSlotAssignments=widgetSlotAssignments+(targetWidget to dragOriginSlot)
-                }
+                applyGridDragPreview(targetPage)
                 appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
-                appSlotAssignments=appSlotAssignments+(dragged.packageName to newSlot)
             }
         }
         if(draggingFromDock) dockPackages=dockPackages.filterNot { it==dragged.packageName }
         dockPackages=dockPackages.distinct()
         persistDock()
         saveAssignments()
+        dragPreviewSlots=emptyMap()
         page=targetPage
         extraHomePages=0
         draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
@@ -961,10 +954,14 @@ fun LauncherRoot(db: LauncherDb) {
                                 change.consume()
                                 dragPosition+=delta
                                 updateDragEdge(dragPosition)
+                                draggingApp?.let { updateGridDragPreview(dragPosition,"app:"+it.packageName) }
                             } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
                                 change.consume()
                                 widgetDragPosition+=delta
                                 updateDragEdge(widgetDragPosition)
+                                val sx=kotlin.math.ceil(widgetCanvasBounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns)
+                                val sy=kotlin.math.ceil(widgetCanvasBounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
+                                updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,sx,sy)
                             }
                         }
                         if(endedNormally) {
@@ -1027,21 +1024,21 @@ fun LauncherRoot(db: LauncherDb) {
                         }.toMap()
                         val gridTiles=buildList {
                             pageApps.forEachIndexed { index, app ->
-                                add(HomeGridTile("app:"+app.packageName,appSlotAssignments[app.packageName] ?: index))
+                                add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName] ?: appSlotAssignments[app.packageName] ?: index))
                             }
-                            visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,folder.slot)) }
-                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
-                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),minOf(2,effectiveRows)))
+                            visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,dragPreviewSlots["folder:"+folder.id] ?: folder.slot)) }
+                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",dragPreviewSlots["widget:-1001"] ?: widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
+                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",dragPreviewSlots["widget:-1002"] ?: widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),minOf(2,effectiveRows)))
                             widgetInfoMap.forEach { (id,info) ->
                                 val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                                 val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)) .toInt().coerceIn(1,effectiveRows)
-                                add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
+                                add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id] ?: widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
                             }
                         }
                         val gridCells=remember(gridTiles,columns,effectiveRows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
-                        LaunchedEffect(targetPage,gridCells,fillCells) {
-                            if(fillCells) {
+                        LaunchedEffect(targetPage,gridCells,fillCells,draggingApp,draggingWidgetId) {
+                            if(fillCells && draggingApp==null && draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
                                 val appUpdates=mutableMapOf<String,Int>()
                                 pageApps.forEach { app ->
                                     val cell=gridCells["app:"+app.packageName]
@@ -1180,7 +1177,7 @@ fun LauncherRoot(db: LauncherDb) {
                                     dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
                                     pendingDragPage=page
                                 },
-                                onDrag={ delta -> dragPosition+=delta },
+                                onDrag={ delta -> dragPosition+=delta; updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
                                 onDragEnd={ finishIconDrag() },
                                 onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
                             )
