@@ -24,6 +24,16 @@
             android:name=".NotesActivity"
             android:exported="false" />
         <activity
+            android:name=".LauncherWelcomeActivity"
+            android:exported="true"
+            android:label="iOS Style Launcher"
+            android:icon="@drawable/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
