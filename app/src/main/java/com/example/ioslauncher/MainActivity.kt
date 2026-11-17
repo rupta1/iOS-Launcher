@@ -350,7 +350,11 @@ fun LauncherRoot(db: LauncherDb) {
     var openFolderId by remember { mutableStateOf<String?>(null) }
     var dockPackages by remember {
         val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }
-        val defaults=apps.filter { app -> app.label.contains("Phone",true) || app.label.contains("Dialer",true) || app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true) }.take(5).map { it.packageName }
+        val defaults=apps.filter { app ->
+            (app.label.contains("Phone",true) && !app.label.contains("PhonePe",true)) ||
+            app.packageName=="com.google.android.dialer" || app.packageName=="com.android.dialer" ||
+            app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true)
+        }.distinctBy { it.packageName }.take(5).map { it.packageName }
         mutableStateOf(if(saved.isNotEmpty()) saved else defaults)
     }
     var draggingFromDock by remember { mutableStateOf(false) }
@@ -667,7 +671,7 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    if (appBounds.values.none { it.contains(down.position) }) {
+                    if (appBounds.values.none { it.contains(down.position) } && widgetBounds.values.none { it.contains(down.position) } && folderBounds.values.none { it.contains(down.position) }) {
                     var dx = 0f
                     var dy = 0f
                     var finished = false
@@ -800,7 +804,7 @@ fun LauncherRoot(db: LauncherDb) {
                             if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),2))
                             if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),2))
                             widgetInfoMap.forEach { (id,info) ->
-                                val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                                val custom=widgetSizes[id] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                                 val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
                                 add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
@@ -847,7 +851,7 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                         widgetInfoMap.forEach { (widgetId,info) ->
                             val cell=gridCells["widget:"+widgetId] ?: return@forEach
-                            val custom=widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                            val custom=widgetSizes[widgetId] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
                             val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                             val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
                             Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*spanX,cellH*spanY)
@@ -943,6 +947,28 @@ fun LauncherRoot(db: LauncherDb) {
                 locked = false
                 db.put("launcher_unlocked", "true")
             }
+        }
+        if(openFolderId!=null) {
+            val folder=folders.firstOrNull { it.id==openFolderId }
+            if(folder==null) openFolderId=null else AlertDialog(
+                onDismissRequest={openFolderId=null},
+                title={Text(folder.title)},
+                text={
+                    Column(Modifier.heightIn(max=380.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        folder.packages.mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }.forEach { app ->
+                            Row(Modifier.fillMaxWidth().clickable {
+                                openFolderId=null
+                                activity.launch(app)
+                            }.padding(vertical=9.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Image(app.icon.toBitmap(96,96).asImageBitmap(),null,Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
+                                Spacer(Modifier.width(12.dp))
+                                Text(app.label,color=fg)
+                            }
+                        }
+                    }
+                },
+                confirmButton={TextButton(onClick={openFolderId=null}){Text("Done")}}
+            )
         }
         if (widgetPickerOpen) {
             AlertDialog(
