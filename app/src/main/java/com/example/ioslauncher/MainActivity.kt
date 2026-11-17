@@ -432,43 +432,44 @@ fun LauncherRoot(db: LauncherDb) {
     val filtered = apps.filter { it.label.contains(search, true) }
 
     fun finishWidgetDrag() {
-        val id = draggingWidgetId
-        val destinationPage = pendingDragPage.coerceAtLeast(0)
-        if (id != AppWidgetManager.INVALID_APPWIDGET_ID && widgetDragPosition.y < uninstallDropZoneHeight) {
-            when (id) {
+        val id=draggingWidgetId
+        val destinationPage=pendingDragPage.coerceAtLeast(0)
+        if(id==AppWidgetManager.INVALID_APPWIDGET_ID) return
+        if(widgetDragPosition.y<uninstallDropZoneHeight) {
+            when(id) {
                 -1001 -> { showWeatherWidget=false; db.put("show_weather_widget","false") }
                 -1002 -> { showTodayWidget=false; db.put("show_today_widget","false") }
+                else -> { activity.removeHomeWidget(id); homeWidgets=homeWidgets.filterNot { it.first==id } }
+            }
+            widgetSlotAssignments=widgetSlotAssignments-id
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            widgetPositions=widgetPositions-id
+        } else {
+            val targetApp=appBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
+            val oldWidgetSlot=widgetSlotAssignments[id] ?: slotAt(widgetCanvasBounds.center)
+            val newSlot=if(targetApp!=null) (appSlotAssignments[targetApp] ?: oldWidgetSlot) else slotAt(widgetDragPosition)
+            if(targetApp!=null) {
+                appSlotAssignments=appSlotAssignments+(targetApp to oldWidgetSlot)
+                appPageAssignments=appPageAssignments+(targetApp to destinationPage)
+                db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            }
+            widgetSlotAssignments=widgetSlotAssignments+(id to newSlot)
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            when(id) {
+                -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
+                -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page",destinationPage.toString()) }
                 else -> {
-                    activity.removeHomeWidget(id)
-                    homeWidgets = homeWidgets.filterNot { it.first == id }
+                    homeWidgets=homeWidgets.map { if(it.first==id) id to destinationPage else it }
+                    db.put("home_widgets",homeWidgets.joinToString(","){it.first.toString()+":"+it.second})
                 }
             }
-            widgetPositions = widgetPositions - id
-        } else if (id != AppWidgetManager.INVALID_APPWIDGET_ID && (id < 0 || widgetCanvasBounds.width > 0f)) {
-            when (id) {
-                -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page", destinationPage.toString()) }
-                -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page", destinationPage.toString()) }
-            }
-            if (id > 0) {
-                homeWidgets = homeWidgets.map { if (it.first == id) id to destinationPage else it }
-                db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString()+":"+it.second })
-            }
-            if (id > 0 && widgetCanvasBounds.width > 0f) {
-                val maxX = (widgetCanvasBounds.width - 1f).coerceAtLeast(1f)
-                val maxY = (widgetCanvasBounds.height - 1f).coerceAtLeast(1f)
-                val normalized = Offset(
-                    ((widgetDragPosition.x - widgetCanvasBounds.left) / maxX).coerceIn(0f,1f),
-                    ((widgetDragPosition.y - widgetCanvasBounds.top) / maxY).coerceIn(0f,1f)
-                )
-                widgetPositions = widgetPositions + (id to normalized)
-                db.put("home_widget_positions", widgetPositions.entries.joinToString(";") { it.key.toString()+":"+it.value.x+":"+it.value.y })
-            }
         }
-        extraHomePages = 0
-        draggingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-        dragEdgeDirection = 0
-        page = destinationPage
-        pendingDragPage = page
+        extraHomePages=0
+        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+        dragEdgeDirection=0
+        page=destinationPage
+        pendingDragPage=page
     }
     val showLabels = labels && hideText == "Off"
     val folderPackages = remember(folders) { folders.flatMap { it.packages }.toSet() }
