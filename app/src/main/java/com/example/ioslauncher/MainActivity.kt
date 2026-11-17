@@ -154,8 +154,10 @@ class LauncherWelcomeActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            val manager = getSystemService(android.app.role.RoleManager::class.java)
-            if (Build.VERSION.SDK_INT >= 29 && manager?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true) finishAndRemoveTask()
+            if (Build.VERSION.SDK_INT >= 29) {
+                val manager = getSystemService(android.app.role.RoleManager::class.java)
+                if (manager?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true) finishAndRemoveTask()
+            }
         }
         setContent { MaterialTheme { LauncherWelcomeScreen(onStart = ::requestHomeRole) } }
     }
