@@ -889,6 +889,12 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && openFolderId==null && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    // Leave Android's back and home gesture edge regions untouched.
+                    val systemEdge = with(density) { 32.dp.toPx() }
+                    if (down.position.x <= systemEdge ||
+                        down.position.x >= size.width - systemEdge ||
+                        down.position.y >= size.height - systemEdge
+                    ) return@awaitEachGesture
                     var dx = 0f
                     var dy = 0f
                     var finished = false
