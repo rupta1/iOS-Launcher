@@ -909,10 +909,11 @@ fun LauncherRoot(db: LauncherDb) {
             }
     ) {
         if (systemWallpaper != null) {
-            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize().graphicsLayer { renderEffect = if (drawer && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f,18f) else null })
+            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
         }
+        if (!drawer) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
-            renderEffect = if ((drawer || controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
+            renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1125,6 +1126,7 @@ fun LauncherRoot(db: LauncherDb) {
                 Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.5f)).clickable { if(homeStyle=="With App drawer") drawer=true })
             }
         }
+        }
 
         if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
             val ghostWidth=with(density){widgetCanvasBounds.width.toDp()}.coerceIn(112.dp,340.dp)
@@ -1159,11 +1161,7 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> Unit
             }
         }
-        AnimatedVisibility(
-            visible=drawer,
-            enter=fadeIn(tween(180))+androidx.compose.animation.slideInVertically(initialOffsetY={ it/5 },animationSpec=tween(260))+scaleIn(initialScale=.97f,animationSpec=tween(260)),
-            exit=fadeOut(tween(140))+androidx.compose.animation.slideOutVertically(targetOffsetY={ it/6 },animationSpec=tween(180))+scaleOut(targetScale=.985f,animationSpec=tween(180))
-        ) {
+        if (drawer) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
