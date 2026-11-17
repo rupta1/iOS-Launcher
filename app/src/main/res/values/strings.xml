@@ -1,0 +1,3 @@
+<resources>
+    <string name="gesture_service_description">Provides optional system-wide Back, Home and Recents swipe gestures using Android accessibility global actions.</string>
+</resources>
