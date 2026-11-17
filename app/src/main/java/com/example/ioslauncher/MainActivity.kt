@@ -42,6 +42,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -349,7 +350,7 @@ fun LauncherRoot(db: LauncherDb) {
     var folders by remember { mutableStateOf(decodeHomeFolders(db.get("home_folders"))) }
     var openFolderId by remember { mutableStateOf<String?>(null) }
     var dockPackages by remember {
-        val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }
+        val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }.distinct()
         val defaults=apps.filter { app ->
             (app.label.contains("Phone",true) && !app.label.contains("PhonePe",true)) ||
             app.packageName=="com.google.android.dialer" || app.packageName=="com.android.dialer" ||
@@ -358,6 +359,12 @@ fun LauncherRoot(db: LauncherDb) {
         mutableStateOf(if(saved.isNotEmpty()) saved else defaults)
     }
     var draggingFromDock by remember { mutableStateOf(false) }
+    var draggingFromFolder by remember { mutableStateOf(false) }
+    var dragSourceFolderId by remember { mutableStateOf<String?>(null) }
+    var dragOriginBounds by remember { mutableStateOf(Rect.Zero) }
+    var dragOriginPage by remember { mutableIntStateOf(0) }
+    var dragOriginSlot by remember { mutableIntStateOf(0) }
+    var folderOverlayBounds by remember { mutableStateOf(Rect.Zero) }
 
     var pendingDragPage by remember { mutableIntStateOf(0) }
     var homeGridBounds by remember { mutableStateOf(Rect.Zero) }
@@ -548,73 +555,109 @@ fun LauncherRoot(db: LauncherDb) {
     fun finishIconDrag() {
         val dragged=draggingApp ?: return
         val targetPage=pendingDragPage.coerceAtLeast(0)
-        if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
+        fun saveAssignments() {
+            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
+        }
+        fun removeFromSourceFolder() {
+            val source=dragSourceFolderId
+            if(source!=null) {
+                folders=folders.mapNotNull { folder ->
+                    if(folder.id!=source) folder
+                    else {
+                        val remaining=folder.packages.filterNot { it==dragged.packageName }
+                        if(remaining.isEmpty()) null else folder.copy(packages=remaining)
+                    }
+                }
+                persistFolders()
+            }
+        }
+        if(dragPosition.y<uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
+            removeFromSourceFolder()
             activity.uninstall(dragged)
             apps=apps.filterNot { it.packageName==dragged.packageName }
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
-            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
-            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
             dockPackages=dockPackages.filterNot { it==dragged.packageName }; persistDock()
-            draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
+            saveAssignments()
+            draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
         }
-        val droppedOnDock=dockBounds.contains(dragPosition)
-        if(droppedOnDock) {
-            val existing=dockPackages.toMutableList()
+        if(dockBounds.contains(dragPosition)) {
+            removeFromSourceFolder()
+            val next=dockPackages.filterNot { it==dragged.packageName }.toMutableList()
             val targetIndex=(((dragPosition.x-dockBounds.left)/dockBounds.width.coerceAtLeast(1f))*5f).toInt().coerceIn(0,4)
-            existing.remove(dragged.packageName)
-            if(targetIndex>=existing.size) existing.add(dragged.packageName) else existing.add(targetIndex,dragged.packageName)
-            dockPackages=existing.take(5); persistDock()
-            if(draggingFromDock) { draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page; return }
+            next.add(targetIndex.coerceAtMost(next.size),dragged.packageName)
+            dockPackages=next.distinct().take(5); persistDock()
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
-            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
-            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
-            draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
+            saveAssignments()
+            draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
-        }
-        if(draggingFromDock) {
-            dockPackages=dockPackages.filterNot { it==dragged.packageName }; persistDock()
         }
         val targetFolder=folderBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
         if(targetFolder!=null) {
-            folders=folders.map { folder -> if(folder.id==targetFolder && dragged.packageName !in folder.packages) folder.copy(packages=folder.packages+dragged.packageName) else folder }
+            removeFromSourceFolder()
+            folders=folders.map { folder ->
+                if(folder.id==targetFolder) folder.copy(packages=(folder.packages+dragged.packageName).distinct())
+                else folder.copy(packages=folder.packages.filterNot { it==dragged.packageName })
+            }.distinctBy { it.id }
             persistFolders()
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
         } else {
             val targetApp=appBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
             if(targetApp!=null) {
-                val existingFolder=folders.firstOrNull { targetApp in it.packages }
-                if(existingFolder!=null) {
-                    folders=folders.map { if(it.id==existingFolder.id && dragged.packageName !in it.packages) it.copy(packages=it.packages+dragged.packageName) else it }
+                val targetBounds=appBounds[targetApp] ?: Rect.Zero
+                val sourceBounds=dragOriginBounds.takeIf { it.width>0f && it.height>0f } ?: Rect(dragPosition.x-36f,dragPosition.y-36f,dragPosition.x+36f,dragPosition.y+36f)
+                val movingRect=Rect(dragPosition.x-sourceBounds.width/2f,dragPosition.y-sourceBounds.height/2f,dragPosition.x+sourceBounds.width/2f,dragPosition.y+sourceBounds.height/2f)
+                val overlap=movingRect.intersect(targetBounds)
+                val overlapArea=overlap.width.coerceAtLeast(0f)*overlap.height.coerceAtLeast(0f)
+                val minArea=minOf(movingRect.width*movingRect.height,targetBounds.width*targetBounds.height).coerceAtLeast(1f)
+                val centered=targetBounds.contains(dragPosition)
+                val createFolder=centered && overlapArea/minArea>=0.42f
+                if(createFolder) {
+                    removeFromSourceFolder()
+                    val existingFolder=folders.firstOrNull { targetApp in it.packages }
+                    folders=folders.map { folder -> folder.copy(packages=folder.packages.filterNot { it==dragged.packageName }) }
+                    if(existingFolder!=null) {
+                        folders=folders.map { folder ->
+                            if(folder.id==existingFolder.id) folder.copy(packages=(folder.packages+dragged.packageName).distinct()) else folder
+                        }
+                    } else {
+                        val targetModel=apps.firstOrNull { it.packageName==targetApp }
+                        folders=folders+HomeFolder("folder:"+targetApp,targetModel?.label ?: "Folder",listOf(targetApp,dragged.packageName).distinct(),targetPage,dragOriginSlot)
+                    }
+                    folders=folders.filter { it.packages.isNotEmpty() }.distinctBy { it.id }
+                    persistFolders()
+                    appPageAssignments=appPageAssignments-dragged.packageName-targetApp
+                    appSlotAssignments=appSlotAssignments-dragged.packageName-targetApp
                 } else {
-                    val folderId="folder:"+targetApp
-                    val targetAppModel=apps.firstOrNull { it.packageName==targetApp }
-                    folders=folders+HomeFolder(folderId,targetAppModel?.label ?: "Folder",listOf(targetApp,dragged.packageName),targetPage,slotAt(dragPosition))
+                    removeFromSourceFolder()
+                    val targetPageOld=appPageAssignments[targetApp] ?: targetPage
+                    val targetSlotOld=appSlotAssignments[targetApp] ?: slotAt(targetBounds.center)
+                    appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)+(targetApp to dragOriginPage)
+                    appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)+(targetApp to dragOriginSlot)
                 }
-                persistFolders()
-                appPageAssignments=appPageAssignments-dragged.packageName
-                appSlotAssignments=appSlotAssignments-dragged.packageName
-                appPageAssignments=appPageAssignments-targetApp
-                appSlotAssignments=appSlotAssignments-targetApp
             } else {
                 val targetWidget=widgetBounds.entries.firstOrNull { it.value.contains(dragPosition) }?.key
+                removeFromSourceFolder()
                 val newSlot=slotAt(dragPosition)
                 if(targetWidget!=null) {
-                    val oldAppSlot=appSlotAssignments[dragged.packageName] ?: 0
-                    widgetSlotAssignments=widgetSlotAssignments+(targetWidget to oldAppSlot)
-                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
+                    widgetSlotAssignments=widgetSlotAssignments+(targetWidget to dragOriginSlot)
                 }
                 appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
                 appSlotAssignments=appSlotAssignments+(dragged.packageName to newSlot)
             }
         }
-        db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
-        db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
-        apps=apps.toMutableList().also { list -> list.removeAll { it.packageName==dragged.packageName }; list.add(dragged) }
-        page=targetPage; extraHomePages=0; draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
+        if(draggingFromDock) dockPackages=dockPackages.filterNot { it==dragged.packageName }
+        dockPackages=dockPackages.distinct()
+        persistDock()
+        saveAssignments()
+        page=targetPage
+        extraHomePages=0
+        draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
     }
 
     SideEffect {
