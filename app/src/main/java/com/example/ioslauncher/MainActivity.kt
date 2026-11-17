@@ -441,9 +441,9 @@ fun LauncherRoot(db: LauncherDb) {
     var fillCells by remember { mutableStateOf(db.get("fill_cells", "true") == "true") }
     var lockLayout by remember { mutableStateOf(db.get("lock_layout", "false") == "true") }
     var hideText by remember { mutableStateOf(db.get("hide_text", "Off")) }
-    val minHomeCellHeightDp = if(labels && hideText=="Off") 78f else 66f
+    val minHomeCellHeightDp = if(labels && hideText=="Off") 80f else 66f
     val screenHeightDp = context.resources.displayMetrics.heightPixels / density.density
-    val availableGridHeightDp = (screenHeightDp - 250f).coerceAtLeast(minHomeCellHeightDp)
+    val availableGridHeightDp = (screenHeightDp - 270f).coerceAtLeast(minHomeCellHeightDp)
     val effectiveRows = minOf(rows,(availableGridHeightDp/minHomeCellHeightDp).toInt().coerceAtLeast(1))
     var recentsArrangement by remember { mutableStateOf(db.get("recents_arrangement", "Vertically")) }
     var highRefreshRate by remember { mutableStateOf(db.get("high_refresh_rate", "true") == "true") }
@@ -942,7 +942,7 @@ fun LauncherRoot(db: LauncherDb) {
                             }
                             visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,folder.slot)) }
                             if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
-                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),2))
+                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),minOf(2,effectiveRows)))
                             widgetInfoMap.forEach { (id,info) ->
                                 val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
@@ -950,7 +950,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
                             }
                         }
-                        val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
+                        val gridCells=remember(gridTiles,columns,effectiveRows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
                         LaunchedEffect(targetPage,gridCells,fillCells) {
                             if(fillCells) {
                                 val appUpdates=mutableMapOf<String,Int>()
@@ -1014,7 +1014,7 @@ fun LauncherRoot(db: LauncherDb) {
                             if(cell!=null) {
                                 val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-x")
                                 val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-y")
-                                Box(Modifier.offset(x=wx,y=wy).size(cellW*2,cellH*2).graphicsLayer { alpha=if(draggingWidgetId==-1002) .12f else 1f }
+                                Box(Modifier.offset(x=wx,y=wy) .size(cellW*minOf(2,columns),cellH*minOf(2,effectiveRows)).graphicsLayer { alpha=if(draggingWidgetId==-1002) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[-1002]=it.boundsInRoot(); if(draggingWidgetId==-1002) widgetCanvasBounds=it.boundsInRoot() }) {
                                 HomeWidget("TODAY",SimpleDateFormat("d",Locale.getDefault()).format(Date()),
                                     SimpleDateFormat("EEEE",Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
@@ -1026,7 +1026,7 @@ fun LauncherRoot(db: LauncherDb) {
                             val cell=gridCells["widget:"+widgetId] ?: return@forEach
                             val custom=widgetSizes[widgetId] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
                             val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-                            val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
+                            val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                             val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-x-$widgetId")
                             val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-y-$widgetId")
                             Box(Modifier.offset(x=wx,y=wy).size(cellW*spanX,cellH*spanY).graphicsLayer { alpha=if(draggingWidgetId==widgetId) .12f else 1f }
