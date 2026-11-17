@@ -147,6 +147,7 @@ data class InstalledApp(val label: String, val packageName: String, val icon: Dr
 
 class LauncherWelcomeActivity : ComponentActivity() {
     private lateinit var homeRoleRequest: androidx.activity.result.ActivityResultLauncher<Intent>
+    private lateinit var permissionsRequest: androidx.activity.result.ActivityResultLauncher<Array<String>>
     private var waitingForHomeSettings = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,7 +160,26 @@ class LauncherWelcomeActivity : ComponentActivity() {
                 if (manager?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true) finishAndRemoveTask()
             }
         }
+        permissionsRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
         setContent { MaterialTheme { LauncherWelcomeScreen(onStart = ::requestHomeRole) } }
+
+        // Ask for the launcher's declared runtime permissions on the welcome screen,
+        // before the user selects Start Launcher. Denials remain non-blocking.
+        val required = buildList {
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.READ_PHONE_STATE)
+            add(Manifest.permission.READ_CONTACTS)
+            add(Manifest.permission.CAMERA)
+            if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
+            if (Build.VERSION.SDK_INT >= 33) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.distinct().filter {
+            ContextCompat.checkSelfPermission(this@LauncherWelcomeActivity, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (required.isNotEmpty()) permissionsRequest.launch(required.toTypedArray())
     }
     private fun requestHomeRole() {
         if (Build.VERSION.SDK_INT >= 29) {
@@ -248,13 +268,7 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply { isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false }
         applyPreferredRefreshRate()
-        val needed = buildList {
-            if (android.os.Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            if (android.os.Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            add(Manifest.permission.READ_PHONE_STATE)
-        }.filter { ContextCompat.checkSelfPermission(this@MainActivity, it) != PackageManager.PERMISSION_GRANTED }
-        if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
+        // Runtime permissions are requested on the welcome screen before Start Launcher.
         setContent { LauncherRoot(db) }
     }
 
@@ -523,7 +537,7 @@ fun LauncherRoot(db: LauncherDb) {
         if(drawer && highRefreshRate) activity.requestHighestRefreshRate()
     }
     var booting by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { delay(2200); booting=false }
+    LaunchedEffect(Unit) { delay(2850); booting=false }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
@@ -800,13 +814,12 @@ fun LauncherRoot(db: LauncherDb) {
         bars.isAppearanceLightNavigationBars = false
     }
     LaunchedEffect(navigationMode, settings) {
+        // Navigation mode belongs to Android/MIUI/HyperOS. Do not hide the system
+        // navigation bar here: the OS must retain ownership of Home, Back and Recents
+        // gestures and dispatch them to the currently selected HOME activity.
         val bars = androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        if (navigationMode == "gestures" && !settings) {
-            bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            bars.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-        } else {
-            bars.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-        }
+        bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+        bars.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
     }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
     LaunchedEffect(page) { appBounds.clear(); widgetBounds.clear(); folderBounds.clear() }
@@ -1970,7 +1983,7 @@ fun SettingsScreen(
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Text("About system navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
-                    Text("Buttons or gesture navigation is controlled by Android / MIUI / HyperOS. Choose a mode above, then finish the change in your phone's system settings. The launcher uses edge swipes for its own actions when Gestures is selected.",color=muted,fontSize=12.sp)
+                    Text("Home, Back and Recents gestures are handled by Android / MIUI / HyperOS and automatically work when this app is your default Home app. To remove the three-button bar, switch your phone to Gesture navigation in system settings; a launcher cannot change that protected system setting itself.",color=muted,fontSize=12.sp)
                     Text("Recents layout is owned by the system launcher. This preference is saved here but cannot rearrange Android's system Recents screen.",color=muted,fontSize=12.sp)
                 }
             }
