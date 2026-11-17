@@ -592,9 +592,9 @@ fun LauncherRoot(db: LauncherDb) {
     fun applyGridDragPreview(destinationPage:Int) {
         val preview=dragPreviewSlots
         preview.forEach { (key,slot) -> when {
-            key.startsWith("app:") -> { val pkg=key.substringAfter("app:"); appSlotAssignments=appSlotAssignments+(pkg to slot); appPageAssignments=appPageAssignments+(pkg to destinationPage) }
+            key.startsWith("app:") -> { val pkg=key.substringAfter("app:"); appSlotAssignments=appSlotAssignments+(pkg to slot) }
             key.startsWith("widget:") -> { val id=key.substringAfter("widget:").toIntOrNull() ?: return@forEach; widgetSlotAssignments=widgetSlotAssignments+(id to slot) }
-            key.startsWith("folder:") -> { val id=key.substringAfter("folder:"); folders=folders.map { if(it.id==id) it.copy(slot=slot,page=destinationPage) else it } }
+            key.startsWith("folder:") -> { val id=key.substringAfter("folder:"); folders=folders.map { if(it.id==id) it.copy(slot=slot) else it } }
         } }
         if(preview.keys.any { it.startsWith("folder:") }) persistFolders()
         db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
@@ -1340,7 +1340,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                             dragOriginSlot=folder.slot
                                             pendingDragPage=folder.page
                                         },
-                                        onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition) },
+                                        onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition); updateGridDragPreview(dragPosition,"app:"+app.packageName) },
                                         onDragEnd={ finishIconDrag() },
                                         onClick={
                                             openFolderId=null
