@@ -530,7 +530,7 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Text(number,Modifier.weight(1f),fontSize=26.sp,color=green,textAlign=TextAlign.Center,maxLines=1)
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).pointerInput(number) {
+                    Modifier.size(48.dp).clip(CircleShape).pointerInput(Unit) {
                         awaitEachGesture {
                             val down=awaitFirstDown(requireUnconsumed=false)
                             val longPress=awaitLongPressOrCancellation(down.id)
@@ -538,7 +538,7 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
                                 if(number.isNotEmpty()) onDelete()
                             } else {
                                 var pressed=true
-                                while(pressed && number.isNotEmpty()) {
+                                while(pressed) {
                                     onDelete()
                                     delay(85)
                                     val event=awaitPointerEvent()
