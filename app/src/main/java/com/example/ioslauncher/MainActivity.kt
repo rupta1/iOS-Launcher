@@ -324,7 +324,7 @@ fun LauncherRoot(db: LauncherDb) {
     val context = LocalContext.current
     val activity = context as MainActivity
     var apps by remember {
-        val loaded = activity.loadApps()
+        val loaded = activity.loadApps().distinctBy { it.packageName }
         val saved = db.get("app_order").split("|").filter { it.isNotBlank() }
         mutableStateOf(if (saved.isEmpty()) loaded else loaded.sortedBy { app ->
             val index = saved.indexOf(app.packageName)
@@ -646,6 +646,8 @@ fun LauncherRoot(db: LauncherDb) {
                 if(createFolder) {
                     removeFromSourceFolder()
                     val existingFolder=folders.firstOrNull { targetApp in it.packages }
+                    val targetPageOld=appPageAssignments[targetApp] ?: targetPage
+                    val targetSlotOld=appSlotAssignments[targetApp] ?: slotAt(targetBounds.center)
                     folders=folders.map { folder -> folder.copy(packages=folder.packages.filterNot { it==dragged.packageName }) }
                     if(existingFolder!=null) {
                         folders=folders.map { folder ->
@@ -653,7 +655,7 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                     } else {
                         val targetModel=apps.firstOrNull { it.packageName==targetApp }
-                        folders=folders+HomeFolder("folder:"+targetApp,targetModel?.label ?: "Folder",listOf(targetApp,dragged.packageName).distinct(),targetPage,dragOriginSlot)
+                        folders=folders+HomeFolder("folder:"+targetApp,targetModel?.label ?: "Folder",listOf(targetApp,dragged.packageName).distinct(),targetPageOld,targetSlotOld)
                     }
                     folders=folders.filter { it.packages.isNotEmpty() }.distinctBy { it.id }
                     persistFolders()
@@ -663,8 +665,17 @@ fun LauncherRoot(db: LauncherDb) {
                     removeFromSourceFolder()
                     val targetPageOld=appPageAssignments[targetApp] ?: targetPage
                     val targetSlotOld=appSlotAssignments[targetApp] ?: slotAt(targetBounds.center)
-                    appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)+(targetApp to dragOriginPage)
-                    appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)+(targetApp to dragOriginSlot)
+                    if(draggingFromDock) {
+                        val dockIndex=dockPackages.indexOf(dragged.packageName)
+                        val updatedDock=dockPackages.toMutableList()
+                        if(dockIndex>=0) updatedDock[dockIndex]=targetApp
+                        dockPackages=updatedDock.distinct()
+                        appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)-targetApp
+                        appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)-targetApp
+                    } else {
+                        appPageAssignments=appPageAssignments+(dragged.packageName to targetPageOld)+(targetApp to dragOriginPage)
+                        appSlotAssignments=appSlotAssignments+(dragged.packageName to targetSlotOld)+(targetApp to dragOriginSlot)
+                    }
                 }
             } else {
                 val targetWidget=widgetBounds.entries.firstOrNull { it.value.contains(dragPosition) }?.key
