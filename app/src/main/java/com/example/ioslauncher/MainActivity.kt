@@ -498,6 +498,8 @@ fun LauncherRoot(db: LauncherDb) {
     var dragPreviewSlots by remember { mutableStateOf<Map<String,Int>>(emptyMap()) }
 
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
+    // Bounds survive page transitions; this set identifies the page currently being laid out.
+    var currentPageAppKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
     val widgetHandleBounds = remember { mutableStateMapOf<Int, Rect>() }
     val widgetResizeHandleBounds = remember { mutableStateMapOf<Int, Rect>() }
@@ -574,9 +576,26 @@ fun LauncherRoot(db: LauncherDb) {
         val cw=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
         val ch=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val items=mutableListOf<DragGridPlacement>()
-        appBounds.forEach { (k,b) -> if(b.width>0f && b.height>0f && "app:"+k!=movingKey) items.add(DragGridPlacement("app:"+k,appSlotAssignments[k] ?: slotAt(b.center))) }
-        folders.filter { it.page==pendingDragPage }.forEach { folder -> if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot)) }
-        widgetBounds.forEach { (id,b) -> if("widget:"+id!=movingKey && b.width>0f && b.height>0f) items.add(DragGridPlacement("widget:"+id,widgetSlotAssignments[id] ?: slotAt(b.center),kotlin.math.ceil(b.width/cw).toInt().coerceIn(1,columns),kotlin.math.ceil(b.height/ch).toInt().coerceIn(1,effectiveRows))) }
+        // Never reuse app/widget bounds from the page the drag just left.
+        currentPageAppKeys.forEach { k ->
+            val b=appBounds[k] ?: Rect.Zero
+            if(b.width>0f && b.height>0f && "app:"+k!=movingKey)
+                items.add(DragGridPlacement("app:"+k,appSlotAssignments[k] ?: slotAt(b.center)))
+        }
+        folders.filter { it.page==pendingDragPage }.forEach { folder ->
+            if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot))
+        }
+        widgetBounds.forEach { (id,b) ->
+            val widgetPage=when(id) {
+                -1001 -> weatherWidgetPage
+                -1002 -> todayWidgetPage
+                else -> homeWidgets.firstOrNull { it.first==id }?.second
+            }
+            if(widgetPage==pendingDragPage && "widget:"+id!=movingKey && b.width>0f && b.height>0f)
+                items.add(DragGridPlacement("widget:"+id,widgetSlotAssignments[id] ?: slotAt(b.center),
+                    kotlin.math.ceil(b.width/cw).toInt().coerceIn(1,columns),
+                    kotlin.math.ceil(b.height/ch).toInt().coerceIn(1,effectiveRows)))
+        }
         val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1) else slotAt(position)
         val moving=DragGridPlacement(movingKey,slot,movingSpanX.coerceIn(1,columns),movingSpanY.coerceIn(1,effectiveRows))
         val ordered=items.sortedWith(compareBy<DragGridPlacement>{it.slot}.thenBy{it.key}).toMutableList()
@@ -1001,6 +1020,10 @@ fun LauncherRoot(db: LauncherDb) {
                 label = "home-pages"
             ) { targetPage ->
                 val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
+                SideEffect {
+                    val visibleKeys=pageApps.map { it.packageName }.toSet()
+                    if(currentPageAppKeys!=visibleKeys) currentPageAppKeys=visibleKeys
+                }
                 if (targetPage < 0 && minusScreen == "Google Discover") {
                     val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
                     Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
@@ -1025,6 +1048,11 @@ fun LauncherRoot(db: LauncherDb) {
                             pageApps.forEachIndexed { index, app ->
                                 add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName] ?: appSlotAssignments[app.packageName] ?: index))
                             }
+                            // Include a moving app as a real destination-page tile even though
+                            // its persisted page assignment is not committed until drop.
+                            draggingApp?.takeIf { targetPage==pendingDragPage && pageApps.none { app -> app.packageName==it.packageName } }?.let { moving ->
+                                add(HomeGridTile("app:"+moving.packageName,dragPreviewSlots["app:"+moving.packageName] ?: dragPreviewSlots.size))
+                            }
                             visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,dragPreviewSlots["folder:"+folder.id] ?: folder.slot)) }
                             if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",dragPreviewSlots["widget:-1001"] ?: widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
                             if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",dragPreviewSlots["widget:-1002"] ?: widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),minOf(2,effectiveRows)))
@@ -1033,6 +1061,15 @@ fun LauncherRoot(db: LauncherDb) {
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                                 val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)) .toInt().coerceIn(1,effectiveRows)
                                 add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id] ?: widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
+                            }
+                            // A widget crossing pages must reserve its full footprint on
+                            // the destination page while it is still being dragged.
+                            if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && targetPage==pendingDragPage &&
+                                none { it.key=="widget:"+draggingWidgetId }) {
+                                val bounds=widgetBounds[draggingWidgetId] ?: widgetCanvasBounds
+                                val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns) else 2.coerceAtMost(columns)
+                                val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows) else 2.coerceAtMost(effectiveRows)
+                                add(HomeGridTile("widget:"+draggingWidgetId,dragPreviewSlots["widget:"+draggingWidgetId] ?: dragPreviewSlots.size,spanX,spanY))
                             }
                         }
                         val gridCells=remember(gridTiles,columns,effectiveRows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
