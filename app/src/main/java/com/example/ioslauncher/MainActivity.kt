@@ -57,6 +57,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -456,6 +457,9 @@ fun LauncherRoot(db: LauncherDb) {
     val effectiveRows = minOf(rows,(availableGridHeightDp/minHomeCellHeightDp).toInt().coerceAtLeast(1))
     var recentsArrangement by remember { mutableStateOf(db.get("recents_arrangement", "Vertically")) }
     var highRefreshRate by remember { mutableStateOf(db.get("high_refresh_rate", "true") == "true") }
+    LaunchedEffect(drawer,highRefreshRate) {
+        if(drawer && highRefreshRate) activity.requestHighestRefreshRate()
+    }
     var locked by remember { mutableStateOf(db.get("launcher_unlocked", "false") != "true") }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
