@@ -37,6 +37,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -534,20 +536,23 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
                 Text(number,Modifier.weight(1f),fontSize=26.sp,color=green,textAlign=TextAlign.Center,maxLines=1)
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down=awaitFirstDown(requireUnconsumed=false)
-                            val longPress=awaitLongPressOrCancellation(down.id)
-                            if(longPress==null) {
-                                if(number.isNotEmpty()) onDelete()
-                            } else {
-                                val repeatJob=launch {
-                                    while(true) {
-                                        onDelete()
-                                        delay(85)
+                        coroutineScope {
+                            val gestureScope=this
+                            awaitEachGesture {
+                                val down=awaitFirstDown(requireUnconsumed=false)
+                                val longPress=awaitLongPressOrCancellation(down.id)
+                                if(longPress==null) {
+                                    if(number.isNotEmpty()) onDelete()
+                                } else {
+                                    val repeatJob=gestureScope.launch {
+                                        while(true) {
+                                            onDelete()
+                                            delay(85)
+                                        }
                                     }
+                                    waitForUpOrCancellation()
+                                    repeatJob.cancel()
                                 }
-                                waitForUpOrCancellation()
-                                repeatJob.cancel()
                             }
                         }
                     },
