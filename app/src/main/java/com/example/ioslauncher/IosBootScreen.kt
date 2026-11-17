@@ -25,7 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun IosBootScreen() {
+fun AppleBootScreen() {
     val progress by animateFloatAsState(
         targetValue = 1f,
         animationSpec = tween(durationMillis = 2450, easing = FastOutSlowInEasing),
