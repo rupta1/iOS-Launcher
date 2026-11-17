@@ -815,7 +815,7 @@ fun LauncherRoot(db: LauncherDb) {
                             if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),2))
                             if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),2))
                             widgetInfoMap.forEach { (id,info) ->
-                                val custom=widgetSizes[id] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
+                                val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                                 val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                                 val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
                                 add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
