@@ -2037,9 +2037,9 @@ fun SettingsScreen(
             }
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                    Text("System-wide gesture navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
-                    Text("For a sideloaded install, first open App info, tap the three-dot menu, and choose Allow restricted settings (if Android shows it). Then open Android Settings > Accessibility > Downloaded apps > iOS Launcher gestures and enable the service. Android requires this approval from you; the launcher cannot grant it automatically.",color=muted,fontSize=12.sp)
-                    Text("Android retains control of the navigation mode. The buttons remain available when you reveal the navigation bar, and Settings / app overlays show the bar normally.",color=muted,fontSize=12.sp)
+                    Text("Navigation bar",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Three-button navigation remains enabled. The navigation bar automatically hides on the Home screen to provide more space; swipe up from the bottom edge to reveal the Back, Home and Recents buttons temporarily.",color=muted,fontSize=12.sp)
+                    Text("The system navigation mode is unchanged. The navigation buttons remain available and reappear temporarily when you swipe from the bottom edge.",color=muted,fontSize=12.sp)
                 }
             }
             Spacer(Modifier.height(20.dp))
