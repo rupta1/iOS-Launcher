@@ -353,11 +353,12 @@ fun LauncherRoot(db: LauncherDb) {
     LaunchedEffect(openFolderId) { if(openFolderId!=null) lastOpenedFolderId=openFolderId }
     var dockPackages by remember {
         val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }.distinct()
-        val defaults=apps.filter { app ->
-            (app.label.contains("Phone",true) && !app.label.contains("PhonePe",true)) ||
-            app.packageName=="com.google.android.dialer" || app.packageName=="com.android.dialer" ||
-            app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true)
-        }.distinctBy { it.packageName }.take(5).map { it.packageName }
+        val defaults=listOfNotNull(
+            apps.firstOrNull { it.packageName=="com.google.android.dialer" || it.packageName=="com.android.dialer" || (it.label.contains("Phone",true) && !it.label.contains("PhonePe",true)) },
+            apps.firstOrNull { it.label.contains("Camera",true) || it.packageName.contains("camera",true) },
+            apps.firstOrNull { it.packageName=="com.android.chrome" || it.label.equals("Chrome",true) },
+            apps.firstOrNull { it.packageName=="internal:settings" || it.label.equals("Settings",true) }
+        ).distinctBy { it.packageName }.map { it.packageName }
         mutableStateOf(if(saved.isNotEmpty()) saved else defaults)
     }
     var draggingFromDock by remember { mutableStateOf(false) }
@@ -380,6 +381,7 @@ fun LauncherRoot(db: LauncherDb) {
         if (id != null && widgetPage != null) id to widgetPage else null
     }) }
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
+    var resizingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     var showWeatherWidget by remember { mutableStateOf(db.get("show_weather_widget", "true") == "true") }
     var showTodayWidget by remember { mutableStateOf(db.get("show_today_widget", "true") == "true") }
     var weatherWidgetPage by remember { mutableIntStateOf(db.get("weather_widget_page", "0").toIntOrNull() ?: 0) }
@@ -455,6 +457,16 @@ fun LauncherRoot(db: LauncherDb) {
         val row=((position.y-homeGridBounds.top)/cellH).toInt().coerceIn(0,rows-1)
         return row*columns+col
     }
+    fun widgetSlotAt(position:Offset,id:Int):Int {
+        val cellW=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(homeGridBounds.height/rows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val bounds=widgetCanvasBounds
+        val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/cellW).toInt().coerceIn(1,columns) else 1
+        val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/cellH).toInt().coerceIn(1,rows) else 1
+        val col=(((position.x-homeGridBounds.left)/cellW).toInt()).coerceIn(0,(columns-spanX).coerceAtLeast(0))
+        val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(rows-spanY).coerceAtLeast(0))
+        return row*columns+col
+    }
     fun finishWidgetDrag() {
         val id=draggingWidgetId
         val destinationPage=pendingDragPage.coerceAtLeast(0)
@@ -497,7 +509,7 @@ fun LauncherRoot(db: LauncherDb) {
                         persistFolders()
                     } else widgetSlotAssignments=widgetSlotAssignments+(id to slotAt(widgetDragPosition))
                 }
-                else -> widgetSlotAssignments=widgetSlotAssignments+(id to slotAt(widgetDragPosition))
+                else -> widgetSlotAssignments=widgetSlotAssignments+(id to widgetSlotAt(widgetDragPosition,id))
             }
             when(id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
@@ -780,8 +792,8 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
-            if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+        ) .pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
+            if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var dx = 0f
@@ -790,7 +802,7 @@ fun LauncherRoot(db: LauncherDb) {
                     while (!finished) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) { finished=true; break }
+                        if (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID || resizingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) { finished=true; break }
                         if (!change.pressed) break
                         val delta = change.position - change.previousPosition
                         dx += delta.x
@@ -819,6 +831,56 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
+            .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings, locked, resizingWidgetId) {
+                if (!drawer && !controlCenter && !settings && openFolderId==null && !locked) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart={ local ->
+                            val global=local
+                            val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                            val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                            when {
+                                appKey!=null -> {
+                                    val app=apps.firstOrNull { it.packageName==appKey }
+                                    if(app!=null) {
+                                        draggingApp=app
+                                        draggingFromDock=false
+                                        draggingFromFolder=false
+                                        dragSourceFolderId=null
+                                        dragPosition=global
+                                        dragOriginBounds=appBounds[appKey] ?: Rect.Zero
+                                        dragOriginPage=page
+                                        dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
+                                        pendingDragPage=page
+                                    }
+                                }
+                                widgetKey!=null -> {
+                                    draggingWidgetId=widgetKey
+                                    widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
+                                    widgetDragPosition=global
+                                    pendingDragPage=page
+                                }
+                            }
+                        },
+                        onDrag={ change, amount ->
+                            if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
+                            else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
+                        },
+                        onDragEnd={
+                            if(draggingApp!=null) finishIconDrag()
+                            else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
+                        },
+                        onDragCancel={
+                            draggingApp=null
+                            draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                            draggingFromDock=false
+                            draggingFromFolder=false
+                            dragSourceFolderId=null
+                            dragEdgeDirection=0
+                            pendingDragPage=page
+                        }
+                    )
+                }
+            }
     ) {
         if (systemWallpaper != null) {
             Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
@@ -859,54 +921,7 @@ fun LauncherRoot(db: LauncherDb) {
                                         BoxWithConstraints(
                         Modifier.weight(1f).fillMaxWidth()
                             .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
-                            .pointerInput(page, apps, folders) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart={ local ->
-                                        val global=Offset(homeGridBounds.left+local.x,homeGridBounds.top+local.y)
-                                        val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                                        val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                                        when {
-                                            appKey!=null -> {
-                                                val app=apps.firstOrNull { it.packageName==appKey }
-                                                if(app!=null) {
-                                                    draggingApp=app
-                                                    draggingFromDock=false
-                                                    draggingFromFolder=false
-                                                    dragSourceFolderId=null
-                                                    dragPosition=global
-                                                    dragOriginBounds=appBounds[appKey] ?: Rect.Zero
-                                                    dragOriginPage=page
-                                                    dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
-                                                    pendingDragPage=page
-                                                }
-                                            }
-                                            widgetKey!=null -> {
-                                                draggingWidgetId=widgetKey
-                                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
-                                                widgetDragPosition=global
-                                                pendingDragPage=page
-                                            }
-                                        }
-                                    },
-                                    onDrag={ change, amount ->
-                                        if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
-                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
-                                    },
-                                    onDragEnd={
-                                        if(draggingApp!=null) finishIconDrag()
-                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
-                                    },
-                                    onDragCancel={
-                                        draggingApp=null
-                                        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
-                                        draggingFromDock=false
-                                        draggingFromFolder=false
-                                        dragSourceFolderId=null
-                                        dragEdgeDirection=0
-                                        pendingDragPage=page
-                                    }
-                                )
-                            }
+
                     ) {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
                         val cellH=maxHeight/rows.coerceAtLeast(1)
@@ -1035,16 +1050,21 @@ fun LauncherRoot(db: LauncherDb) {
                                     contentAlignment=Alignment.Center
                                 ) { Text("⠿",color=Color.White,fontSize=19.sp) }
                                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp).clip(CircleShape)
-                                    .background(Color(0x88333333)).pointerInput(widgetId) {
-                                        detectDragGestures(
+                                    .background(Color(0x88333333)).pointerInput(widgetId,cell) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart={ resizingWidgetId=widgetId },
                                             onDrag={ change,amount ->
                                                 change.consume()
                                                 val current=widgetSizes[widgetId] ?: (custom.first to custom.second)
-                                                val w=(current.first+with(density){amount.x.toDp()}).coerceIn(110.dp,cellW*columns)
-                                                val h=(current.second+with(density){amount.y.toDp()}).coerceIn(90.dp,cellH*rows)
+                                                val maxWidth=cellW*(columns-cell.column).coerceAtLeast(1)
+                                                val maxHeight=cellH*(rows-cell.row).coerceAtLeast(1)
+                                                val w=(current.first+with(density){amount.x.toDp()}).coerceIn(110.dp,maxWidth.coerceAtLeast(110.dp))
+                                                val h=(current.second+with(density){amount.y.toDp()}).coerceIn(90.dp,maxHeight.coerceAtLeast(90.dp))
                                                 widgetSizes=widgetSizes+(widgetId to (w to h))
                                                 db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
-                                            }
+                                            },
+                                            onDragEnd={ resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID },
+                                            onDragCancel={ resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID }
                                         )
                                     }) {
                                     Icon(Icons.Default.OpenInFull,null,tint=Color.White,modifier=Modifier.padding(5.dp))
