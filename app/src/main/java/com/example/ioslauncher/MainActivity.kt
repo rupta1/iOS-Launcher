@@ -740,147 +740,119 @@ fun LauncherRoot(db: LauncherDb) {
                         Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
                     }
                 } else Column(Modifier.fillMaxSize()) {
-                    LazyVerticalGrid(
-                        columns=GridCells.Fixed(columns),
-                        userScrollEnabled=false,
-                        modifier=Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
-                            .pointerInput(doubleTapLock) {
-                                detectTapGestures(onDoubleTap={ if(doubleTapLock && !locked) locked=true })
-                            }
-                            .pointerInput(page, pageCount, draggingApp, draggingWidgetId) {
-                                var horizontalDistance = 0f
-                                if (draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) detectHorizontalDragGestures(
-                                    onHorizontalDrag={ change, amount -> horizontalDistance += amount; change.consume() },
-                                    onDragEnd={
-                                        if (kotlin.math.abs(horizontalDistance) > 70f) page = (page + if (horizontalDistance < 0f) 1 else -1).coerceIn(0, pageCount - 1)
-                                        horizontalDistance = 0f
+                                        BoxWithConstraints(
+                        Modifier.weight(1f).fillMaxWidth()
+                            .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
+                            .pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart={ local ->
+                                        val global=Offset(homeGridBounds.left+local.x,homeGridBounds.top+local.y)
+                                        val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                                        val widgetKey=widgetBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                                        val folderKey=folderBounds.entries.firstOrNull { it.value.contains(global) }?.key
+                                        when {
+                                            appKey!=null -> {
+                                                draggingApp=apps.firstOrNull { it.packageName==appKey }
+                                                draggingFromDock=false
+                                                dragPosition=global
+                                                pendingDragPage=targetPage.coerceAtLeast(0)
+                                            }
+                                            widgetKey!=null -> {
+                                                draggingWidgetId=widgetKey
+                                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
+                                                widgetDragPosition=global
+                                                pendingDragPage=targetPage.coerceAtLeast(0)
+                                            }
+                                            folderKey!=null -> {
+                                                val folder=folders.firstOrNull { it.id==folderKey }
+                                                if(folder!=null) openFolderId=folder.id
+                                            }
+                                        }
                                     },
-                                    onDragCancel={ horizontalDistance = 0f }
+                                    onDrag={ change, amount ->
+                                        if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
+                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
+                                    },
+                                    onDragEnd={
+                                        if(draggingApp!=null) finishIconDrag()
+                                        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
+                                    },
+                                    onDragCancel={
+                                        draggingApp=null
+                                        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                                        dragEdgeDirection=0
+                                        pendingDragPage=page
+                                    }
                                 )
-                            },
-                        verticalArrangement=Arrangement.spacedBy(12.dp),
-                        horizontalArrangement=Arrangement.spacedBy(10.dp),
-                        contentPadding=PaddingValues(top=12.dp, bottom=12.dp)
+                            }
                     ) {
-                        if ((showWeatherWidget && targetPage == weatherWidgetPage) || (showTodayWidget && targetPage == todayWidgetPage)) {
-                            item(span={ GridItemSpan(maxLineSpan) }, key="builtin-summary-widgets") {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                                    if (showWeatherWidget && targetPage == weatherWidgetPage) {
-                                        var center by remember { mutableStateOf(Offset.Zero) }
-                                        Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
-                                            .pointerInput(Unit) {
-                                                detectDragGesturesAfterLongPress(
-                                                    onDragStart={ draggingWidgetId=-1001; pendingDragPage=page.coerceAtLeast(0); widgetDragPosition=center },
-                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
-                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
-                                                )
-                                            }) { HomeWidget("WEATHER", "24°", "Mostly Sunny", Icons.Default.WbSunny, Modifier.fillMaxWidth().graphicsLayer { if(draggingWidgetId == -1001) { translationX=widgetDragPosition.x-center.x; translationY=widgetDragPosition.y-center.y; scaleX=1.04f; scaleY=1.04f } }, Color(0xFFFFB648)) }
-                                    }
-                                    if (showTodayWidget && targetPage == todayWidgetPage) {
-                                        var center by remember { mutableStateOf(Offset.Zero) }
-                                        Box(Modifier.weight(1f).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot(); center=it.boundsInRoot().center }
-                                            .pointerInput(Unit) {
-                                                detectDragGesturesAfterLongPress(
-                                                    onDragStart={ draggingWidgetId=-1002; pendingDragPage=page.coerceAtLeast(0); widgetDragPosition=center },
-                                                    onDrag={ change, amount -> change.consume(); widgetDragPosition += amount; updateDragEdge(widgetDragPosition) },
-                                                    onDragEnd={ finishWidgetDrag() }, onDragCancel={ finishWidgetDrag() }
-                                                )
-                                            }) {
-                                            HomeWidget("TODAY", SimpleDateFormat("d", Locale.getDefault()).format(Date()),
-                                                SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                                Icons.Default.CalendarMonth, Modifier.fillMaxWidth().graphicsLayer { if(draggingWidgetId == -1002) { translationX=widgetDragPosition.x-center.x; translationY=widgetDragPosition.y-center.y; scaleX=1.04f; scaleY=1.04f } }, Color(0xFFEF6375))
-                                        }
-                                    }
-                                }
+                        val cellW=maxWidth/columns.coerceAtLeast(1)
+                        val cellH=maxHeight/rows.coerceAtLeast(1)
+                        val visibleFolders=folders.filter { it.page==targetPage }
+                        val widgetInfoMap=homeWidgets.filter { it.second==targetPage }.mapNotNull { (id,_) ->
+                            AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let { id to it }
+                        }.toMap()
+                        val gridTiles=buildList {
+                            pageApps.forEachIndexed { index, app ->
+                                add(HomeGridTile("app:"+app.packageName,appSlotAssignments[app.packageName] ?: index))
+                            }
+                            visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,folder.slot)) }
+                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),2))
+                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),2))
+                            widgetInfoMap.forEach { (id,info) ->
+                                val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                                val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
+                                val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
+                                add(HomeGridTile("widget:"+id,widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
                             }
                         }
-                        homeWidgets.filter { it.second == targetPage }.forEach { (widgetId, _) ->
-                            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
-                            if (info != null) {
-                                val customSize = widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(180).dp to info.minHeight.coerceIn(110, 300).dp)
-                                item(span={ GridItemSpan(maxLineSpan) }, key="host-widget-$widgetId") {
-                                    Box(Modifier.fillMaxWidth().height(customSize.second).onGloballyPositioned { widgetCanvasBounds=it.boundsInRoot() }) {
-                                        AndroidView(
-                                            factory={ viewContext ->
-                                                activity.widgetHost.createView(viewContext, widgetId, info)
-                                            },
-                                            modifier=Modifier.fillMaxSize()
-                                                .pointerInput(widgetId) {
-                                                    detectDragGesturesAfterLongPress(
-                                                        onDragStart={
-                                                            draggingWidgetId=widgetId
-                                                            widgetDragPosition=widgetCanvasBounds.center
-                                                        },
-                                                        onDrag={ change, amount ->
-                                                            change.consume()
-                                                            widgetDragPosition += amount
-                                                        },
-                                                        onDragEnd={ finishWidgetDrag() },
-                                                        onDragCancel={ finishWidgetDrag() }
-                                                    )
-                                                }
-                                                .graphicsLayer {
-                                                    if (draggingWidgetId == widgetId) {
-                                                        translationX=widgetDragPosition.x-widgetCanvasBounds.center.x
-                                                        translationY=widgetDragPosition.y-widgetCanvasBounds.center.y
-                                                        scaleX=1.04f; scaleY=1.04f; alpha=.92f
-                                                    }
-                                                }
-                                        )
-                                        Box(Modifier.align(Alignment.BottomEnd).size(28.dp).background(Color(0x88444444), CircleShape)
-                                            .pointerInput(widgetId) {
-                                                detectDragGestures(
-                                                    onDrag={ change, amount ->
-                                                        change.consume()
-                                                        val current=widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(180).dp to info.minHeight.coerceIn(110,300).dp)
-                                                        val w=(current.first+with(density){amount.x.toDp()}) .coerceIn(140.dp, 360.dp)
-                                                        val h=(current.second+with(density){amount.y.toDp()}).coerceIn(100.dp, 420.dp)
-                                                        widgetSizes=widgetSizes+(widgetId to (w to h))
-                                                        db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
-                                                        try { activity.widgetHost.createView(context,widgetId,info).updateAppWidgetSize(null,w.value.toInt(),h.value.toInt(),w.value.toInt(),h.value.toInt()) } catch (_:Exception) { }
-                                                    }
-                                                )
-                                            }) {
-                                            Icon(Icons.Default.OpenInFull,null,tint=Color.White,modifier=Modifier.padding(5.dp).size(17.dp))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        var nextSlot = 0
-                        pageApps.forEachIndexed { index, app ->
-                            val desiredSlot = (appSlotAssignments[app.packageName] ?: index).coerceAtLeast(nextSlot)
-                            while (nextSlot < desiredSlot) {
-                                val emptySlot = nextSlot
-                                item(key="empty-slot-" + targetPage + "-" + emptySlot) { Spacer(Modifier.size(62.dp)) }
-                                nextSlot++
-                            }
-                            item(key="app-" + app.packageName) {
-                                val isDragging = draggingApp?.packageName == app.packageName
-                                val originalCenter = appBounds[app.packageName]?.center ?: dragPosition
-                                val translation = if (isDragging) dragPosition - originalCenter else Offset.Zero
+                        val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,rows,fillCells) }
+                        pageApps.forEach { app ->
+                            val cell=gridCells["app:"+app.packageName] ?: return@forEach
+                            val center=appBounds[app.packageName]?.center ?: dragPosition
+                            val translation=if(draggingApp?.packageName==app.packageName) dragPosition-center else Offset.Zero
+                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW,cellH),contentAlignment=Alignment.Center) {
                                 AppIcon(
-                                    app=app, labels=labels && hideText == "Off", fg=fg, index=index, animationSpeed=animationSpeed,
-                                    dragTranslation=translation, isDragging=isDragging,
-                                    onBounds={ key, rect -> if (draggingApp?.packageName != key) appBounds[key] = rect },
-                                    onDragStart={ if (!lockLayout) { draggingApp=app; pendingDragPage=page.coerceAtLeast(0); dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero } },
-                                    onDrag={ delta -> dragPosition += delta; updateDragEdge(dragPosition) },
-                                    onDragEnd={ finishIconDrag() },
-                                    onClick={ if (app.packageName == "internal:settings") settings=true else activity.launch(app) }
+                                    app=app,labels=labels && hideText=="Off",fg=fg,index=0,animationSpeed=animationSpeed,
+                                    dragTranslation=translation,isDragging=draggingApp?.packageName==app.packageName,
+                                    size=62.dp,
+                                    draggableEnabled=false,
+                                    onBounds={ key,rect -> appBounds[key]=rect },
+                                    onClick={ if(app.packageName=="internal:settings") settings=true else activity.launch(app) }
                                 )
                             }
-                            nextSlot = desiredSlot + 1
                         }
-                        if (fillCells) {
-                            val occupiedWidgetRows = homeWidgets.count { it.second == targetPage } +
-                                (if(showWeatherWidget && weatherWidgetPage == targetPage) 1 else 0) +
-                                (if(showTodayWidget && todayWidgetPage == targetPage) 1 else 0)
-                            val maxSlots = (columns * (rows.coerceAtLeast(1) - occupiedWidgetRows)).coerceAtLeast(0)
-                            while (nextSlot < maxSlots) {
-                                val emptySlot = nextSlot
-                                item(key="fill-slot-" + targetPage + "-" + emptySlot) { Spacer(Modifier.size(62.dp)) }
-                                nextSlot++
+                        visibleFolders.forEach { folder ->
+                            val cell=gridCells["folder:"+folder.id] ?: return@forEach
+                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW,cellH)
+                                .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() },contentAlignment=Alignment.Center) {
+                                FolderTile(folder,apps,fg,onClick={openFolderId=folder.id})
+                            }
+                        }
+                        if(showWeatherWidget && targetPage==weatherWidgetPage) {
+                            val cell=gridCells["widget:-1001"]
+                            if(cell!=null) Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*2,cellH*2)
+                                .onGloballyPositioned { widgetBounds[-1001]=it.boundsInRoot(); if(draggingWidgetId==-1001) widgetCanvasBounds=it.boundsInRoot() }) {
+                                HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth(),Color(0xFFFFB648))
+                            }
+                        }
+                        if(showTodayWidget && targetPage==todayWidgetPage) {
+                            val cell=gridCells["widget:-1002"]
+                            if(cell!=null) Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*2,cellH*2)
+                                .onGloballyPositioned { widgetBounds[-1002]=it.boundsInRoot(); if(draggingWidgetId==-1002) widgetCanvasBounds=it.boundsInRoot() }) {
+                                HomeWidget("TODAY",SimpleDateFormat("d",Locale.getDefault()).format(Date()),
+                                    SimpleDateFormat("EEEE",Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
+                                    Icons.Default.CalendarMonth,Modifier.fillMaxWidth(),Color(0xFFEF6375))
+                            }
+                        }
+                        widgetInfoMap.forEach { (widgetId,info) ->
+                            val cell=gridCells["widget:"+widgetId] ?: return@forEach
+                            val custom=widgetSizes[widgetId] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                            val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
+                            val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
+                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*spanX,cellH*spanY)
+                                .onGloballyPositioned { widgetBounds[widgetId]=it.boundsInRoot(); if(draggingWidgetId==widgetId) widgetCanvasBounds=it.boundsInRoot() }) {
+                                AndroidView(factory={ activity.widgetHost.createView(it,widgetId,info) },modifier=Modifier.fillMaxSize())
                             }
                         }
                     }
