@@ -342,6 +342,19 @@ fun LauncherRoot(db: LauncherDb) {
         val slot=parts.getOrNull(1)?.toIntOrNull()
         if(!packageName.isNullOrBlank() && slot!=null) packageName to slot else null
     }.toMap()) }
+    var widgetSlotAssignments by remember { mutableStateOf(db.get("widget_slots").split(";").mapNotNull { token ->
+        val parts=token.split(":"); val id=parts.getOrNull(0)?.toIntOrNull(); val slot=parts.getOrNull(1)?.toIntOrNull()
+        if(id!=null && slot!=null) id to slot else null
+    }.toMap()) }
+    var folders by remember { mutableStateOf(decodeHomeFolders(db.get("home_folders"))) }
+    var openFolderId by remember { mutableStateOf<String?>(null) }
+    var dockPackages by remember {
+        val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }
+        val defaults=apps.filter { app -> app.label.contains("Phone",true) || app.label.contains("Dialer",true) || app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true) }.take(5).map { it.packageName }
+        mutableStateOf(if(saved.isNotEmpty()) saved else defaults)
+    }
+    var draggingFromDock by remember { mutableStateOf(false) }
+
     var pendingDragPage by remember { mutableIntStateOf(0) }
     var homeGridBounds by remember { mutableStateOf(Rect.Zero) }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
@@ -378,6 +391,11 @@ fun LauncherRoot(db: LauncherDb) {
     var dragEdgeDirection by remember { mutableIntStateOf(0) }
 
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
+    val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
+    val folderBounds = remember { mutableStateMapOf<String, Rect>() }
+    var dockBounds by remember { mutableStateOf(Rect.Zero) }
+    val dockAppBounds = remember { mutableStateMapOf<String, Rect>() }
+
     val density = LocalDensity.current
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
     var drawer by remember { mutableStateOf(false) }
