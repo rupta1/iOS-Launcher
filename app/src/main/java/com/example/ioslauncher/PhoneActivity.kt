@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.provider.CallLog
+import android.telecom.TelecomManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -38,9 +39,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.Manifest
+import android.content.pm.PackageManager
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 
 private data class PhoneContact(val name:String,val number:String,val starred:Boolean)
+private data class RecentCall(val name:String,val number:String,val type:Int,val date:Long)
 
 class PhoneActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
@@ -54,22 +59,49 @@ class PhoneActivity : ComponentActivity() {
 @Composable
 private fun IosPhoneScreen() {
     val context= LocalContext.current
-    var tab by remember { mutableStateOf("Favorites") }
+    var tab by remember { mutableStateOf("Keypad") }
     var number by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
     var contacts by remember { mutableStateOf(emptyList<PhoneContact>()) }
+    var recents by remember { mutableStateOf(emptyList<RecentCall>()) }
+    var hasCallLogPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED) }
+    var hasCallPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED) }
+    var pendingCall by remember { mutableStateOf("") }
+    val callPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        hasCallPermission=result[Manifest.permission.CALL_PHONE]==true || ContextCompat.checkSelfPermission(context,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED
+        hasCallLogPermission=result[Manifest.permission.READ_CALL_LOG]==true || ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED
+        if(hasCallLogPermission) recents=loadRecentCalls(context)
+        if(hasCallPermission && pendingCall.isNotBlank()) {
+            val value=pendingCall; pendingCall=""
+            try { context.startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(value)))) }
+            catch (_:Exception) { context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value)))) }
+        }
+    }
+    val callLogPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasCallLogPermission=granted
+        if(granted) recents=loadRecentCalls(context)
+    }
     var hasPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED) }
     val permission= rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasPermission=granted
         if(granted) contacts=loadPhoneContacts(context)
     }
     LaunchedEffect(hasPermission) { if(hasPermission) contacts=loadPhoneContacts(context) }
+    LaunchedEffect(tab,hasCallLogPermission) { if(tab=="Recents" && hasCallLogPermission) recents=loadRecentCalls(context) }
     BackHandler(enabled=number.isNotEmpty()) { number=number.dropLast(1) }
     val visibleContacts=contacts.filter { (tab!="Favorites" || it.starred) && (it.name.contains(query,true) || it.number.contains(query,true)) }
     fun dial(value:String) {
-        if(value.isNotBlank()) try {
-            context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value))))
-        } catch (_:Exception) { }
+        if(value.isBlank()) return
+        if(!hasCallPermission) {
+            pendingCall=value
+            callPermission.launch(arrayOf(Manifest.permission.CALL_PHONE,Manifest.permission.READ_CALL_LOG))
+            return
+        }
+        // ACTION_CALL transfers the call to Android Telecom; its SIM chooser and
+        // native in-call UI are shown by the system when multiple SIMs are configured.
+        try { context.startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(value)))) }
+        catch (_:SecurityException) { context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value)))) }
+        catch (_:Exception) { }
     }
     Column(Modifier.fillMaxSize().background(Color(0xFFF5F5FA)).padding(WindowInsets.statusBars.asPaddingValues())) {
         Row(Modifier.fillMaxWidth().padding(horizontal=22.dp, vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -113,12 +145,32 @@ private fun IosPhoneScreen() {
                     }
                     Text("Calls are handed to Android's system dialer for confirmation.",fontSize=11.sp,color=Color(0xFF85858E),textAlign=TextAlign.Center,modifier=Modifier.padding(top=12.dp))
                 }
-                "Recents" -> Column(Modifier.fillMaxSize().padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                    Icon(Icons.Default.History,null,tint=Color(0xFF8A8A93),modifier=Modifier.size(54.dp))
-                    Spacer(Modifier.height(14.dp))
-                    Text("Recent calls",fontSize=20.sp,fontWeight=FontWeight.SemiBold,color=Color(0xFF22222A))
-                    Text("Your device keeps call history in the system Phone app.",fontSize=13.sp,color=Color(0xFF777780),textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                    Button(onClick={try { context.startActivity(Intent(Intent.ACTION_VIEW,CallLog.Calls.CONTENT_URI)) } catch (_:Exception) { dial("") }}) { Text("Open call history") }
+                "Recents" -> {
+                    if(!hasCallLogPermission) {
+                        Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                            Icon(Icons.Default.History,null,tint=Color(0xFF8A8A93),modifier=Modifier.size(54.dp))
+                            Text("Allow call history access to view recent calls",fontSize=14.sp,color=Color(0xFF777780),textAlign=TextAlign.Center,modifier=Modifier.padding(18.dp))
+                            Button(onClick={callLogPermission.launch(Manifest.permission.READ_CALL_LOG)}) { Text("Allow call history") }
+                        }
+                    } else if(recents.isEmpty()) {
+                        Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { Text("No recent calls",color=Color(0xFF85858E)) }
+                    } else LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp),contentPadding=PaddingValues(vertical=8.dp)) {
+                        items(recents) { call ->
+                            Row(Modifier.fillMaxWidth().clickable { number=call.number; tab="Keypad" }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE5E5ED)),contentAlignment=Alignment.Center) {
+                                    Icon(if(call.type==CallLog.Calls.OUTGOING_TYPE) Icons.Default.Call else Icons.Default.CallReceived,null,tint=if(call.type==CallLog.Calls.MISSED_TYPE) Color(0xFFE14D5A) else Color(0xFF30B968))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(call.name.ifBlank { call.number.ifBlank { "Unknown" } },color=Color(0xFF22222A),fontSize=15.sp,fontWeight=FontWeight.Medium)
+                                    Text(call.number+"  ·  "+when(call.type) { CallLog.Calls.INCOMING_TYPE -> "Incoming"; CallLog.Calls.OUTGOING_TYPE -> "Outgoing"; CallLog.Calls.MISSED_TYPE -> "Missed"; else -> "Call" },color=Color(0xFF85858E),fontSize=12.sp)
+                                }
+                                Text(SimpleDateFormat("dd MMM, h:mm a",Locale.getDefault()).format(Date(call.date)),color=Color(0xFF85858E),fontSize=11.sp)
+                                IconButton(onClick={dial(call.number)}) { Icon(Icons.Default.Call,null,tint=Color(0xFF30B968)) }
+                            }
+                            HorizontalDivider(color=Color(0xFFE7E7ED))
+                        }
+                    }
                 }
                 else -> Column(Modifier.fillMaxSize().padding(horizontal=18.dp)) {
                     OutlinedTextField(value=query,onValueChange={query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,
@@ -157,6 +209,25 @@ private fun IosPhoneScreen() {
             }
         }
     }
+}
+
+private fun loadRecentCalls(context:android.content.Context):List<RecentCall> {
+    if(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) return emptyList()
+    val result=mutableListOf<RecentCall>()
+    try {
+        context.contentResolver.query(
+            CallLog.Calls.CONTENT_URI,
+            arrayOf(CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER,CallLog.Calls.TYPE,CallLog.Calls.DATE),
+            null,null,CallLog.Calls.DATE+" DESC"
+        )?.use { cursor ->
+            val nameIndex=cursor.getColumnIndex(CallLog.Calls.CACHED_NAME)
+            val numberIndex=cursor.getColumnIndex(CallLog.Calls.NUMBER)
+            val typeIndex=cursor.getColumnIndex(CallLog.Calls.TYPE)
+            val dateIndex=cursor.getColumnIndex(CallLog.Calls.DATE)
+            while(cursor.moveToNext()) result.add(RecentCall(cursor.getString(nameIndex).orEmpty(),cursor.getString(numberIndex).orEmpty(),cursor.getInt(typeIndex),cursor.getLong(dateIndex)))
+        }
+    } catch (_:SecurityException) { }
+    return result
 }
 
 private fun loadPhoneContacts(context:android.content.Context):List<PhoneContact> {

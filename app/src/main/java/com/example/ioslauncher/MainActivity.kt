@@ -262,14 +262,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
-        if (db.get("default_wallpaper_applied") != "true") {
+        // Apply the bundled powder wallpaper once for this asset version.
+        // It is also rendered directly by the launcher if the OS blocks wallpaper writes.
+        if (db.get("default_wallpaper_applied") != "powder_wallpaper_v3") {
             try {
-                val encoded = resources.openRawResource(R.raw.default_wallpaper_b64).bufferedReader().use { it.readText() }
-                val bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
-                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bitmap = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.launcher_default_wallpaper)
                 if (bitmap != null) {
                     WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
-                    db.put("default_wallpaper_applied", "true")
+                    db.put("default_wallpaper_applied", "powder_wallpaper_v3")
                     wallpaperRevision++
                 }
             } catch (_: Exception) { }
@@ -886,15 +886,18 @@ fun LauncherRoot(db: LauncherDb) {
                 try { context.contentResolver.openInputStream(android.net.Uri.parse(customWallpaperUri))?.use { android.graphics.BitmapFactory.decodeStream(it) } }
                 catch (_: Exception) { null }
             } else null
-            val systemBitmap = if (customBitmap == null) {
+            val bundledDefault = try {
+                android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.launcher_default_wallpaper)
+            } catch (_: Exception) { null }
+            val systemBitmap = if (customBitmap == null && bundledDefault == null) {
                 try { manager.getWallpaperFile(WallpaperManager.FLAG_SYSTEM)?.use { android.graphics.BitmapFactory.decodeFileDescriptor(it.fileDescriptor) } }
                 catch (_: Exception) { null }
             } else null
-            val fallbackBitmap = if (customBitmap == null && systemBitmap == null) {
+            val fallbackBitmap = if (customBitmap == null && bundledDefault == null && systemBitmap == null) {
                 try { manager.drawable?.toBitmap(context.resources.displayMetrics.widthPixels.coerceAtLeast(1), context.resources.displayMetrics.heightPixels.coerceAtLeast(1)) }
                 catch (_: Exception) { null }
             } else null
-            (customBitmap ?: systemBitmap ?: fallbackBitmap)?.asImageBitmap()
+            (customBitmap ?: bundledDefault ?: systemBitmap ?: fallbackBitmap)?.asImageBitmap()
         } catch (_: Exception) { null }
     }
     Box(
@@ -1335,11 +1338,30 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     ) {
                         Column(Modifier.padding(horizontal=20.dp,vertical=18.dp)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text(folder.title,color=Color(0xFF20242C),fontSize=21.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
-                                IconButton(onClick={ renameFolderText=folder.title; renamingFolderId=folder.id }) {
-                                    Icon(Icons.Default.Edit,null,tint=Color(0xFF59616D))
+                                if (renamingFolderId == folder.id) {
+                                    OutlinedTextField(
+                                        value=renameFolderText,
+                                        onValueChange={ renameFolderText=it },
+                                        modifier=Modifier.weight(1f),
+                                        singleLine=true,
+                                        textStyle=androidx.compose.ui.text.TextStyle(fontSize=19.sp,fontWeight=FontWeight.SemiBold),
+                                        placeholder={ Text("Group name") }
+                                    )
+                                    IconButton(onClick={
+                                        val newTitle=renameFolderText.trim()
+                                        if(newTitle.isNotEmpty()) {
+                                            folders=folders.map { item -> if(item.id==folder.id) item.copy(title=newTitle) else item }
+                                            persistFolders()
+                                        }
+                                        renamingFolderId=null
+                                    }) { Icon(Icons.Default.Check,null,tint=Color(0xFF30B968)) }
+                                } else {
+                                    Text(folder.title,color=Color(0xFF20242C),fontSize=21.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                    IconButton(onClick={ renameFolderText=folder.title; renamingFolderId=folder.id }) {
+                                        Icon(Icons.Default.Edit,null,tint=Color(0xFF59616D))
+                                    }
                                 }
-                                IconButton(onClick={openFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
+                                IconButton(onClick={openFolderId=null; renamingFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
                             }
                             Spacer(Modifier.height(12.dp))
                             val folderApps=folder.packages.distinct().mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }
@@ -1380,35 +1402,6 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     }
                 }
             }
-        }
-        if (renamingFolderId != null) {
-            AlertDialog(
-                onDismissRequest = { renamingFolderId = null },
-                title = { Text("Rename folder") },
-                text = {
-                    OutlinedTextField(
-                        value = renameFolderText,
-                        onValueChange = { renameFolderText = it },
-                        singleLine = true,
-                        label = { Text("Folder name") }
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val newTitle = renameFolderText.trim()
-                        if (newTitle.isNotEmpty()) {
-                            folders = folders.map { folder ->
-                                if (folder.id == renamingFolderId) folder.copy(title = newTitle) else folder
-                            }
-                            persistFolders()
-                        }
-                        renamingFolderId = null
-                    }) { Text("Save") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { renamingFolderId = null }) { Text("Cancel") }
-                }
-            )
         }
         draggingApp?.let { dragged ->
             val bitmap=remember(dragged.packageName) { dragged.icon.toBitmap(144,144).asImageBitmap() }
