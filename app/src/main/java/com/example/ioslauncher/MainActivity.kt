@@ -350,7 +350,8 @@ class MainActivity : ComponentActivity() {
                 listOf(
                     InstalledApp("Safari", "internal:browser", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(40, 135, 225)); cornerRadius=28f }),
                     InstalledApp("Notes", "internal:notes", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(255, 205, 65)); cornerRadius=28f }),
-                    InstalledApp("Settings", "internal:settings", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(125, 130, 145)); cornerRadius=28f })
+                    InstalledApp("Settings", "internal:settings", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(125, 130, 145)); cornerRadius=28f }),
+                    InstalledApp("Phone", "internal:phone", android.graphics.drawable.GradientDrawable().apply { setColor(android.graphics.Color.rgb(40, 190, 105)); cornerRadius=28f })
                 )
             )
             .sortedWith(compareBy<InstalledApp> {
@@ -373,6 +374,7 @@ class MainActivity : ComponentActivity() {
                 "internal:browser" -> startActivity(Intent(this, BrowserActivity::class.java))
                 "internal:notes" -> startActivity(Intent(this, NotesActivity::class.java))
                 "internal:settings" -> startActivity(Intent(Settings.ACTION_SETTINGS))
+                "internal:phone" -> startActivity(Intent(this, PhoneActivity::class.java))
                 else -> {
                     val i = packageManager.getLaunchIntentForPackage(app.packageName) ?: return
                     db.log("app_launch", app.packageName)
@@ -418,7 +420,7 @@ fun LauncherRoot(db: LauncherDb) {
     var dockPackages by remember {
         val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }.distinct()
         val defaults=listOfNotNull(
-            apps.firstOrNull { it.packageName=="com.google.android.dialer" || it.packageName=="com.android.dialer" || (it.label.contains("Phone",true) && !it.label.contains("PhonePe",true)) },
+            apps.firstOrNull { it.packageName=="internal:phone" },
             apps.firstOrNull { it.label.contains("Camera",true) || it.packageName.contains("camera",true) },
             apps.firstOrNull { it.packageName=="com.android.chrome" || it.label.equals("Chrome",true) },
             apps.firstOrNull { it.packageName=="internal:settings" || it.label.equals("Settings",true) }
@@ -428,7 +430,7 @@ fun LauncherRoot(db: LauncherDb) {
                 app.packageName=="com.google.android.dialer" || app.packageName=="com.android.dialer" ||
                 app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true)
         }.distinctBy { it.packageName }.take(5).map { it.packageName }
-        mutableStateOf(if(saved.isEmpty() || saved==previousAutomaticDefaults) defaults else saved)
+        mutableStateOf((if(saved.isEmpty() || saved==previousAutomaticDefaults) defaults else (listOf("internal:phone") + saved.filterNot { it=="internal:phone" })).take(5))
     }
     var draggingFromDock by remember { mutableStateOf(false) }
     var draggingFromFolder by remember { mutableStateOf(false) }
@@ -521,7 +523,8 @@ fun LauncherRoot(db: LauncherDb) {
     LaunchedEffect(drawer,highRefreshRate) {
         if(drawer && highRefreshRate) activity.requestHighestRefreshRate()
     }
-    var locked by remember { mutableStateOf(db.get("launcher_unlocked", "false") != "true") }
+    var booting by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(2200); booting=false }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
@@ -870,8 +873,8 @@ fun LauncherRoot(db: LauncherDb) {
                 if (dark) listOf(Color(0xFF22283A), Color(0xFF10131D))
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        ) .pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
-            if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+        ) .pointerInput(drawer, controlCenter, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
+            if (!drawer && !controlCenter && !settings && openFolderId==null && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var dx = 0f
@@ -909,8 +912,8 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
-             .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings, locked) {
-                if (!drawer && !controlCenter && !settings && openFolderId==null && !locked) {
+             .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings) {
+                if (!drawer && !controlCenter && !settings && openFolderId==null ) {
                     awaitEachGesture {
                         val down=awaitFirstDown(requireUnconsumed=false)
                         val globalDown=down.position
@@ -1238,6 +1241,9 @@ fun LauncherRoot(db: LauncherDb) {
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
             ControlCenter(deviceState, dark, { themeMode=if(it) "dark" else "light"; db.put("theme_mode",themeMode) }, {controlCenter=false})
         }
+        AnimatedVisibility(visible=booting, enter=fadeIn(tween(220)), exit=fadeOut(tween(520)), modifier=Modifier.fillMaxSize()) {
+            IosBootScreen()
+        }
         AnimatedVisibility(visible=settings, enter=androidx.compose.animation.slideInHorizontally { it }, exit=androidx.compose.animation.slideOutHorizontally { it }) {
             SettingsScreen(
                 columns=columns, rows=rows, labels=labels, hideText=hideText, dark=dark,
@@ -1272,13 +1278,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             )
         }
-        AnimatedVisibility(visible=locked, enter=fadeIn(tween(280)), exit=fadeOut(tween(300))) {
-            LauncherLockScreen {
-                locked = false
-                db.put("launcher_unlocked", "true")
-            }
-        }
-        AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(spring(dampingRatio=.78f,stiffness=460f),initialScale=.84f),exit=fadeOut(tween(110))+scaleOut(tween(110)),modifier=Modifier.fillMaxSize()) {
+AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(spring(dampingRatio=.78f,stiffness=460f),initialScale=.84f),exit=fadeOut(tween(110))+scaleOut(tween(110)),modifier=Modifier.fillMaxSize()) {
             val folder=folders.firstOrNull { it.id==(openFolderId ?: lastOpenedFolderId) }
             if(folder==null) openFolderId=null else {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha=.22f)).clickable(
@@ -1385,54 +1385,6 @@ fun LauncherRoot(db: LauncherDb) {
                     Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun LauncherLockScreen(onUnlock:()->Unit) {
-    var clock by remember { mutableStateOf(SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())) }
-    var date by remember { mutableStateOf(SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())) }
-    var drag by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            clock = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
-            date = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
-            delay(1000)
-        }
-    }
-    Box(Modifier.fillMaxSize()
-        .background(Brush.linearGradient(listOf(Color(0xFF1E285A), Color(0xFF65518D), Color(0xFFB66D82), Color(0xFFDE9B79))))
-        .pointerInput(Unit) {
-            detectDragGestures(onDrag={ change, amount -> drag += amount.y; change.consume() },
-                onDragEnd={ if (drag < -65f) onUnlock(); drag=0f })
-        }) {
-        Column(Modifier.align(Alignment.TopCenter).padding(top=42.dp), horizontalAlignment=Alignment.CenterHorizontally) {
-            Box(Modifier.width(118.dp).height(34.dp).clip(CircleShape).background(Color.Black))
-            Spacer(Modifier.height(80.dp))
-            Text(date, color=Color.White, fontSize=20.sp)
-            Text(clock, color=Color.White, fontSize=76.sp, fontWeight=FontWeight.ExtraLight)
-            Spacer(Modifier.height(24.dp))
-            Text("☀  24°", color=Color.White, fontSize=22.sp)
-            Text("Mostly Sunny", color=Color.White.copy(alpha=.9f), fontSize=15.sp)
-        }
-        Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal=22.dp).padding(bottom=105.dp),
-            shape=RoundedCornerShape(24.dp), color=Color.White.copy(alpha=.8f)) {
-            Column(Modifier.padding(18.dp)) {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Icon(Icons.Default.Message, null, tint=Color(0xFF2AC46D), modifier=Modifier.size(22.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("Messages", color=Color(0xFF25252B), fontWeight=FontWeight.SemiBold, modifier=Modifier.weight(1f))
-                    Text("now", color=Color.Gray, fontSize=12.sp)
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Your launcher is ready. Swipe up to explore.", color=Color(0xFF35353D), fontSize=14.sp)
-            }
-        }
-        Column(Modifier.align(Alignment.BottomCenter).padding(bottom=26.dp), horizontalAlignment=Alignment.CenterHorizontally) {
-            Text("Swipe up to unlock", color=Color.White.copy(alpha=.8f), fontSize=13.sp)
-            Spacer(Modifier.height(18.dp))
-            Box(Modifier.width(110.dp).height(5.dp).clip(CircleShape).background(Color.White))
         }
     }
 }
