@@ -424,6 +424,8 @@ fun LauncherRoot(db: LauncherDb) {
     val density = LocalDensity.current
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
     var drawer by remember { mutableStateOf(false) }
+    var drawerTransparency by remember { mutableFloatStateOf(db.get("drawer_transparency","0.30").toFloatOrNull()?.coerceIn(0f,.80f) ?: .30f) }
+    var drawerBlur by remember { mutableFloatStateOf(db.get("drawer_blur","0").toFloatOrNull()?.coerceIn(0f,32f) ?: 0f) }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -909,7 +911,10 @@ fun LauncherRoot(db: LauncherDb) {
             }
     ) {
         if (systemWallpaper != null) {
-            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
+            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop,
+                modifier=Modifier.fillMaxSize().graphicsLayer {
+                    renderEffect = if (drawer && drawerBlur > 0f && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(drawerBlur,drawerBlur) else null
+                })
         }
         if (!drawer) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
@@ -1162,7 +1167,8 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
         if (drawer) {
-            AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off", {activity.launch(it)}, {drawer=false})
+            AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off",
+                drawerTransparency, {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
             ControlCenter(deviceState, dark, { themeMode=if(it) "dark" else "light"; db.put("theme_mode",themeMode) }, {controlCenter=false})
@@ -1174,6 +1180,8 @@ fun LauncherRoot(db: LauncherDb) {
                 animationSpeed=animationSpeed, doubleTapLock=doubleTapLock, fillCells=fillCells, lockLayout=lockLayout,
                 navigationMode=navigationMode, recentsArrangement=recentsArrangement, highRefreshRate=highRefreshRate,
                 themeMode=themeMode, onThemeMode={ themeMode=it; db.put("theme_mode", it) },
+                drawerTransparency=drawerTransparency, onDrawerTransparency={ drawerTransparency=it; db.put("drawer_transparency",it.toString()) },
+                drawerBlur=drawerBlur, onDrawerBlur={ drawerBlur=it; db.put("drawer_blur",it.toString()) },
                 onAddWidget={ widgetProviders=activity.availableHomeWidgets(); widgetPickerOpen=true },
                 onChooseWallpaper={ activity.chooseWallpaper() },
                 onColumns={columns=it;db.put("grid_columns",it.toString())},
@@ -1510,14 +1518,15 @@ fun DockButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: Str
 }
 
 @Composable
-fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit, fg: Color, bg: Color, labels: Boolean, onLaunch: (InstalledApp)->Unit, onClose:()->Unit) {
+fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit, fg: Color, bg: Color, labels: Boolean,
+    transparency:Float, onLaunch: (InstalledApp)->Unit, onClose:()->Unit) {
     val context=LocalContext.current
     val density=LocalDensity.current
     var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
     var selectedBounds by remember { mutableStateOf(Rect.Zero) }
-    val appBounds=remember { mutableStateMapOf<String,Rect>() }
-    val gridState=rememberLazyGridState()
-    Box(Modifier.fillMaxSize().background(Color(0xFF101724).copy(alpha=.30f))) {
+    val gridState=rememberLazyListState()
+    val appRows=remember(apps) { apps.chunked(4) }
+    Box(Modifier.fillMaxSize().background(Color(0xFF101724).copy(alpha=transparency))) {
         Column(
             Modifier.fillMaxSize()
                 .background(Color.Transparent)
@@ -1564,30 +1573,24 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                 }
             }
             Spacer(Modifier.height(18.dp))
-            LazyVerticalGrid(
+            LazyColumn(
                 state=gridState,
-                columns=GridCells.Fixed(4),
                 modifier=Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement=Arrangement.spacedBy(22.dp),
-                horizontalArrangement=Arrangement.spacedBy(8.dp),
                 contentPadding=PaddingValues(top=4.dp,bottom=30.dp)
             ) {
-                items(apps,key={it.packageName}) { app ->
-                    AppIcon(
-                        app=app,labels=true,fg=Color.White,index=0,animationSpeed="Fast",size=54.dp,
-                        draggableEnabled=false,
-                        onBounds={ key,rect ->
-                            appBounds[key]=rect
-                            if(selectedApp?.packageName==key) selectedBounds=rect
-                        },
-                        onLongClick={
-                            if(!app.packageName.startsWith("internal:")) {
-                                selectedApp=app
-                                selectedBounds=appBounds[app.packageName] ?: Rect.Zero
-                            }
-                        },
-                        onClick={ selectedApp=null; onLaunch(app) }
-                    )
+                items(appRows,key={ row -> row.firstOrNull()?.packageName ?: "empty-row" }) { row ->
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        row.forEach { app ->
+                            DrawerAppIcon(
+                                app=app,labels=true,modifier=Modifier.weight(1f),
+                                onBounds={ rect -> if(selectedApp?.packageName==app.packageName && selectedBounds!=rect) selectedBounds=rect },
+                                onLongClick={ if(!app.packageName.startsWith("internal:")) selectedApp=app },
+                                onClick={ selectedApp=null; onLaunch(app) }
+                            )
+                        }
+                        repeat(4-row.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
         }
@@ -1626,6 +1629,34 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DrawerAppIcon(
+    app:InstalledApp, labels:Boolean, modifier:Modifier=Modifier,
+    onBounds:(Rect)->Unit, onLongClick:()->Unit, onClick:()->Unit
+) {
+    val iconRes=remember(app.packageName,app.label) { iconResourceForLabel(app.label,app.packageName) }
+    val fallback=remember(app.packageName) { app.icon.toBitmap(96,96).asImageBitmap() }
+    Column(
+        modifier=modifier.onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .combinedClickable(
+                interactionSource=remember { MutableInteractionSource() },
+                indication=null,
+                onClick=onClick,
+                onLongClick=onLongClick
+            ),
+        horizontalAlignment=Alignment.CenterHorizontally
+    ) {
+        Surface(modifier=Modifier.size(54.dp),shape=RoundedCornerShape(16.dp),color=Color.White) {
+            if(iconRes!=0) Image(painterResource(iconRes),null,Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)))
+            else Image(fallback,null,Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)))
+        }
+        if(labels) {
+            Spacer(Modifier.height(6.dp))
+            Text(app.label,color=Color.White,fontSize=11.sp,maxLines=1,textAlign=TextAlign.Center)
         }
     }
 }
@@ -1828,7 +1859,9 @@ fun SettingsScreen(
     homeStyle:String, minusScreen:String, searchStyle:String, swipeDownAction:String,
     animationSpeed:String, doubleTapLock:Boolean, fillCells:Boolean, lockLayout:Boolean,
     navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
-    themeMode:String, onThemeMode:(String)->Unit, onAddWidget:()->Unit, onChooseWallpaper:()->Unit,
+    themeMode:String, onThemeMode:(String)->Unit,
+    drawerTransparency:Float, onDrawerTransparency:(Float)->Unit, drawerBlur:Float, onDrawerBlur:(Float)->Unit,
+    onAddWidget:()->Unit, onChooseWallpaper:()->Unit,
     onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
     onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
     onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
@@ -1862,6 +1895,18 @@ fun SettingsScreen(
             }
             SettingsGroup("Personalization",card,muted) {
                 SettingChoice("Wallpaper","Choose wallpaper",fg,muted) { onChooseWallpaper() }
+                Column(Modifier.fillMaxWidth().padding(horizontal=18.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                        Text("App Library transparency",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
+                        Text("${(drawerTransparency*100).toInt()}%",color=muted,fontSize=13.sp)
+                    }
+                    Slider(value=drawerTransparency,onValueChange=onDrawerTransparency,valueRange=0f..0.80f)
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                        Text("App Library blur",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
+                        Text("${drawerBlur.toInt()} px",color=muted,fontSize=13.sp)
+                    }
+                    Slider(value=drawerBlur,onValueChange=onDrawerBlur,valueRange=0f..32f)
+                }
             }
             SettingsGroup("Home screen layout",card,muted) {
                 SettingSwitch("Fill cells of uninstalled apps",fillCells,fg,onFillCells)
