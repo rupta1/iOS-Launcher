@@ -82,6 +82,62 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+
+private data class HomeFolder(val id:String, val title:String, val packages:List<String>, val page:Int, val slot:Int)
+private data class HomeGridTile(val key:String, val slot:Int, val spanX:Int=1, val spanY:Int=1)
+private data class HomeGridCell(val column:Int, val row:Int)
+
+private fun calculateHomeGridCells(tiles:List<HomeGridTile>, columns:Int, rows:Int, compact:Boolean):Map<String,HomeGridCell> {
+    val cols=columns.coerceAtLeast(1)
+    val rowCount=rows.coerceAtLeast(1)
+    val occupied=Array(rowCount) { BooleanArray(cols) }
+    val result=linkedMapOf<String,HomeGridCell>()
+    fun fits(index:Int,w:Int,h:Int):Boolean {
+        val col=index%cols
+        val row=index/cols
+        if(row+h>rowCount || col+w>cols) return false
+        for(y in row until row+h) for(x in col until col+w) if(occupied[y][x]) return false
+        return true
+    }
+    fun occupy(index:Int,w:Int,h:Int) {
+        val col=index%cols
+        val row=index/cols
+        for(y in row until row+h) for(x in col until col+w) occupied[y][x]=true
+    }
+    val ordered=tiles.sortedWith(compareBy<HomeGridTile> { if(compact) it.slot else it.slot }.thenBy { it.key })
+    ordered.forEach { tile ->
+        val w=tile.spanX.coerceIn(1,cols)
+        val h=tile.spanY.coerceIn(1,rowCount)
+        val requested=if(compact) 0 else tile.slot.coerceAtLeast(0)
+        var found=-1
+        for(index in requested until cols*rowCount) if(fits(index,w,h)){found=index;break}
+        if(found<0 && !compact) for(index in 0 until requested.coerceAtMost(cols*rowCount)) if(fits(index,w,h)){found=index;break}
+        if(found>=0) {
+            occupy(found,w,h)
+            result[tile.key]=HomeGridCell(found%cols,found/cols)
+        }
+    }
+    return result
+}
+
+private fun decodeHomeFolders(raw:String):List<HomeFolder> = try {
+    val array=org.json.JSONArray(raw)
+    (0 until array.length()).mapNotNull { index ->
+        val item=array.optJSONObject(index) ?: return@mapNotNull null
+        val packages=item.optJSONArray("packages") ?: org.json.JSONArray()
+        HomeFolder(item.optString("id"),item.optString("title","Folder"),
+            (0 until packages.length()).map { packages.optString(it) }.filter { it.isNotBlank() },
+            item.optInt("page",0),item.optInt("slot",0))
+    }
+} catch (_:Exception) { emptyList() }
+
+private fun encodeHomeFolders(folders:List<HomeFolder>):String = org.json.JSONArray().apply {
+    folders.forEach { folder ->
+        put(org.json.JSONObject().put("id",folder.id).put("title",folder.title)
+            .put("packages",org.json.JSONArray(folder.packages)).put("page",folder.page).put("slot",folder.slot))
+    }
+}.toString()
+
 data class InstalledApp(val label: String, val packageName: String, val icon: Drawable)
 
 class MainActivity : ComponentActivity() {
