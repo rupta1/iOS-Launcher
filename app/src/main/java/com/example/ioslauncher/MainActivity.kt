@@ -435,6 +435,15 @@ fun LauncherRoot(db: LauncherDb) {
     val fg = if (dark) Color.White else Color(0xFF18191F)
     val filtered = apps.filter { it.label.contains(search, true) }
 
+    fun persistDock() { db.put("dock_packages", dockPackages.joinToString("|")) }
+    fun persistFolders() { db.put("home_folders", encodeHomeFolders(folders)) }
+    fun slotAt(position:Offset):Int {
+        val cellW=(homeGridBounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(homeGridBounds.height / rows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val col=((position.x-homeGridBounds.left)/cellW).toInt().coerceIn(0,columns-1)
+        val row=((position.y-homeGridBounds.top)/cellH).toInt().coerceIn(0,rows-1)
+        return row*columns+col
+    }
     fun finishWidgetDrag() {
         val id=draggingWidgetId
         val destinationPage=pendingDragPage.coerceAtLeast(0)
@@ -446,7 +455,7 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> { activity.removeHomeWidget(id); homeWidgets=homeWidgets.filterNot { it.first==id } }
             }
             widgetSlotAssignments=widgetSlotAssignments-id
-            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
             widgetPositions=widgetPositions-id
         } else {
             val targetApp=appBounds.entries.firstOrNull { it.value.contains(widgetDragPosition) }?.key
@@ -525,15 +534,6 @@ fun LauncherRoot(db: LauncherDb) {
             dragEdgeDirection = direction
             page = pendingDragPage
         }
-    }
-    fun persistDock() { db.put("dock_packages", dockPackages.joinToString("|")) }
-    fun persistFolders() { db.put("home_folders", encodeHomeFolders(folders)) }
-    fun slotAt(position:Offset):Int {
-        val cellW=(homeGridBounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(homeGridBounds.height / rows.coerceAtLeast(1)).coerceAtLeast(1f)
-        val col=((position.x-homeGridBounds.left)/cellW).toInt().coerceIn(0,columns-1)
-        val row=((position.y-homeGridBounds.top)/cellH).toInt().coerceIn(0,rows-1)
-        return row*columns+col
     }
     fun finishIconDrag() {
         val dragged=draggingApp ?: return
@@ -1197,7 +1197,7 @@ fun AppIcon(
 }
 
 @Composable
-fun FolderTile(folder:HomeFolder, apps:List<InstalledApp>, fg:Color, onClick:()->Unit) {
+private fun FolderTile(folder:HomeFolder, apps:List<InstalledApp>, fg:Color, onClick:()->Unit) {
     val members=folder.packages.mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }.take(4)
     Column(Modifier.fillMaxWidth().clickable(onClick=onClick),horizontalAlignment=Alignment.CenterHorizontally) {
         Surface(shape=RoundedCornerShape(17.dp),color=Color.White.copy(alpha=.78f),modifier=Modifier.size(62.dp)) {
