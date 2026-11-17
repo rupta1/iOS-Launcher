@@ -727,27 +727,7 @@ fun LauncherRoot(db: LauncherDb) {
             Spacer(Modifier.height(24.dp))
             AnimatedContent(
                 targetState = page,
-                modifier = Modifier.weight(1f),
-                transitionSpec = {
-                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=when(animationSpeed) { "Slow" -> 260f; "Normal" -> 430f; else -> 720f })) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
-                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=when(animationSpeed) { "Slow" -> 300f; "Normal" -> 500f; else -> 800f })) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
-                },
-                label = "home-pages"
-            ) { targetPage ->
-                val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
-                if (targetPage < 0 && minusScreen == "Google Discover") {
-                    val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
-                    Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
-                        Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
-                        Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
-                    }
-                } else Column(Modifier.fillMaxSize()) {
-                                        BoxWithConstraints(
-                        Modifier.weight(1f).fillMaxWidth()
-                            .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
-                            .pointerInput(Unit) {
+                modifier = Modifier.weight(1f).pointerInput(Unit) {
                                 detectDragGesturesAfterLongPress(
                                     onDragStart={ local ->
                                         val global=Offset(homeGridBounds.left+local.x,homeGridBounds.top+local.y)
@@ -788,7 +768,27 @@ fun LauncherRoot(db: LauncherDb) {
                                         pendingDragPage=page
                                     }
                                 )
-                            }
+                            },
+                transitionSpec = {
+                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=when(animationSpeed) { "Slow" -> 260f; "Normal" -> 430f; else -> 720f })) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=when(animationSpeed) { "Slow" -> 300f; "Normal" -> 500f; else -> 800f })) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
+                },
+                label = "home-pages"
+            ) { targetPage ->
+                val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
+                if (targetPage < 0 && minusScreen == "Google Discover") {
+                    val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
+                    Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
+                        Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                        Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
+                    }
+                } else Column(Modifier.fillMaxSize()) {
+                                        BoxWithConstraints(
+                        Modifier.weight(1f).fillMaxWidth()
+                            .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
+                            
                     ) {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
                         val cellH=maxHeight/rows.coerceAtLeast(1)
