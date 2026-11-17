@@ -262,6 +262,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LauncherDb(this)
+        if (db.get("default_wallpaper_applied") != "true") {
+            try {
+                val encoded = resources.openRawResource(R.raw.default_wallpaper_b64).bufferedReader().use { it.readText() }
+                val bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
+                    db.put("default_wallpaper_applied", "true")
+                    wallpaperRevision++
+                }
+            } catch (_: Exception) { }
+        }
         widgetHost = AppWidgetHost(this, 0x10A1)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
