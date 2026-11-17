@@ -890,7 +890,7 @@ fun LauncherRoot(db: LauncherDb) {
                                     }
                                 )
                             }
-                     {
+                    ) {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
                         val cellH=maxHeight/rows.coerceAtLeast(1)
                         val visibleFolders=folders.filter { it.page==targetPage }
