@@ -784,7 +784,6 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    if (appBounds.values.none { it.contains(down.position) } && widgetBounds.values.none { it.contains(down.position) } && folderBounds.values.none { it.contains(down.position) }) {
                     var dx = 0f
                     var dy = 0f
                     var finished = false
@@ -816,7 +815,6 @@ fun LauncherRoot(db: LauncherDb) {
                                 finished = true
                             }
                         }
-                    }
                     }
                 }
             }
