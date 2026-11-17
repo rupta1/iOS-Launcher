@@ -1260,7 +1260,7 @@ fun LauncherRoot(db: LauncherDb) {
             ControlCenter(deviceState, dark, { themeMode=if(it) "dark" else "light"; db.put("theme_mode",themeMode) }, {controlCenter=false})
         }
         AnimatedVisibility(visible=booting, enter=fadeIn(tween(220)), exit=fadeOut(tween(520)), modifier=Modifier.fillMaxSize()) {
-            IosBootScreen()
+            AppleBootScreen()
         }
         AnimatedVisibility(visible=settings, enter=androidx.compose.animation.slideInHorizontally { it }, exit=androidx.compose.animation.slideOutHorizontally { it }) {
             SettingsScreen(
