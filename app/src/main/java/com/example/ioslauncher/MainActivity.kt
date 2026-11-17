@@ -839,7 +839,8 @@ fun LauncherRoot(db: LauncherDb) {
                             val global=local
                             val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
                             val widgetKey=widgetBounds.entries.firstOrNull { entry ->
-                                entry.value.contains(global) && widgetResizeHandleBounds[entry.key]?.contains(global)!=true
+                                entry.value.contains(global) && widgetResizeHandleBounds[entry.key]?.contains(global)!=true &&
+                                    (entry.key<0 || widgetHandleBounds[entry.key]?.contains(global)==true)
                             }?.key
                             when {
                                 appKey!=null -> {
