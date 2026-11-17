@@ -849,23 +849,6 @@ fun LauncherRoot(db: LauncherDb) {
                                     }
                                 )
                             }
-                            .pointerInput(page, pageCount) {
-                                var totalDrag=0f
-                                detectHorizontalDragGestures(
-                                    onHorizontalDragStart={ totalDrag=0f },
-                                    onHorizontalDrag={ change, amount ->
-                                        totalDrag+=amount
-                                        if(kotlin.math.abs(totalDrag)>with(density){12.dp.toPx()}) change.consume()
-                                    },
-                                    onHorizontalDragEnd={
-                                        val threshold=with(density){52.dp.toPx()}
-                                        if(kotlin.math.abs(totalDrag)>threshold) {
-                                            page=(page+if(totalDrag<0f) 1 else -1).coerceIn(0,(pageCount-1).coerceAtLeast(0))
-                                        }
-                                    },
-                                    onHorizontalDragCancel={ totalDrag=0f }
-                                )
-                            }
                      {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
                         val cellH=maxHeight/rows.coerceAtLeast(1)
@@ -1380,6 +1363,8 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             .pointerInput(onClose) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed=false)
+                    val startedOnItem = appBounds.values.any { it.contains(down.position) } || widgetBounds.values.any { it.contains(down.position) } || folderBounds.values.any { it.contains(down.position) }
+                    if (startedOnItem) return@awaitEachGesture
                     var totalY = 0f
                     var closed = false
                     while (!closed) {
