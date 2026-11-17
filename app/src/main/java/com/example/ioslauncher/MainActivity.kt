@@ -937,6 +937,25 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
 
+        draggingApp?.let { dragged ->
+            val bitmap=remember(dragged.packageName) { dragged.icon.toBitmap(144,144).asImageBitmap() }
+            val half=with(density){34.dp.toPx()}
+            Image(bitmap,contentDescription="Moving ${dragged.label}",
+                modifier=Modifier.offset { IntOffset((dragPosition.x-half).toInt(),(dragPosition.y-half).toInt()) }
+                    .size(68.dp).clip(RoundedCornerShape(18.dp)).shadow(12.dp,RoundedCornerShape(18.dp)).graphicsLayer { alpha=.96f })
+        }
+        if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+            val half=with(density){52.dp.toPx()}
+            val label=when(draggingWidgetId) {
+                -1001 -> "Weather"
+                -1002 -> "Today"
+                else -> try { AppWidgetManager.getInstance(context).getAppWidgetInfo(draggingWidgetId)?.loadLabel(context.packageManager)?.toString() ?: "Widget" } catch (_:Exception) { "Widget" }
+            }
+            Surface(shape=RoundedCornerShape(18.dp),color=Color.White.copy(alpha=.88f),shadowElevation=12.dp,
+                modifier=Modifier.offset { IntOffset((widgetDragPosition.x-half).toInt(),(widgetDragPosition.y-with(density){34.dp.toPx()}).toInt()) }.width(104.dp).height(68.dp)) {
+                Box(contentAlignment=Alignment.Center) { Text(label,color=Color.DarkGray,fontSize=12.sp,maxLines=2,textAlign=TextAlign.Center,modifier=Modifier.padding(6.dp)) }
+            }
+        }
         BackHandler(enabled=true) {
             when {
                 controlCenter -> controlCenter=false
