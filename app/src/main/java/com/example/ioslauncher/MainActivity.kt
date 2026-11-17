@@ -787,7 +787,6 @@ fun LauncherRoot(db: LauncherDb) {
                     applyGridDragPreview(targetPage)
                     appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
                 }
-            }
             } else {
                 removeFromSourceFolder()
                 applyGridDragPreview(targetPage)
