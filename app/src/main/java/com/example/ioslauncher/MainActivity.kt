@@ -360,7 +360,12 @@ fun LauncherRoot(db: LauncherDb) {
             apps.firstOrNull { it.packageName=="com.android.chrome" || it.label.equals("Chrome",true) },
             apps.firstOrNull { it.packageName=="internal:settings" || it.label.equals("Settings",true) }
         ).distinctBy { it.packageName }.map { it.packageName }
-        mutableStateOf(if(saved.isNotEmpty()) saved else defaults)
+        val previousAutomaticDefaults=apps.filter { app ->
+            (app.label.contains("Phone",true) && !app.label.contains("PhonePe",true)) ||
+                app.packageName=="com.google.android.dialer" || app.packageName=="com.android.dialer" ||
+                app.label.contains("Chrome",true) || app.label.contains("Music",true) || app.label.contains("Message",true)
+        }.distinctBy { it.packageName }.take(5).map { it.packageName }
+        mutableStateOf(if(saved.isEmpty() || saved==previousAutomaticDefaults) defaults else saved)
     }
     var draggingFromDock by remember { mutableStateOf(false) }
     var draggingFromFolder by remember { mutableStateOf(false) }
