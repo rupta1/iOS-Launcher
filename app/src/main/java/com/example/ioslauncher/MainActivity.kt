@@ -349,6 +349,8 @@ fun LauncherRoot(db: LauncherDb) {
     }.toMap()) }
     var folders by remember { mutableStateOf(decodeHomeFolders(db.get("home_folders"))) }
     var openFolderId by remember { mutableStateOf<String?>(null) }
+    var lastOpenedFolderId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(openFolderId) { if(openFolderId!=null) lastOpenedFolderId=openFolderId }
     var dockPackages by remember {
         val saved=db.get("dock_packages").split("|").filter { it.isNotBlank() }.distinct()
         val defaults=apps.filter { app ->
@@ -1176,7 +1178,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
         AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(spring(dampingRatio=.78f,stiffness=460f),initialScale=.84f),exit=fadeOut(tween(110))+scaleOut(tween(110)),modifier=Modifier.fillMaxSize()) {
-            val folder=folders.firstOrNull { it.id==openFolderId }
+            val folder=folders.firstOrNull { it.id==(openFolderId ?: lastOpenedFolderId) }
             if(folder==null) openFolderId=null else {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha=.22f)).clickable(
                     interactionSource=remember { MutableInteractionSource() },indication=null
