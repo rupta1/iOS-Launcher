@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 
 @Composable
 fun IosBootScreen() {
@@ -73,7 +72,7 @@ fun IosBootScreen() {
                     .background(Color(0xFF454545))
             ) {
                 Box(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.width(126.dp * progress).height(3.dp)
                         .clip(RoundedCornerShape(50))
                         .background(Color.White)
                 )
