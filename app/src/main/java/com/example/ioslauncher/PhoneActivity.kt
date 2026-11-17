@@ -60,6 +60,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.SideEffect
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -488,84 +493,144 @@ private fun IosDialer() {
             }
         }
     }
-    if(simChooser) AlertDialog(onDismissRequest={simChooser=false},title={Text("Choose SIM")},text={
-        Column { sims.forEach { sim -> Row(Modifier.fillMaxWidth().clickable{simChooser=false;callNumber(dial,sim)}.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
-            Icon(Icons.Default.SimCard,null,tint=green);Spacer(Modifier.width(12.dp));Text(sim.name)
-        } } }
-    },confirmButton={TextButton(onClick={simChooser=false}) { Text("Cancel") }})
-    if(noteDialog && selectedCall!=null) AlertDialog(onDismissRequest={noteDialog=false},title={Text("Call note")},text={
-        OutlinedTextField(value=note,onValueChange={note=it},placeholder={Text("Add a note")},minLines=3)
-    },confirmButton={TextButton(onClick={prefs.edit().putString("call_note_"+selectedCall!!.id,note).apply();noteDialog=false}) { Text("Save") }},dismissButton={TextButton(onClick={noteDialog=false}) { Text("Cancel") }})
-    if(dialogTitle.isNotBlank()) AlertDialog(onDismissRequest={dialogTitle=""},title={Text(dialogTitle)},text={
-        if(dialogTitle=="Blocklist") OutlinedTextField(value=dialogText,onValueChange={dialogText=it},label={Text("One number per line")},minLines=3) else Text(dialogText)
-    },confirmButton={TextButton(onClick={
-        if(dialogTitle=="Blocklist") { blocked=dialogText.lines().map{it.trim()}.filter{it.isNotBlank()}.toSet();prefs.edit().putStringSet("blocked_numbers",blocked).apply() }
-        dialogTitle=""
-    }) { Text("Done") }})
-}
-
-@Composable
-private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
-    onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
-    var menu by remember { mutableStateOf(false) }
-    val history=calls.filter { call -> c.phones.any{it.first==call.number} }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
-            Text(c.name,Modifier.weight(1f),fontSize=20.sp,color=fg,textAlign=TextAlign.Center,fontWeight=FontWeight.SemiBold)
-            IconButton(onClick=onFavorite) { Icon(Icons.Default.FavoriteBorder,null,tint=fg) }
-            IconButton(onClick=onEdit) { Icon(Icons.Default.Edit,null,tint=fg) }
-            Box { IconButton(onClick={menu=true}) { Icon(Icons.Default.MoreVert,null,tint=fg) }
-                DropdownMenu(menu,{menu=false}) {
-                    DropdownMenuItem(text={Text("Place on Home screen")},onClick={menu=false})
-                    DropdownMenuItem(text={Text("Delete contact")},onClick={menu=false;onDelete()})
-                    DropdownMenuItem(text={Text("Block")},onClick={menu=false;onBlock()})
-                    DropdownMenuItem(text={Text("Share")},onClick={menu=false;onShare()})
-                    DropdownMenuItem(text={Text("Set default SIM for calls")},onClick={menu=false})
+    if(simChooser) IosModal(
+        title="Choose a line",
+        subtitle="Select which SIM to use for this call",
+        dark=dark,
+        onDismiss={simChooser=false},
+        confirmLabel="Cancel",
+        onConfirm={simChooser=false}
+    ) {
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            sims.forEachIndexed { index, sim ->
+                Surface(
+                    onClick={simChooser=false;callNumber(dial,sim)},
+                    color=if(dark) Color(0xFF3A3940) else Color(0xFFF0F0F5),
+                    shape=RoundedCornerShape(17.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF3987FF).copy(alpha=.16f)),contentAlignment=Alignment.Center) {
+                            Icon(Icons.Default.SimCard,null,tint=Color(0xFF3987FF))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(sim.name,color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium,modifier=Modifier.weight(1f))
+                        Icon(Icons.Default.ChevronRight,null,tint=muted)
+                    }
                 }
             }
         }
-        LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=18.dp,vertical=8.dp)) {
-            item {
-                Text(c.name,fontSize=27.sp,color=fg,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth().padding(vertical=14.dp))
-                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(15.dp)) {
-                        c.phones.forEach { p -> Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text(p.first,color=fg,fontSize=16.sp);Text(p.second+"  |  India",color=muted,fontSize=12.sp) }
-                            IconButton(onClick={onCall(p.first)}) { Icon(Icons.Default.Call,null,tint=green) }
-                            IconButton(onClick={onSms(p.first)}) { Icon(Icons.Default.Message,null,tint=green) }
-                        } }
-                        c.emails.forEach { Text(it.first,color=fg,modifier=Modifier.padding(vertical=8.dp));Text(it.second,color=muted,fontSize=12.sp) }
-                        c.addresses.forEach { Text(it.first,color=fg,modifier=Modifier.padding(vertical=8.dp));Text(it.second,color=muted,fontSize=12.sp) }
-                        c.birthday?.let { Text(it,color=fg,modifier=Modifier.padding(vertical=8.dp));Text("Birthday",color=muted,fontSize=12.sp) }
+    }
+    if(noteDialog && selectedCall!=null) IosModal(
+        title="Call note",
+        subtitle="Keep a private note with this call",
+        dark=dark,
+        onDismiss={noteDialog=false},
+        confirmLabel="Save",
+        onConfirm={prefs.edit().putString("call_note_"+selectedCall!!.id,note).apply();noteDialog=false},
+        secondaryLabel="Cancel",
+        onSecondary={noteDialog=false}
+    ) {
+        OutlinedTextField(
+            value=note,onValueChange={note=it},
+            modifier=Modifier.fillMaxWidth(),
+            placeholder={Text("Add a note…")},
+            minLines=3,
+            shape=RoundedCornerShape(18.dp),
+            colors=OutlinedTextFieldDefaults.colors(
+                focusedContainerColor=if(dark) Color(0xFF39383F) else Color(0xFFF1F1F5),
+                unfocusedContainerColor=if(dark) Color(0xFF39383F) else Color(0xFFF1F1F5),
+                focusedBorderColor=Color.Transparent,unfocusedBorderColor=Color.Transparent
+            )
+        )
+    }
+    if(dialogTitle.isNotBlank()) IosModal(
+        title=dialogTitle,
+        subtitle=when(dialogTitle) {
+            "My groups" -> "Your contact groups"
+            "Blocklist" -> "Numbers hidden from recent calls"
+            "QR code" -> "Contact sharing code"
+            else -> null
+        },
+        dark=dark,
+        onDismiss={dialogTitle=""},
+        confirmLabel="Done",
+        onConfirm={
+            if(dialogTitle=="Blocklist") {
+                blocked=dialogText.lines().map{it.trim()}.filter{it.isNotBlank()}.toSet()
+                prefs.edit().putStringSet("blocked_numbers",blocked).apply()
+            }
+            dialogTitle=""
+        }
+    ) {
+        if(dialogTitle=="Blocklist") {
+            OutlinedTextField(
+                value=dialogText,onValueChange={dialogText=it},modifier=Modifier.fillMaxWidth(),
+                label={Text("One number per line")},minLines=3,shape=RoundedCornerShape(18.dp)
+            )
+        } else if(dialogTitle=="My groups") {
+            val groups=dialogText.lines().filter{it.isNotBlank()}
+            Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                groups.forEach { group ->
+                    Row(Modifier.fillMaxWidth().padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Icon(Icons.Default.FolderOpen,null,tint=Color(0xFF3987FF),modifier=Modifier.size(19.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(group,color=fg,fontSize=14.sp)
                     }
                 }
-                Spacer(Modifier.height(14.dp))
-                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal=15.dp)) {
-                        ContactAction("Video call",Icons.Default.Videocam,blue,fg) { c.phones.firstOrNull()?.first?.let(onVideo) }
-                        ContactAction("WhatsApp",Icons.Default.Chat,green,fg) { c.phones.firstOrNull()?.first?.let(onWhatsApp) }
-                        ContactAction("Telegram",Icons.Default.Send,blue,fg) { c.phones.firstOrNull()?.first?.let(onTelegram) }
-                    }
-                }
-                Text("Call history",color=muted,fontSize=13.sp,modifier=Modifier.padding(start=12.dp,top=18.dp,bottom=8.dp))
-                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
-                        (if(allHistory) history else history.take(3)).forEach { call ->
-                            Column(Modifier.fillMaxWidth().clickable{onCallDetail(call)}.padding(vertical=9.dp)) {
-                                Text(SimpleDateFormat("h:mm a",Locale.getDefault()).format(Date(call.date)),color=if(call.type==CallLog.Calls.MISSED_TYPE) red else fg,fontWeight=FontWeight.Medium)
-                                Text(call.number,color=muted,fontSize=12.sp);Text(callSummary(call),color=muted,fontSize=12.sp)
+            }
+        } else {
+            Text(dialogText,color=fg.copy(alpha=.88f),fontSize=14.sp,lineHeight=21.sp)
+        }
+    }
+}
+
+@Composable
+private fun IosModal(
+    title:String,
+    subtitle:String?,
+    dark:Boolean,
+    onDismiss:()->Unit,
+    confirmLabel:String,
+    onConfirm:()->Unit,
+    secondaryLabel:String?=null,
+    onSecondary:(()->Unit)?=null,
+    content:@Composable ColumnScope.()->Unit
+) {
+    val fg=if(dark) Color(0xFFF5F5F7) else Color(0xFF17171B)
+    val muted=if(dark) Color(0xFFB0AFB7) else Color(0xFF777780)
+    val panel=if(dark) Color(0xE82B2A30) else Color(0xEFFFFFFF)
+    Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
+        val view=LocalView.current
+        val window=(view.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            window?.setDimAmount(.34f)
+            window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            if(android.os.Build.VERSION.SDK_INT>=31) window?.setBackgroundBlurRadius(34)
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha=.34f)).clickable(onClick=onDismiss),contentAlignment=Alignment.Center) {
+            AnimatedVisibility(
+                visible=true,
+                enter=fadeIn(tween(180))+scaleIn(tween(230,delayMillis=10),initialScale=.92f),
+                exit=fadeOut(tween(120))+scaleOut(tween(120))
+            ) {
+                Surface(
+                    modifier=Modifier.fillMaxWidth(.88f).clickable(enabled=false){}.padding(0.dp),
+                    shape=RoundedCornerShape(30.dp),
+                    color=panel,
+                    tonalElevation=0.dp,
+                    shadowElevation=24.dp
+                ) {
+                    Column(Modifier.padding(start=22.dp,end=22.dp,top=23.dp,bottom=18.dp),verticalArrangement=Arrangement.spacedBy(13.dp)) {
+                        Text(title,color=fg,fontSize=25.sp,fontWeight=FontWeight.SemiBold)
+                        if(!subtitle.isNullOrBlank()) Text(subtitle,color=muted,fontSize=13.sp)
+                        content()
+                        Row(Modifier.fillMaxWidth().padding(top=5.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically) {
+                            if(secondaryLabel!=null && onSecondary!=null) {
+                                TextButton(onClick=onSecondary) { Text(secondaryLabel,color=Color(0xFF3987FF),fontWeight=FontWeight.SemiBold) }
+                                Spacer(Modifier.width(5.dp))
                             }
+                            TextButton(onClick=onConfirm) { Text(confirmLabel,color=Color(0xFF3987FF),fontWeight=FontWeight.SemiBold) }
                         }
-                        if(history.size>3 && !allHistory) Text("Show more",color=blue,modifier=Modifier.clickable(onClick=onHistory).padding(vertical=8.dp))
-                        if(history.isEmpty()) Text("No call history",color=muted)
-                    }
-                }
-                Text("More",color=muted,fontSize=13.sp,modifier=Modifier.padding(start=12.dp,top=18.dp,bottom=8.dp))
-                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal=15.dp)) {
-                        ContactAction("Default ringtone",Icons.Default.MusicNote,muted,fg,onRingtone)
-                        ContactAction("QR code",Icons.Default.QrCode,muted,fg,onQr)
                     }
                 }
             }
@@ -574,27 +639,214 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
 }
 
 @Composable
-private fun CallHistoryPage(call:DialCall,history:List<DialCall>,fg:Color,muted:Color,card:Color,green:Color,red:Color,onBack:()->Unit,onCall:()->Unit,onNote:()->Unit,onRecordings:()->Unit,onDelete:()->Unit) {
+private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
+    onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val history=calls.filter { call -> c.phones.any{it.first==call.number} }
+    val panel=if(dark) Color(0xFF242428) else Color.White
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(10.dp),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
-            Text("Call history details",Modifier.weight(1f),fontSize=19.sp,color=fg,textAlign=TextAlign.Center)
-            IconButton(onClick=onCall) { Icon(Icons.Default.Call,null,tint=green) }
-        }
-        LazyColumn(Modifier.weight(1f).padding(horizontal=18.dp),contentPadding=PaddingValues(bottom=12.dp)) {
-            items(history.sortedByDescending{it.date},key={it.id}) { c ->
-                Column(Modifier.fillMaxWidth().background(card,RoundedCornerShape(12.dp)).clickable(onClick=onCall).padding(14.dp)) {
-                    Text(SimpleDateFormat("MMM d  h:mm a",Locale.getDefault()).format(Date(c.date)),color=fg,fontWeight=FontWeight.Medium)
-                    Text(c.number,color=muted,fontSize=12.sp);Text(callSummary(c),color=muted,fontSize=12.sp)
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBackIosNew,null,tint=fg) }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick=onFavorite) { Icon(Icons.Default.FavoriteBorder,null,tint=fg) }
+            IconButton(onClick=onEdit) { Icon(Icons.Default.Edit,null,tint=fg) }
+            Box {
+                IconButton(onClick={menu=true}) { Icon(Icons.Default.MoreHoriz,null,tint=fg) }
+                DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
+                    DropdownMenuItem(text={Text("Share contact")},leadingIcon={Icon(Icons.Default.Share,null)},onClick={menu=false;onShare()})
+                    DropdownMenuItem(text={Text("Block contact")},leadingIcon={Icon(Icons.Default.Block,null)},onClick={menu=false;onBlock()})
+                    DropdownMenuItem(text={Text("Delete contact")},leadingIcon={Icon(Icons.Default.Delete,null)},onClick={menu=false;onDelete()})
                 }
-                Spacer(Modifier.height(7.dp))
             }
         }
-        NavigationBar(containerColor=Color.Transparent) {
-            NavigationBarItem(selected=false,onClick=onRecordings,icon={Icon(Icons.Default.Voicemail,null)},label={Text("Recorded calls")})
-            NavigationBarItem(selected=false,onClick=onNote,icon={Icon(Icons.Default.Notes,null)},label={Text("Call notes")})
-            NavigationBarItem(selected=false,onClick=onDelete,icon={Icon(Icons.Default.Delete,null)},label={Text("Delete")})
+        LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=18.dp,vertical=4.dp)) {
+            item {
+                AnimatedVisibility(visible=true,enter=fadeIn(tween(260))+scaleIn(tween(260,delayMillis=30))) {
+                    Column(Modifier.fillMaxWidth().padding(top=8.dp,bottom=20.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                        Box(Modifier.size(104.dp).clip(CircleShape).background(if(dark) Color(0xFF3B3A42) else Color(0xFFE8E8EF)),contentAlignment=Alignment.Center) {
+                            Text(c.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",fontSize=43.sp,fontWeight=FontWeight.Light,color=fg)
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(c.name,fontSize=28.sp,fontWeight=FontWeight.SemiBold,color=fg,textAlign=TextAlign.Center)
+                        Text(c.phones.firstOrNull()?.first ?: "No phone number",fontSize=14.sp,color=muted,modifier=Modifier.padding(top=4.dp))
+                        Row(Modifier.fillMaxWidth().padding(top=22.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
+                            ContactQuickAction(Icons.Default.Call,"call",green){c.phones.firstOrNull()?.first?.let(onCall)}
+                            ContactQuickAction(Icons.Default.Message,"message",blue){c.phones.firstOrNull()?.first?.let(onSms)}
+                            ContactQuickAction(Icons.Default.Videocam,"video",blue){c.phones.firstOrNull()?.first?.let(onVideo)}
+                            ContactQuickAction(Icons.Default.MailOutline,"mail",muted){ }
+                        }
+                    }
+                }
+                ContactSectionCard(panel,dark) {
+                    c.phones.forEachIndexed { index,p ->
+                        Row(Modifier.fillMaxWidth().padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(p.first,color=blue,fontSize=16.sp,fontWeight=FontWeight.Medium)
+                                Text(p.second.ifBlank{"mobile"}.replaceFirstChar{it.uppercase()},color=muted,fontSize=12.sp,modifier=Modifier.padding(top=3.dp))
+                            }
+                            IconButton(onClick={onCall(p.first)}) { Icon(Icons.Default.Call,null,tint=green) }
+                            IconButton(onClick={onSms(p.first)}) { Icon(Icons.Default.ChatBubbleOutline,null,tint=green) }
+                        }
+                        if(index<c.phones.lastIndex) HorizontalDivider(color=line)
+                    }
+                    c.emails.forEach { (value,type) ->
+                        HorizontalDivider(color=line)
+                        Column(Modifier.padding(vertical=10.dp)) { Text(value,color=blue,fontSize=15.sp);Text(type,color=muted,fontSize=12.sp) }
+                    }
+                    c.addresses.forEach { (value,type) ->
+                        HorizontalDivider(color=line)
+                        Column(Modifier.padding(vertical=10.dp)) { Text(value,color=fg,fontSize=15.sp);Text(type,color=muted,fontSize=12.sp) }
+                    }
+                    c.birthday?.let { value ->
+                        HorizontalDivider(color=line)
+                        Column(Modifier.padding(vertical=10.dp)) { Text(value,color=fg,fontSize=15.sp);Text("Birthday",color=muted,fontSize=12.sp) }
+                    }
+                }
+                Text("CONNECTED APPS",color=muted,fontSize=11.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.sp,modifier=Modifier.padding(start=8.dp,top=22.dp,bottom=9.dp))
+                ContactSectionCard(panel,dark) {
+                    ContactAction("WhatsApp",Icons.Default.Chat,green,fg){c.phones.firstOrNull()?.first?.let(onWhatsApp)}
+                    HorizontalDivider(color=line)
+                    ContactAction("Telegram",Icons.Default.Send,blue,fg){c.phones.firstOrNull()?.first?.let(onTelegram)}
+                }
+                Row(Modifier.fillMaxWidth().padding(start=8.dp,top=23.dp,bottom=9.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text("RECENT CALLS",color=muted,fontSize=11.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.sp,modifier=Modifier.weight(1f))
+                    if(history.size>3 && !allHistory) Text("See all",color=blue,fontSize=13.sp,modifier=Modifier.clickable(onClick=onHistory))
+                }
+                ContactSectionCard(panel,dark) {
+                    (if(allHistory) history else history.take(3)).forEachIndexed { index,call ->
+                        Row(Modifier.fillMaxWidth().clickable{onCallDetail(call)}.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Box(Modifier.size(37.dp).clip(CircleShape).background(if(call.type==CallLog.Calls.MISSED_TYPE) red.copy(alpha=.13f) else green.copy(alpha=.13f)),contentAlignment=Alignment.Center) {
+                                Icon(
+                                    when(call.type) { CallLog.Calls.MISSED_TYPE->Icons.Default.CallMissed;CallLog.Calls.OUTGOING_TYPE->Icons.Default.CallMade;else->Icons.Default.CallReceived },
+                                    null,tint=if(call.type==CallLog.Calls.MISSED_TYPE) red else green,modifier=Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(callSummary(call),color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                Text(SimpleDateFormat("MMM d · h:mm a",Locale.getDefault()).format(Date(call.date)),color=muted,fontSize=12.sp,modifier=Modifier.padding(top=3.dp))
+                            }
+                            Icon(Icons.Default.ChevronRight,null,tint=muted)
+                        }
+                        if(index<(if(allHistory) history.size else minOf(history.size,3))-1) HorizontalDivider(color=line)
+                    }
+                    if(history.isEmpty()) Text("No call history",color=muted,fontSize=14.sp,modifier=Modifier.padding(vertical=12.dp))
+                }
+                Text("MORE",color=muted,fontSize=11.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.sp,modifier=Modifier.padding(start=8.dp,top=23.dp,bottom=9.dp))
+                ContactSectionCard(panel,dark) {
+                    ContactAction("Default ringtone",Icons.Default.MusicNote,muted,fg,onRingtone)
+                    HorizontalDivider(color=line)
+                    ContactAction("QR code",Icons.Default.QrCode,muted,fg,onQr)
+                }
+                Spacer(Modifier.height(30.dp))
+            }
         }
+    }
+}
+
+@Composable
+private fun ContactQuickAction(icon:androidx.compose.ui.graphics.vector.ImageVector,label:String,tint:Color,onClick:()->Unit) {
+    Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.width(66.dp).clickable(onClick=onClick)) {
+        Box(Modifier.size(52.dp).clip(CircleShape).background(tint.copy(alpha=.14f)),contentAlignment=Alignment.Center) {
+            Icon(icon,null,tint=tint,modifier=Modifier.size(23.dp))
+        }
+        Text(label,color=tint,fontSize=12.sp,modifier=Modifier.padding(top=7.dp))
+    }
+}
+
+@Composable
+private fun ContactSectionCard(panel:Color,dark:Boolean,content:@Composable ColumnScope.()->Unit) {
+    Surface(color=panel,shape=RoundedCornerShape(22.dp),modifier=Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal=16.dp,vertical=5.dp),content=content)
+    }
+}
+
+@Composable
+private fun CallHistoryPage(call:DialCall,history:List<DialCall>,fg:Color,muted:Color,card:Color,green:Color,red:Color,onBack:()->Unit,onCall:()->Unit,onNote:()->Unit,onRecordings:()->Unit,onDelete:()->Unit) {
+    val dark=fg.red<.5f
+    val panel=if(dark) Color(0xFF242428) else Color.White
+    val callType=when(call.type) {
+        CallLog.Calls.MISSED_TYPE->"Missed call"
+        CallLog.Calls.OUTGOING_TYPE->"Outgoing call"
+        CallLog.Calls.INCOMING_TYPE->"Incoming call"
+        CallLog.Calls.REJECTED_TYPE->"Declined call"
+        else->"Call"
+    }
+    val duration=if(call.duration>0) (call.duration/60).toString()+" min "+(call.duration%60)+" sec" else "Not connected"
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBackIosNew,null,tint=fg) }
+            Text("Call details",Modifier.weight(1f),fontSize=18.sp,color=fg,textAlign=TextAlign.Center,fontWeight=FontWeight.SemiBold)
+            IconButton(onClick=onCall) { Icon(Icons.Default.Phone,null,tint=green) }
+        }
+        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)) {
+            item {
+                AnimatedVisibility(visible=true,enter=fadeIn(tween(240))+slideInVertically(tween(240)){it/5}) {
+                    Column(Modifier.fillMaxWidth().padding(top=16.dp,bottom=24.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                        Box(Modifier.size(88.dp).clip(CircleShape).background(if(call.type==CallLog.Calls.MISSED_TYPE) red.copy(alpha=.14f) else green.copy(alpha=.14f)),contentAlignment=Alignment.Center) {
+                            Icon(
+                                when(call.type) { CallLog.Calls.MISSED_TYPE->Icons.Default.CallMissed;CallLog.Calls.OUTGOING_TYPE->Icons.Default.CallMade;else->Icons.Default.CallReceived },
+                                null,tint=if(call.type==CallLog.Calls.MISSED_TYPE) red else green,modifier=Modifier.size(37.dp)
+                            )
+                        }
+                        Text(call.name.ifBlank{call.number.ifBlank{"Unknown caller"}},color=fg,fontSize=25.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(top=15.dp))
+                        Text(call.number,color=muted,fontSize=15.sp,modifier=Modifier.padding(top=5.dp))
+                        Text(callType,color=if(call.type==CallLog.Calls.MISSED_TYPE) red else green,fontSize=13.sp,fontWeight=FontWeight.Medium,modifier=Modifier.padding(top=8.dp))
+                    }
+                }
+                ContactSectionCard(panel,dark) {
+                    CallInfoRow(Icons.Default.CalendarToday,"Date",SimpleDateFormat("EEEE, MMM d, yyyy",Locale.getDefault()).format(Date(call.date)),fg,muted)
+                    HorizontalDivider(color=muted.copy(alpha=.18f))
+                    CallInfoRow(Icons.Default.Schedule,"Time",SimpleDateFormat("h:mm a",Locale.getDefault()).format(Date(call.date)),fg,muted)
+                    HorizontalDivider(color=muted.copy(alpha=.18f))
+                    CallInfoRow(Icons.Default.Timer,"Duration",duration,fg,muted)
+                    HorizontalDivider(color=muted.copy(alpha=.18f))
+                    CallInfoRow(Icons.Default.SimCard,"SIM",call.account.ifBlank{"Default line"},fg,muted)
+                }
+                Text("CALL HISTORY",color=muted,fontSize=11.sp,fontWeight=FontWeight.SemiBold,letterSpacing=1.sp,modifier=Modifier.padding(start=8.dp,top=24.dp,bottom=9.dp))
+            }
+            items(history.sortedByDescending{it.date},key={it.id}) { item ->
+                Surface(color=panel,shape=RoundedCornerShape(17.dp),modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)) {
+                    Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Icon(
+                            when(item.type) { CallLog.Calls.MISSED_TYPE->Icons.Default.CallMissed;CallLog.Calls.OUTGOING_TYPE->Icons.Default.CallMade;else->Icons.Default.CallReceived },
+                            null,tint=if(item.type==CallLog.Calls.MISSED_TYPE) red else green
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(when(item.type){CallLog.Calls.MISSED_TYPE->"Missed";CallLog.Calls.OUTGOING_TYPE->"Outgoing";else->"Incoming"},color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                            Text(SimpleDateFormat("MMM d, h:mm a",Locale.getDefault()).format(Date(item.date)),color=muted,fontSize=12.sp)
+                        }
+                        Text(if(item.duration>0) item.duration.toString()+"s" else "—",color=muted,fontSize=12.sp)
+                    }
+                }
+            }
+        }
+        Surface(color=if(dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7),shadowElevation=12.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal=12.dp,vertical=9.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
+                CallDetailAction(Icons.Default.Voicemail,"Recordings",muted,onRecordings)
+                CallDetailAction(Icons.Default.Notes,"Call notes",Color(0xFF3987FF),onNote)
+                CallDetailAction(Icons.Default.Delete,"Delete",red,onDelete)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallInfoRow(icon:androidx.compose.ui.graphics.vector.ImageVector,label:String,value:String,fg:Color,muted:Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical=13.dp),verticalAlignment=Alignment.CenterVertically) {
+        Icon(icon,null,tint=muted,modifier=Modifier.size(19.dp))
+        Spacer(Modifier.width(13.dp))
+        Text(label,color=muted,fontSize=13.sp,modifier=Modifier.weight(1f))
+        Text(value,color=fg,fontSize=13.sp,fontWeight=FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CallDetailAction(icon:androidx.compose.ui.graphics.vector.ImageVector,label:String,tint:Color,onClick:()->Unit) {
+    Column(Modifier.width(92.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick=onClick).padding(vertical=7.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+        Icon(icon,null,tint=tint,modifier=Modifier.size(22.dp))
+        Text(label,color=tint,fontSize=11.sp,modifier=Modifier.padding(top=5.dp))
     }
 }
 
