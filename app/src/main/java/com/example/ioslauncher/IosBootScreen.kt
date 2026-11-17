@@ -1,7 +1,7 @@
 package com.example.ioslauncher
 
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,11 +28,11 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun AppleBootScreen() {
-    val progress by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = tween(durationMillis = 2600, easing = LinearEasing),
-        label = "appleBootProgress"
-    )
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, animationSpec = tween(durationMillis = 2600, easing = LinearEasing))
+    }
 
     // The supplied 24x24 SVG path, rendered in white on the black boot screen.
     val appleLogo = PathParser().parsePathString(
@@ -63,7 +65,7 @@ fun AppleBootScreen() {
                     .background(Color(0xFF454545))
             ) {
                 Box(
-                    modifier = Modifier.width(126.dp * progress).height(3.dp)
+                    modifier = Modifier.width(126.dp * progress.value).height(3.dp)
                         .clip(RoundedCornerShape(50))
                         .background(Color.White)
                 )
