@@ -2026,9 +2026,6 @@ fun SettingsScreen(
                 }
             }
             SettingsGroup("Other",card,muted) {
-                SettingChoice("Allow gesture access","Open app info",fg,muted) {
-                    onDeviceSettings()
-                }
                 SettingChoice("Arrange items in Recents",recentsArrangement,fg,muted) {
                     choose("Arrange items in Recents",recentsArrangement,listOf("Vertically","Horizontally"),onRecentsArrangement)
                 }
@@ -2042,7 +2039,7 @@ fun SettingsScreen(
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Text("System-wide gesture navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
                     Text("For a sideloaded install, first open App info, tap the three-dot menu, and choose Allow restricted settings (if Android shows it). Then open Android Settings > Accessibility > Downloaded apps > iOS Launcher gestures and enable the service. Android requires this approval from you; the launcher cannot grant it automatically.",color=muted,fontSize=12.sp)
-                    Text("This is an accessibility-based gesture bridge, not Xiaomi's privileged native gesture engine. Keep the system navigation buttons available as a fallback; gesture availability and edge behavior can vary by device.",color=muted,fontSize=12.sp)
+                    Text("Android retains control of the navigation mode. The buttons remain available when you reveal the navigation bar, and Settings / app overlays show the bar normally.",color=muted,fontSize=12.sp)
                 }
             }
             Spacer(Modifier.height(20.dp))
