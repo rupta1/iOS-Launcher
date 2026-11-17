@@ -572,6 +572,10 @@ fun LauncherRoot(db: LauncherDb) {
     }
     fun finishIconDrag() {
         val dragged=draggingApp ?: return
+        if(draggingFromFolder && folderOverlayBounds.contains(dragPosition)) {
+            draggingApp=null; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
+            return
+        }
         val targetPage=pendingDragPage.coerceAtLeast(0)
         fun saveAssignments() {
             db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
@@ -1059,20 +1063,32 @@ fun LauncherRoot(db: LauncherDb) {
         }
 
         if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
-            val half=with(density){52.dp.toPx()}
+            val ghostWidth=with(density){widgetCanvasBounds.width.toDp()}.coerceIn(112.dp,340.dp)
+            val ghostHeight=with(density){widgetCanvasBounds.height.toDp()}.coerceIn(88.dp,360.dp)
+            val halfWidth=with(density){ghostWidth.toPx()/2f}
+            val halfHeight=with(density){ghostHeight.toPx()/2f}
             val label=when(draggingWidgetId) {
-                -1001 -> "Weather"
-                -1002 -> "Today"
+                -1001 -> "WEATHER"
+                -1002 -> "TODAY"
                 else -> try { AppWidgetManager.getInstance(context).getAppWidgetInfo(draggingWidgetId)?.loadLabel(context.packageManager)?.toString() ?: "Widget" } catch (_:Exception) { "Widget" }
             }
-            Surface(shape=RoundedCornerShape(18.dp),color=Color.White.copy(alpha=.88f),shadowElevation=12.dp,
-                modifier=Modifier.offset { IntOffset((widgetDragPosition.x-half).toInt(),(widgetDragPosition.y-with(density){34.dp.toPx()}).toInt()) }.width(104.dp).height(68.dp)) {
-                Box(contentAlignment=Alignment.Center) { Text(label,color=Color.DarkGray,fontSize=12.sp,maxLines=2,textAlign=TextAlign.Center,modifier=Modifier.padding(6.dp)) }
+            Surface(
+                shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.86f),
+                border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.85f)),shadowElevation=24.dp,
+                modifier=Modifier.offset { IntOffset((widgetDragPosition.x-halfWidth).toInt(),(widgetDragPosition.y-halfHeight).toInt()) }
+                    .width(ghostWidth).height(ghostHeight).graphicsLayer { scaleX=.97f; scaleY=.97f; alpha=.94f }
+            ) {
+                Column(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
+                    Text(label,color=Color(0xFF5C6470),fontSize=11.sp,fontWeight=FontWeight.Bold)
+                    Text(if(draggingWidgetId==-1001) "24°  Mostly Sunny" else if(draggingWidgetId==-1002) SimpleDateFormat("d MMM",Locale.getDefault()).format(Date()) else "Move widget",
+                        color=Color(0xFF252B34),fontSize=20.sp,fontWeight=FontWeight.SemiBold)
+                }
             }
         }
         BackHandler(enabled=true) {
             when {
                 controlCenter -> controlCenter=false
+                openFolderId!=null -> openFolderId=null
                 drawer -> drawer=false
                 settings -> settings=false
                 draggingApp != null -> draggingApp=null
