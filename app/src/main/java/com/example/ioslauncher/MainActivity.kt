@@ -740,7 +740,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                 draggingApp=apps.firstOrNull { it.packageName==appKey }
                                                 draggingFromDock=false
                                                 dragPosition=global
-                                                pendingDragPage=targetPage.coerceAtLeast(0)
+                                                pendingDragPage=page.coerceAtLeast(0)
                                             }
                                             widgetKey!=null -> {
                                                 draggingWidgetId=widgetKey
@@ -812,6 +812,22 @@ fun LauncherRoot(db: LauncherDb) {
                             }
                         }
                         val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,rows,fillCells) }
+                        LaunchedEffect(targetPage,gridCells,fillCells) {
+                            if(fillCells) {
+                                val appUpdates=pageApps.mapNotNull { app -> gridCells["app:"+app.packageName]?.let { app.packageName to (it.row*columns+it.column) } }.toMap()
+                                val widgetUpdates=gridTiles.filter { it.key.startsWith("widget:") }.mapNotNull { tile ->
+                                    gridCells[tile.key]?.let { tile.key.removePrefix("widget:").toIntOrNull()?.let { id -> id to (it.row*columns+it.column) } }
+                                }.toMap()
+                                if(appUpdates.isNotEmpty()) {
+                                    appSlotAssignments=appSlotAssignments+appUpdates
+                                    db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                                }
+                                if(widgetUpdates.isNotEmpty()) {
+                                    widgetSlotAssignments=widgetSlotAssignments+widgetUpdates
+                                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                                }
+                            }
+                        }
                         pageApps.forEach { app ->
                             val cell=gridCells["app:"+app.packageName] ?: return@forEach
                             val center=appBounds[app.packageName]?.center ?: dragPosition
