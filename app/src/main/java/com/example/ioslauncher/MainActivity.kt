@@ -1290,7 +1290,7 @@ fun LauncherRoot(db: LauncherDb) {
                 onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
                 onClose={settings=false},
                 onDeviceSettings={
-                    try { context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
+                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                     catch (_: Exception) { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
                 }
             )
@@ -1971,11 +1971,8 @@ fun SettingsScreen(
                 }
             }
             SettingsGroup("Other",card,muted) {
-                SettingChoice("System navigation",if(navigationMode=="buttons") "Buttons" else "Gestures",fg,muted) {
-                    choose("System navigation",if(navigationMode=="buttons") "Buttons" else "Gestures",listOf("Buttons","Gestures"),{ value ->
-                        onNavigationMode(value.lowercase())
-                        onDeviceSettings()
-                    })
+                SettingChoice("System-wide gestures","Configure",fg,muted) {
+                    onDeviceSettings()
                 }
                 SettingChoice("Arrange items in Recents",recentsArrangement,fg,muted) {
                     choose("Arrange items in Recents",recentsArrangement,listOf("Vertically","Horizontally"),onRecentsArrangement)
@@ -1988,9 +1985,9 @@ fun SettingsScreen(
             }
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                    Text("About system navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
-                    Text("Home, Back and Recents gestures are handled by Android / MIUI / HyperOS and automatically work when this app is your default Home app. To remove the three-button bar, switch your phone to Gesture navigation in system settings; a launcher cannot change that protected system setting itself.",color=muted,fontSize=12.sp)
-                    Text("Recents layout is owned by the system launcher. This preference is saved here but cannot rearrange Android's system Recents screen.",color=muted,fontSize=12.sp)
+                    Text("System-wide gesture navigation",color=fg,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Enable iOS Launcher gestures in Android Accessibility settings. The service adds edge-swipe Back and bottom-swipe Home / hold-for-Recents gestures across apps. Android will ask you to enable this service manually.",color=muted,fontSize=12.sp)
+                    Text("This is an accessibility-based gesture bridge, not Xiaomi's privileged native gesture engine. Keep the system navigation buttons available as a fallback; gesture availability and edge behavior can vary by device.",color=muted,fontSize=12.sp)
                 }
             }
             Spacer(Modifier.height(20.dp))
