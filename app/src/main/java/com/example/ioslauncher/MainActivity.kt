@@ -1683,9 +1683,14 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
     val maxVolume=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
     var volume by remember { mutableFloatStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()/maxVolume) }
     var brightness by remember { mutableFloatStateOf(.72f) }
-    var focusOn by remember { mutableStateOf(false) }
-    var rotationLocked by remember { mutableStateOf(false) }
-    var airplaneOn by remember { mutableStateOf(false) }
+    var torchOn by remember { mutableStateOf(false) }
+    val cameraManager = remember { context.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager }
+    fun toggleTorch() {
+        val cameraId = try { cameraManager.cameraIdList.firstOrNull { id ->
+            cameraManager.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        } } catch (_:Exception) { null }
+        if(cameraId != null) try { cameraManager.setTorchMode(cameraId,!torchOn); torchOn=!torchOn } catch (_:Exception) { open(Intent(Settings.ACTION_SETTINGS)) }
+    }
     var wifiOn by remember { mutableStateOf(state.transport=="Wi-Fi") }
     var bluetoothOn by remember { mutableStateOf(state.bluetooth=="On") }
     val white=Color.White
@@ -1698,24 +1703,6 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             .background(Color(0xFF101724).copy(alpha=.30f))
             .padding(WindowInsets.statusBars.asPaddingValues())
             .padding(horizontal=18.dp, vertical=10.dp)
-            .pointerInput(onClose) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed=false)
-                    var totalY = 0f
-                    var closed = false
-                    while (!closed) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        totalY += change.position.y - change.previousPosition.y
-                        if (totalY < -72f) {
-                            change.consume()
-                            onClose()
-                            closed = true
-                        }
-                    }
-                }
-            }
             .verticalScroll(rememberScrollState())
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal=8.dp, vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -1772,7 +1759,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-            IosRoundAction(Icons.Default.ScreenRotation,"Lock",rotationLocked,Modifier.weight(1f)) { rotationLocked=!rotationLocked; open(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+            IosRoundAction(Icons.Default.ScreenRotation,"Rotation",false,Modifier.weight(1f)) { open(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
             IosRoundAction(Icons.Default.ScreenShare,"Screen Mirroring",false,Modifier.weight(1f)) { open(Intent(Settings.ACTION_CAST_SETTINGS)) }
             Column(Modifier.weight(.82f).height(174.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                 IosVerticalSlider(brightness,{ brightness=it
@@ -1786,7 +1773,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(12.dp))
         Surface(
-            onClick={focusOn=!focusOn;open(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))},
+            onClick={open(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))},
             shape=RoundedCornerShape(28.dp),color=panel,border=androidx.compose.foundation.BorderStroke(1.dp,panelBorder),
             modifier=Modifier.fillMaxWidth().height(66.dp)
         ) {
@@ -1802,7 +1789,7 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(14.dp))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-            IosUtilityButton(Icons.Default.FlashlightOn,"Flashlight",Modifier.weight(1f)) { open(Intent(Settings.ACTION_SETTINGS)) }
+            IosUtilityButton(if(torchOn) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,"Flashlight",Modifier.weight(1f)) { toggleTorch() }
             IosUtilityButton(Icons.Default.Timer,"Timer",Modifier.weight(1f)) { open(Intent(android.provider.AlarmClock.ACTION_SET_TIMER)) }
             IosUtilityButton(Icons.Default.Calculate,"Calculator",Modifier.weight(1f)) {
                 val launch=context.packageManager.getLaunchIntentForPackage("com.google.android.calculator")
@@ -1816,7 +1803,24 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             Spacer(Modifier.weight(3f))
         }
         Spacer(Modifier.height(20.dp))
-        Text("Swipe up to close",color=white.copy(alpha=.58f),fontSize=10.sp,modifier=Modifier.align(Alignment.CenterHorizontally))
+        Box(
+            Modifier.fillMaxWidth().height(46.dp).pointerInput(onClose) {
+                var upward=0f
+                detectDragGestures(
+                    onDragStart={ upward=0f },
+                    onDrag={ change,amount ->
+                        change.consume()
+                        if(amount.y<0f) upward+=amount.y
+                        if(upward < -52f) { onClose(); upward=0f }
+                    },
+                    onDragEnd={ upward=0f },
+                    onDragCancel={ upward=0f }
+                )
+            },
+            contentAlignment=Alignment.Center
+        ) {
+            Box(Modifier.width(42.dp).height(5.dp).clip(CircleShape).background(white.copy(alpha=.58f)))
+        }
     }
 }
 
