@@ -471,15 +471,16 @@ fun LauncherRoot(db: LauncherDb) {
         pendingDragPage = page
     }
     val showLabels = labels && hideText == "Off"
-    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments) {
+    val folderPackages = remember(folders) { folders.flatMap { it.packages }.toSet() }
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments, folders, dockPackages) {
         val result = mutableMapOf<Int, MutableList<InstalledApp>>()
         var defaultPage = 0
         fun capacityFor(index: Int): Int {
-            val widgetRows = homeWidgets.count { it.second == index }
-            val builtInRows = if ((showWeatherWidget && index == weatherWidgetPage) || (showTodayWidget && index == todayWidgetPage)) 1 else 0
-            return (columns * rows.coerceAtLeast(1) - (widgetRows + builtInRows) * columns).coerceAtLeast(1)
+            val widgetCells = homeWidgets.count { it.second == index } * 4
+            val builtInCells = (if (showWeatherWidget && index == weatherWidgetPage) 4 else 0) + (if (showTodayWidget && index == todayWidgetPage) 4 else 0)
+            return (columns * rows.coerceAtLeast(1) - widgetCells - builtInCells).coerceAtLeast(1)
         }
-        apps.forEach { app ->
+        apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
             val explicitPage = appPageAssignments[app.packageName]
             val destination = if (explicitPage != null) explicitPage.coerceAtLeast(0) else {
                 while ((result[defaultPage]?.size ?: 0) >= capacityFor(defaultPage)) defaultPage++
@@ -491,7 +492,8 @@ fun LauncherRoot(db: LauncherDb) {
             result.keys.maxOrNull() ?: 0,
             homeWidgets.maxOfOrNull { it.second } ?: 0,
             if (showWeatherWidget) weatherWidgetPage else 0,
-            if (showTodayWidget) todayWidgetPage else 0
+            if (showTodayWidget) todayWidgetPage else 0,
+            folders.maxOfOrNull { it.page } ?: 0
         )
         (0..maxPage).map { pageIndex ->
             val pageItems = result[pageIndex]?.toList().orEmpty()
@@ -516,52 +518,88 @@ fun LauncherRoot(db: LauncherDb) {
                 pendingDragPage = currentPage + 1
             } else pendingDragPage = (currentPage + direction).coerceAtLeast(0)
             dragEdgeDirection = direction
+            page = pendingDragPage
         }
     }
+    fun persistDock() { db.put("dock_packages", dockPackages.joinToString("|")) }
+    fun persistFolders() { db.put("home_folders", encodeHomeFolders(folders)) }
+    fun slotAt(position:Offset):Int {
+        val cellW=(homeGridBounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(homeGridBounds.height / rows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val col=((position.x-homeGridBounds.left)/cellW).toInt().coerceIn(0,columns-1)
+        val row=((position.y-homeGridBounds.top)/cellH).toInt().coerceIn(0,rows-1)
+        return row*columns+col
+    }
     fun finishIconDrag() {
-        val dragged = draggingApp ?: return
+        val dragged=draggingApp ?: return
+        val targetPage=pendingDragPage.coerceAtLeast(0)
         if (dragPosition.y < uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
             activity.uninstall(dragged)
-            draggingApp = null
-            dragEdgeDirection = 0
-            pendingDragPage = page.coerceAtLeast(0)
+            apps=apps.filterNot { it.packageName==dragged.packageName }
+            appPageAssignments=appPageAssignments-dragged.packageName
+            appSlotAssignments=appSlotAssignments-dragged.packageName
+            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            dockPackages=dockPackages.filterNot { it==dragged.packageName }; persistDock()
+            draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
             return
         }
-        val targetPage = pendingDragPage.coerceAtLeast(0)
-        val targetPageApps = pageAppSlices.getOrNull(targetPage).orEmpty()
-        val target = appBounds.entries.firstOrNull { (key, rect) ->
-            key != dragged.packageName && targetPageApps.any { it.packageName == key } && rect.contains(dragPosition)
-        }?.key
-        val list = apps.toMutableList()
-        list.removeAll { it.packageName == dragged.packageName }
-        val targetIndex = target?.let { key -> list.indexOfFirst { it.packageName == key } } ?: -1
-        if (targetIndex >= 0) list.add(targetIndex, dragged) else list.add(dragged)
-        val stablePages = pageAppSlices.flatMapIndexed { pageIndex, pageApps -> pageApps.map { it.packageName to pageIndex } }.toMap()
-        appPageAssignments = stablePages + (dragged.packageName to targetPage)
-        val slot = if (homeGridBounds.width > 0f) {
-            val colWidth = homeGridBounds.width / columns.coerceAtLeast(1)
-            val col = ((dragPosition.x - homeGridBounds.left) / colWidth).toInt().coerceIn(0, columns - 1)
-            val rowHeight = with(density) { 94.dp.toPx() }
-            val widgetRows = homeWidgets.count { it.second == targetPage } +
-                (if (showWeatherWidget && weatherWidgetPage == targetPage) 1 else 0) +
-                (if (showTodayWidget && todayWidgetPage == targetPage) 1 else 0)
-            val topInset = with(density) { (widgetRows * 148).dp.toPx() }
-            val row = ((dragPosition.y - homeGridBounds.top - topInset).coerceAtLeast(0f) / rowHeight).toInt()
-            row * columns + col
-        } else targetPageApps.size
-        val stableSlots = pageAppSlices.flatMapIndexed { pageIndex, pageApps ->
-            pageApps.mapIndexed { index, app -> app.packageName to (appSlotAssignments[app.packageName] ?: index) }
-        }.toMap()
-        appSlotAssignments = stableSlots + (dragged.packageName to slot)
-        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key+":"+it.value })
-        db.put("app_slots", appSlotAssignments.entries.joinToString(";") { it.key+":"+it.value })
-        apps = list
-        db.put("app_order", list.joinToString("|") { it.packageName })
-        page = targetPage
-        extraHomePages = 0
-        draggingApp = null
-        dragEdgeDirection = 0
-        pendingDragPage = page
+        val droppedOnDock=dockBounds.contains(dragPosition)
+        if(droppedOnDock) {
+            val existing=dockPackages.toMutableList()
+            val targetIndex=(((dragPosition.x-dockBounds.left)/dockBounds.width.coerceAtLeast(1f))*5f).toInt().coerceIn(0,4)
+            existing.remove(dragged.packageName)
+            if(targetIndex>=existing.size) existing.add(dragged.packageName) else existing.add(targetIndex,dragged.packageName)
+            dockPackages=existing.take(5); persistDock()
+            if(draggingFromDock) { draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page; return }
+            appPageAssignments=appPageAssignments-dragged.packageName
+            appSlotAssignments=appSlotAssignments-dragged.packageName
+            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
+            return
+        }
+        if(draggingFromDock) {
+            dockPackages=dockPackages.filterNot { it==dragged.packageName }; persistDock()
+        }
+        val targetFolder=folderBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
+        if(targetFolder!=null) {
+            folders=folders.map { folder -> if(folder.id==targetFolder && dragged.packageName !in folder.packages) folder.copy(packages=folder.packages+dragged.packageName) else folder }
+            persistFolders()
+            appPageAssignments=appPageAssignments-dragged.packageName
+            appSlotAssignments=appSlotAssignments-dragged.packageName
+        } else {
+            val targetApp=appBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
+            if(targetApp!=null) {
+                val existingFolder=folders.firstOrNull { targetApp in it.packages }
+                if(existingFolder!=null) {
+                    folders=folders.map { if(it.id==existingFolder.id && dragged.packageName !in it.packages) it.copy(packages=it.packages+dragged.packageName) else it }
+                } else {
+                    val folderId="folder:"+targetApp
+                    val targetAppModel=apps.firstOrNull { it.packageName==targetApp }
+                    folders=folders+HomeFolder(folderId,targetAppModel?.label ?: "Folder",listOf(targetApp,dragged.packageName),targetPage,slotAt(dragPosition))
+                }
+                persistFolders()
+                appPageAssignments=appPageAssignments-dragged.packageName
+                appSlotAssignments=appSlotAssignments-dragged.packageName
+                appPageAssignments=appPageAssignments-targetApp
+                appSlotAssignments=appSlotAssignments-targetApp
+            } else {
+                val targetWidget=widgetBounds.entries.firstOrNull { it.value.contains(dragPosition) }?.key
+                val newSlot=slotAt(dragPosition)
+                if(targetWidget!=null) {
+                    val oldAppSlot=appSlotAssignments[dragged.packageName] ?: 0
+                    widgetSlotAssignments=widgetSlotAssignments+(targetWidget to oldAppSlot)
+                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                }
+                appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
+                appSlotAssignments=appSlotAssignments+(dragged.packageName to newSlot)
+            }
+        }
+        db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+        db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+        apps=apps.toMutableList().also { list -> list.removeAll { it.packageName==dragged.packageName }; list.add(dragged) }
+        page=targetPage; extraHomePages=0; draggingApp=null; draggingFromDock=false; dragEdgeDirection=0; pendingDragPage=page
     }
 
     SideEffect {
