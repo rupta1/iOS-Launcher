@@ -1,6 +1,8 @@
 package com.example.ioslauncher
 
 import android.Manifest
+import android.content.ContentUris
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
@@ -11,6 +13,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
 import android.provider.ContactsContract
+import android.telecom.TelecomManager
+import android.telephony.SubscriptionManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -46,299 +50,533 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private data class PhoneContact(val name:String,val number:String,val starred:Boolean)
-private data class RecentCall(val name:String,val number:String,val type:Int,val date:Long)
+private data class DialContact(val id:Long,val name:String,val number:String,val starred:Boolean)
+private data class DialCall(val id:Long,val name:String,val number:String,val type:Int,val date:Long,val duration:Long,val account:String)
+private data class DialSim(val id:Int,val name:String,val accountId:String?)
+private data class DialContactDetail(val id:Long,val name:String,val phones:List<Pair<String,String>>,val emails:List<Pair<String,String>>,val addresses:List<Pair<String,String>>,val birthday:String?)
 
-class PhoneActivity : ComponentActivity() {
+class PhoneActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             val dark=isSystemInDarkTheme()
-            MaterialTheme(colorScheme=if(dark) darkColorScheme() else lightColorScheme()) {
-                IosPhoneScreen()
+            MaterialTheme(colorScheme=if(dark) darkColorScheme() else lightColorScheme()) { IosDialer() }
+        }
+    }
+}
+
+@Composable
+private fun IosDialer() {
+    val ctx=LocalContext.current
+    val dark=isSystemInDarkTheme()
+    val bg=if(dark) Color.Black else Color(0xFFF5F5F8)
+    val card=if(dark) Color(0xFF242426) else Color.White
+    val field=if(dark) Color(0xFF303034) else Color(0xFFE9E9EE)
+    val fg=if(dark) Color(0xFFF5F5F7) else Color(0xFF17171B)
+    val muted=if(dark) Color(0xFF99999F) else Color(0xFF85858D)
+    val line=if(dark) Color(0xFF363639) else Color(0xFFE5E5EA)
+    val green=Color(0xFF30C65B); val blue=Color(0xFF3987FF); val red=Color(0xFFFF453A)
+    val prefs=remember { ctx.getSharedPreferences("phone_preferences",Context.MODE_PRIVATE) }
+    var tab by remember { mutableStateOf("Recents") }
+    var page by remember { mutableStateOf("main") }
+    var query by remember { mutableStateOf("") }
+    var dial by remember { mutableStateOf("") }
+    var keypadOpen by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("All calls") }
+    var filterMenu by remember { mutableStateOf(false) }
+    var topMenu by remember { mutableStateOf(false) }
+    var contacts by remember { mutableStateOf(emptyList<DialContact>()) }
+    var calls by remember { mutableStateOf(emptyList<DialCall>()) }
+    var sims by remember { mutableStateOf(emptyList<DialSim>()) }
+    var selectedContact by remember { mutableStateOf<DialContactDetail?>(null) }
+    var selectedCall by remember { mutableStateOf<DialCall?>(null) }
+    var note by remember { mutableStateOf("") }
+    var noteDialog by remember { mutableStateOf(false) }
+    var dialogTitle by remember { mutableStateOf("") }
+    var dialogText by remember { mutableStateOf("") }
+    var keypadSound by remember { mutableStateOf(prefs.getBoolean("keypad_sound",true)) }
+    var blocked by remember { mutableStateOf(prefs.getStringSet("blocked_numbers",emptySet())?.toSet() ?: emptySet()) }
+    var allHistory by remember { mutableStateOf(false) }
+    var favoriteOnly by remember { mutableStateOf(false) }
+    var pendingNumber by remember { mutableStateOf("") }
+    var pendingSim by remember { mutableStateOf<DialSim?>(null) }
+    var simChooser by remember { mutableStateOf(false) }
+    var readContacts by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED) }
+    var readCalls by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED) }
+    var makeCalls by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED) }
+    var readPhone by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED) }
+
+    val permissions=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        readContacts=result[Manifest.permission.READ_CONTACTS]==true || ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED
+        readCalls=result[Manifest.permission.READ_CALL_LOG]==true || ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED
+        makeCalls=result[Manifest.permission.CALL_PHONE]==true || ContextCompat.checkSelfPermission(ctx,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED
+        readPhone=result[Manifest.permission.READ_PHONE_STATE]==true || ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED
+        if(readContacts) contacts=readDialContacts(ctx)
+        if(readCalls) calls=readDialCalls(ctx)
+        if(pendingNumber.isNotBlank()) { val n=pendingNumber;pendingNumber="";startDialCall(ctx,n,pendingSim) }
+    }
+    val contactsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { readContacts=it;if(it) contacts=readDialContacts(ctx) }
+    val callsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { readCalls=it;if(it) calls=readDialCalls(ctx) }
+
+    LaunchedEffect(Unit) {
+        if(readContacts) contacts=readDialContacts(ctx)
+        if(readCalls) calls=readDialCalls(ctx)
+        sims=readDialSims(ctx)
+    }
+    LaunchedEffect(page,tab) {
+        if(page=="main" && tab=="Recents" && readCalls) calls=readDialCalls(ctx)
+        if(page=="main" && tab!="Keypad" && readContacts) contacts=readDialContacts(ctx)
+    }
+    fun callNumber(n:String,sim:DialSim?=null) {
+        if(n.isBlank()) return
+        pendingSim=sim
+        if(!makeCalls) { pendingNumber=n;permissions.launch(arrayOf(Manifest.permission.CALL_PHONE,Manifest.permission.READ_CALL_LOG,Manifest.permission.READ_PHONE_STATE));return }
+        startDialCall(ctx,n,sim)
+    }
+    fun showContact(id:Long) { selectedContact=readDialContact(ctx,id);page="contact";allHistory=false }
+    fun showCall(c:DialCall) { selectedCall=c;page="call_detail";allHistory=false }
+    fun key(k:String) { dial+=k;if(keypadSound) playDialTone(k) }
+
+    BackHandler(enabled=page!="main" || simChooser || noteDialog || dialogTitle.isNotBlank() || keypadOpen) {
+        when {
+            simChooser -> simChooser=false
+            noteDialog -> noteDialog=false
+            dialogTitle.isNotBlank() -> dialogTitle=""
+            page=="call_detail" -> page=if(selectedContact!=null) "contact" else "main"
+            page!="main" -> page="main"
+            keypadOpen -> keypadOpen=false
+        }
+    }
+
+    val shownCalls=calls.filter {
+        (filter=="All calls" || filter=="Missed" && it.type==CallLog.Calls.MISSED_TYPE ||
+         filter=="Incoming" && it.type==CallLog.Calls.INCOMING_TYPE || filter=="Outgoing" && it.type==CallLog.Calls.OUTGOING_TYPE) &&
+        (it.name.contains(query,true) || it.number.contains(query,true)) && it.number !in blocked
+    }
+    val shownContacts=contacts.filter { (tab!="Favorites" || it.starred) && (it.name.contains(query,true) || it.number.contains(query,true)) }.distinctBy { it.id }
+
+    Column(Modifier.fillMaxSize().background(bg).padding(WindowInsets.statusBars.asPaddingValues())) {
+        when(page) {
+            "contact" -> selectedContact?.let { c ->
+                ContactPage(c,calls,allHistory,dark,card,field,fg,muted,line,green,blue,red,
+                    onBack={page="main"},onCall={callNumber(it)},onSms={openSms(ctx,it)},onVideo={openVideo(ctx,it)},
+                    onWhatsApp={openLink(ctx,"https://wa.me/"+it.filter(Char::isDigit))},
+                    onTelegram={openLink(ctx,"https://t.me/"+it.filter(Char::isDigit))},
+                    onEdit={openEditContact(ctx,c.id)},onFavorite={
+                        try { val old=contacts.firstOrNull{it.id==c.id}?.starred==true
+                            val v=android.content.ContentValues().apply { put(ContactsContract.Contacts.STARRED,if(old) 0 else 1) }
+                            ctx.contentResolver.update(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,c.id),v,null,null)
+                            contacts=readDialContacts(ctx);selectedContact=readDialContact(ctx,c.id)
+                        } catch (_:Exception) {}
+                    },onHistory={allHistory=true},onCallDetail={showCall(it)},
+                    onRingtone={openAndroidSettings(ctx,android.provider.Settings.ACTION_SOUND_SETTINGS)},
+                    onQr={dialogTitle="QR code";dialogText=c.name+"\n"+c.phones.joinToString("\n"){it.first}},
+                    onBlock={blocked=blocked+c.phones.map{it.first};prefs.edit().putStringSet("blocked_numbers",blocked).apply();dialogTitle="Blocked";dialogText="This number is hidden from the dialer's recent list."},
+                    onDelete={try { ctx.contentResolver.delete(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,c.id),null,null);contacts=readDialContacts(ctx);page="main" } catch (_:Exception) {}},
+                    onShare={try { ctx.startActivity(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,c.name+" "+c.phones.joinToString { it.first }).let { Intent.createChooser(it,"Share contact") }) } catch (_:Exception) {}}
+                )
+            }
+            "call_detail" -> selectedCall?.let { c ->
+                CallHistoryPage(c,calls.filter{it.number==c.number},fg,muted,card,green,red,
+                    onBack={page=if(selectedContact!=null) "contact" else "main"},onCall={callNumber(c.number)},
+                    onNote={note=prefs.getString("call_note_"+c.id,"") ?: "";noteDialog=true},
+                    onRecordings={dialogTitle="Recorded calls";dialogText="Recording playback depends on the phone manufacturer's dialer and recorder. Android may restrict third-party access."},
+                    onDelete={dialogTitle="Delete call history";dialogText="Android protects call-log deletion. Manage or delete call records using the system Phone app."})
+            }
+            "call_settings" -> CallSettingsPage(fg,muted,card,line,onBack={page="main"},onItem={label ->
+                when(label) {
+                    "Mobile networks" -> openAndroidSettings(ctx,android.provider.Settings.ACTION_NETWORK_OPERATOR_SETTINGS)
+                    "Call-forwarding settings","Call waiting","Incoming call settings","Auto-answer","Advanced settings","Privacy" -> openAndroidCallSettings(ctx)
+                    "Location" -> openAndroidSettings(ctx,android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    "Feedback" -> try { ctx.startActivity(Intent(Intent.ACTION_SENDTO,Uri.parse("mailto:")).putExtra(Intent.EXTRA_SUBJECT,"Dialer feedback")) } catch (_:Exception) {}
+                    "Blocklist" -> {dialogTitle="Blocklist";dialogText=blocked.joinToString("\n")}
+                    "Call recording" -> {dialogTitle="Call recording";dialogText="Recording support is controlled by your device manufacturer, region and carrier."}
+                    "Identify unknown numbers" -> {dialogTitle=label;dialogText="Caller ID availability depends on Android, your carrier and installed caller-ID apps."}
+                }
+            })
+            else -> {
+                Row(Modifier.fillMaxWidth().padding(start=22.dp,end=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(if(tab=="Recents") "Recents" else tab,Modifier.weight(1f),fontSize=32.sp,fontWeight=FontWeight.Bold,color=fg)
+                    Box {
+                        IconButton(onClick={topMenu=true}) { Icon(Icons.Default.Settings,null,tint=fg) }
+                        DropdownMenu(topMenu,{topMenu=false}) {
+                            DropdownMenuItem(text={Text("Call settings")},onClick={topMenu=false;page="call_settings"})
+                            DropdownMenuItem(text={Text("Keypad sound")},trailingIcon={Switch(keypadSound,{keypadSound=it;prefs.edit().putBoolean("keypad_sound",it).apply()})},onClick={keypadSound=!keypadSound;prefs.edit().putBoolean("keypad_sound",keypadSound).apply()})
+                            DropdownMenuItem(text={Text("System appearance")},leadingIcon={Icon(Icons.Default.Check,null,tint=green)},onClick={topMenu=false})
+                            DropdownMenuItem(text={Text("Blocked numbers")},onClick={topMenu=false;dialogTitle="Blocklist";dialogText=blocked.joinToString("\n")})
+                        }
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when(tab) {
+                        "Recents" -> Column(Modifier.fillMaxSize().padding(horizontal=18.dp)) {
+                            DialSearch(query,{query=it},field,fg,muted)
+                            Row(Modifier.fillMaxWidth().padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Box {
+                                    Text(filter+"  ⌄",color=muted,fontSize=13.sp,modifier=Modifier.clickable{filterMenu=true}.padding(8.dp))
+                                    DropdownMenu(filterMenu,{filterMenu=false}) {
+                                        listOf("All calls","Missed","Incoming","Outgoing").forEach { f -> DropdownMenuItem(text={Text(f)},onClick={filter=f;filterMenu=false}) }
+                                    }
+                                }
+                                Spacer(Modifier.weight(1f));Text(shownCalls.size.toString()+" calls",color=muted,fontSize=12.sp)
+                            }
+                            if(!readCalls) PermissionPanel("Allow call history access to view recent calls","Allow call history",muted) { callsPermission.launch(Manifest.permission.READ_CALL_LOG) }
+                            else if(shownCalls.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) { Text("No recent calls",color=muted) }
+                            else LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(bottom=if(keypadOpen) 0.dp else 72.dp)) {
+                                items(shownCalls,key={it.id}) { c -> RecentRow(c,dark,fg,muted,line,green,red,{showCall(c)},{callNumber(c.number)}) }
+                            }
+                            if(keypadOpen) DialPad(dial,fg,muted,green,onKey={key(it)},onDelete={dial=dial.dropLast(1)},onCall={
+                                if(sims.size>1) simChooser=true else callNumber(dial,sims.firstOrNull())
+                            },sims=sims)
+                        }
+                        "Contacts","Favorites" -> Column(Modifier.fillMaxSize().padding(horizontal=18.dp)) {
+                            DialSearch(query,{query=it},field,fg,muted)
+                            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Text(if(tab=="Favorites") "Favorite contacts" else "All contacts",color=muted,fontSize=13.sp)
+                                Spacer(Modifier.weight(1f))
+                                Text("My groups",color=blue,fontSize=13.sp,modifier=Modifier.clickable {
+                                    dialogTitle="My groups";dialogText=readDialGroups(ctx).joinToString("\n").ifBlank{"No contact groups"}
+                                })
+                            }
+                            if(!readContacts) PermissionPanel("Allow contacts access to see your contacts","Allow contacts",muted) { contactsPermission.launch(Manifest.permission.READ_CONTACTS) }
+                            else LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(bottom=72.dp)) {
+                                items(shownContacts,key={it.id}) { c -> ContactRow(c,dark,fg,muted,line,{showContact(c.id)}) }
+                            }
+                        }
+                        else -> Column(Modifier.fillMaxSize().padding(horizontal=22.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                            Text(dial.ifBlank{" "},fontSize=30.sp,color=green,textAlign=TextAlign.Center)
+                            DialPad(dial,fg,muted,green,onKey={key(it)},onDelete={dial=dial.dropLast(1)},onCall={
+                                if(sims.size>1) simChooser=true else callNumber(dial,sims.firstOrNull())
+                            },sims=sims)
+                        }
+                    }
+                    if(tab=="Recents" && !keypadOpen) DialFab(green) { keypadOpen=true }
+                    if(tab=="Contacts") AddFab(green) {
+                        try { ctx.startActivity(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)) } catch (_:Exception) {}
+                    }
+                }
+                NavigationBar(containerColor=card) {
+                    listOf("Favorites" to Icons.Default.Star,"Recents" to Icons.Default.History,"Contacts" to Icons.Default.Contacts,"Keypad" to Icons.Default.Dialpad).forEach { (label,icon) ->
+                        NavigationBarItem(selected=tab==label,onClick={tab=label;query="";keypadOpen=false},icon={Icon(icon,null)},label={Text(label,fontSize=10.sp)},
+                            colors=NavigationBarItemDefaults.colors(selectedIconColor=green,selectedTextColor=green,indicatorColor=if(dark) Color(0xFF183C29) else Color(0xFFE8F8EE),unselectedIconColor=muted,unselectedTextColor=muted))
+                    }
+                }
+            }
+        }
+    }
+
+    if(simChooser) AlertDialog(onDismissRequest={simChooser=false},title={Text("Choose SIM")},text={
+        Column { sims.forEach { sim -> Row(Modifier.fillMaxWidth().clickable{simChooser=false;callNumber(dial,sim)}.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            Icon(Icons.Default.SimCard,null,tint=green);Spacer(Modifier.width(12.dp));Text(sim.name)
+        } } }
+    },confirmButton={TextButton(onClick={simChooser=false}) { Text("Cancel") }})
+    if(noteDialog && selectedCall!=null) AlertDialog(onDismissRequest={noteDialog=false},title={Text("Call note")},text={
+        OutlinedTextField(value=note,onValueChange={note=it},placeholder={Text("Add a note")},minLines=3)
+    },confirmButton={TextButton(onClick={prefs.edit().putString("call_note_"+selectedCall!!.id,note).apply();noteDialog=false}) { Text("Save") }},dismissButton={TextButton(onClick={noteDialog=false}) { Text("Cancel") }})
+    if(dialogTitle.isNotBlank()) AlertDialog(onDismissRequest={dialogTitle=""},title={Text(dialogTitle)},text={
+        if(dialogTitle=="Blocklist") OutlinedTextField(value=dialogText,onValueChange={dialogText=it},label={Text("One number per line")},minLines=3) else Text(dialogText)
+    },confirmButton={TextButton(onClick={
+        if(dialogTitle=="Blocklist") { blocked=dialogText.lines().map{it.trim()}.filter{it.isNotBlank()}.toSet();prefs.edit().putStringSet("blocked_numbers",blocked).apply() }
+        dialogTitle=""
+    }) { Text("Done") }})
+}
+
+@Composable
+private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
+    onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val history=calls.filter { call -> c.phones.any{it.first==call.number} }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
+            Text(c.name,Modifier.weight(1f),fontSize=20.sp,color=fg,textAlign=TextAlign.Center,fontWeight=FontWeight.SemiBold)
+            IconButton(onClick=onFavorite) { Icon(Icons.Default.FavoriteBorder,null,tint=fg) }
+            IconButton(onClick=onEdit) { Icon(Icons.Default.Edit,null,tint=fg) }
+            Box { IconButton(onClick={menu=true}) { Icon(Icons.Default.MoreVert,null,tint=fg) }
+                DropdownMenu(menu,{menu=false}) {
+                    DropdownMenuItem(text={Text("Place on Home screen")},onClick={menu=false})
+                    DropdownMenuItem(text={Text("Delete contact")},onClick={menu=false;onDelete()})
+                    DropdownMenuItem(text={Text("Block")},onClick={menu=false;onBlock()})
+                    DropdownMenuItem(text={Text("Share")},onClick={menu=false;onShare()})
+                    DropdownMenuItem(text={Text("Set default SIM for calls")},onClick={menu=false})
+                }
+            }
+        }
+        LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=18.dp,vertical=8.dp)) {
+            item {
+                Text(c.name,fontSize=27.sp,color=fg,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth().padding(vertical=14.dp))
+                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(15.dp)) {
+                        c.phones.forEach { p -> Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text(p.first,color=fg,fontSize=16.sp);Text(p.second+"  |  India",color=muted,fontSize=12.sp) }
+                            IconButton(onClick={onCall(p.first)}) { Icon(Icons.Default.Call,null,tint=green) }
+                            IconButton(onClick={onSms(p.first)}) { Icon(Icons.Default.Message,null,tint=green) }
+                        } }
+                        c.emails.forEach { Text(it.first,color=fg,modifier=Modifier.padding(vertical=8.dp));Text(it.second,color=muted,fontSize=12.sp) }
+                        c.addresses.forEach { Text(it.first,color=fg,modifier=Modifier.padding(vertical=8.dp));Text(it.second,color=muted,fontSize=12.sp) }
+                        c.birthday?.let { Text(it,color=fg,modifier=Modifier.padding(vertical=8.dp));Text("Birthday",color=muted,fontSize=12.sp) }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal=15.dp)) {
+                        ContactAction("Video call",Icons.Default.Videocam,blue,fg) { c.phones.firstOrNull()?.first?.let(onVideo) }
+                        ContactAction("WhatsApp",Icons.Default.Chat,green,fg) { c.phones.firstOrNull()?.first?.let(onWhatsApp) }
+                        ContactAction("Telegram",Icons.Default.Send,blue,fg) { c.phones.firstOrNull()?.first?.let(onTelegram) }
+                    }
+                }
+                Text("Call history",color=muted,fontSize=13.sp,modifier=Modifier.padding(start=12.dp,top=18.dp,bottom=8.dp))
+                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        (if(allHistory) history else history.take(3)).forEach { call ->
+                            Column(Modifier.fillMaxWidth().clickable{onCallDetail(call)}.padding(vertical=9.dp)) {
+                                Text(SimpleDateFormat("h:mm a",Locale.getDefault()).format(Date(call.date)),color=if(call.type==CallLog.Calls.MISSED_TYPE) red else fg,fontWeight=FontWeight.Medium)
+                                Text(call.number,color=muted,fontSize=12.sp);Text(callSummary(call),color=muted,fontSize=12.sp)
+                            }
+                        }
+                        if(history.size>3 && !allHistory) Text("Show more",color=blue,modifier=Modifier.clickable(onClick=onHistory).padding(vertical=8.dp))
+                        if(history.isEmpty()) Text("No call history",color=muted)
+                    }
+                }
+                Text("More",color=muted,fontSize=13.sp,modifier=Modifier.padding(start=12.dp,top=18.dp,bottom=8.dp))
+                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal=15.dp)) {
+                        ContactAction("Default ringtone",Icons.Default.MusicNote,muted,fg,onRingtone)
+                        ContactAction("QR code",Icons.Default.QrCode,muted,fg,onQr)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun IosPhoneScreen() {
-    val context=LocalContext.current
-    val dark=isSystemInDarkTheme()
-    val background=if(dark) Color(0xFF101114) else Color(0xFFF5F5FA)
-    val surface=if(dark) Color(0xFF1C1D22) else Color.White
-    val primaryText=if(dark) Color(0xFFF4F4F7) else Color(0xFF17171C)
-    val secondaryText=if(dark) Color(0xFFA5A6AE) else Color(0xFF85858E)
-    val divider=if(dark) Color(0xFF303139) else Color(0xFFE7E7ED)
-    val green=Color(0xFF30C66B)
-    val prefs=remember { context.getSharedPreferences("phone_preferences",android.content.Context.MODE_PRIVATE) }
-    var tab by remember { mutableStateOf("Recents") }
-    var number by remember { mutableStateOf("") }
-    var query by remember { mutableStateOf("") }
-    var contacts by remember { mutableStateOf(emptyList<PhoneContact>()) }
-    var recents by remember { mutableStateOf(emptyList<RecentCall>()) }
-    var hasCallLogPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED) }
-    var hasCallPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED) }
-    var pendingCall by remember { mutableStateOf("") }
-    var keypadSound by remember { mutableStateOf(prefs.getBoolean("keypad_sound",true)) }
-    var menuExpanded by remember { mutableStateOf(false) }
-    var appearanceExpanded by remember { mutableStateOf(false) }
-
-    val callPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        hasCallPermission=result[Manifest.permission.CALL_PHONE]==true || ContextCompat.checkSelfPermission(context,Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED
-        hasCallLogPermission=result[Manifest.permission.READ_CALL_LOG]==true || ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED
-        if(hasCallLogPermission) recents=loadRecentCalls(context)
-        if(hasCallPermission && pendingCall.isNotBlank()) {
-            val value=pendingCall
-            pendingCall=""
-            try { context.startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(value)))) }
-            catch (_:Exception) { context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value)))) }
+private fun CallHistoryPage(call:DialCall,history:List<DialCall>,fg:Color,muted:Color,card:Color,green:Color,red:Color,onBack:()->Unit,onCall:()->Unit,onNote:()->Unit,onRecordings:()->Unit,onDelete:()->Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(10.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
+            Text("Call history details",Modifier.weight(1f),fontSize=19.sp,color=fg,textAlign=TextAlign.Center)
+            IconButton(onClick=onCall) { Icon(Icons.Default.Call,null,tint=green) }
         }
-    }
-    val callLogPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        hasCallLogPermission=granted
-        if(granted) recents=loadRecentCalls(context)
-    }
-    var hasContactsPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED) }
-    val contactsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        hasContactsPermission=granted
-        if(granted) contacts=loadPhoneContacts(context)
-    }
-    LaunchedEffect(hasContactsPermission) { if(hasContactsPermission) contacts=loadPhoneContacts(context) }
-    LaunchedEffect(tab,hasCallLogPermission) { if(tab=="Recents" && hasCallLogPermission) recents=loadRecentCalls(context) }
-    BackHandler(enabled=number.isNotEmpty() || menuExpanded || appearanceExpanded) {
-        when {
-            appearanceExpanded -> appearanceExpanded=false
-            menuExpanded -> menuExpanded=false
-            else -> number=number.dropLast(1)
-        }
-    }
-    val visibleContacts=contacts.filter { (tab!="Favorites" || it.starred) && (it.name.contains(query,true) || it.number.contains(query,true)) }
-
-    fun playKeyTone(key:String) {
-        if(!keypadSound) return
-        try {
-            val tone=when(key) {
-                "*" -> ToneGenerator.TONE_DTMF_S
-                "#" -> ToneGenerator.TONE_DTMF_P
-                else -> ToneGenerator.TONE_DTMF_0+(key.firstOrNull()?.digitToIntOrNull() ?: 0)
-            }
-            val generator=ToneGenerator(AudioManager.STREAM_DTMF,75)
-            generator.startTone(tone,110)
-            Handler(Looper.getMainLooper()).postDelayed({ try { generator.release() } catch (_:Exception) {} },160)
-        } catch (_:Exception) { }
-    }
-    fun dial(value:String) {
-        if(value.isBlank()) return
-        if(!hasCallPermission) {
-            pendingCall=value
-            callPermission.launch(arrayOf(Manifest.permission.CALL_PHONE,Manifest.permission.READ_CALL_LOG))
-            return
-        }
-        try { context.startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(value)))) }
-        catch (_:SecurityException) { context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(value)))) }
-        catch (_:Exception) { }
-    }
-
-    Column(Modifier.fillMaxSize().background(background).padding(WindowInsets.statusBars.asPaddingValues())) {
-        Row(Modifier.fillMaxWidth().padding(start=22.dp,end=12.dp,top=12.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(if(tab=="Recents") "Recents" else if(tab=="Keypad") "Keypad" else if(tab=="Contacts") "Contacts" else "Favorites",
-                    fontSize=32.sp,fontWeight=FontWeight.Bold,color=primaryText)
-                if(tab=="Recents") Text("Recent calls",fontSize=13.sp,color=secondaryText)
-            }
-            if(tab=="Contacts") {
-                IconButton(onClick={
-                    try { context.startActivity(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)) } catch (_:Exception) {}
-                }) { Icon(Icons.Default.PersonAdd,null,tint=green) }
-            }
-            Box {
-                IconButton(onClick={menuExpanded=true}) { Icon(Icons.Default.MoreVert,null,tint=primaryText) }
-                DropdownMenu(expanded=menuExpanded,onDismissRequest={menuExpanded=false},modifier=Modifier.background(surface)) {
-                    DropdownMenuItem(
-                        text={ Text("Keypad sound") },
-                        trailingIcon={ Switch(checked=keypadSound,onCheckedChange={
-                            keypadSound=it
-                            prefs.edit().putBoolean("keypad_sound",it).apply()
-                        }) },
-                        onClick={
-                            keypadSound=!keypadSound
-                            prefs.edit().putBoolean("keypad_sound",keypadSound).apply()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text={ Text("Appearance") },
-                        trailingIcon={ Icon(Icons.Default.ChevronRight,null) },
-                        onClick={ appearanceExpanded=true; menuExpanded=false }
-                    )
-                    DropdownMenuItem(
-                        text={ Text("Call settings") },
-                        onClick={
-                            menuExpanded=false
-                            try { context.startActivity(Intent("android.telephony.action.CALL_SETTINGS")) }
-                            catch (_:Exception) { try { context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_:Exception) {} }
-                        }
-                    )
-                    DropdownMenuItem(
-                        text={ Text("Contacts settings") },
-                        onClick={
-                            menuExpanded=false
-                            try { context.startActivity(Intent(android.provider.Settings.ACTION_SYNC_SETTINGS)) } catch (_:Exception) {}
-                        }
-                    )
+        LazyColumn(Modifier.weight(1f).padding(horizontal=18.dp),contentPadding=PaddingValues(bottom=12.dp)) {
+            items(history.sortedByDescending{it.date},key={it.id}) { c ->
+                Column(Modifier.fillMaxWidth().background(card,RoundedCornerShape(12.dp)).clickable(onClick=onCall).padding(14.dp)) {
+                    Text(SimpleDateFormat("MMM d  h:mm a",Locale.getDefault()).format(Date(c.date)),color=fg,fontWeight=FontWeight.Medium)
+                    Text(c.number,color=muted,fontSize=12.sp);Text(callSummary(c),color=muted,fontSize=12.sp)
                 }
-                DropdownMenu(expanded=appearanceExpanded,onDismissRequest={appearanceExpanded=false},modifier=Modifier.background(surface)) {
-                    DropdownMenuItem(
-                        text={ Text("System default"+if(dark) " · Dark" else " · Light") },
-                        leadingIcon={ Icon(Icons.Default.Check,null,tint=green) },
-                        onClick={appearanceExpanded=false}
-                    )
-                }
+                Spacer(Modifier.height(7.dp))
             }
         }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(targetState=tab,transitionSpec={fadeIn() togetherWith fadeOut()},modifier=Modifier.fillMaxSize(),label="phone-tabs") { current ->
-                when(current) {
-                    "Keypad" -> Column(Modifier.fillMaxSize().padding(horizontal=30.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(18.dp))
-                        Text(number.ifBlank { " " },fontSize=30.sp,color=primaryText,textAlign=TextAlign.Center,maxLines=1)
-                        Spacer(Modifier.height(20.dp))
-                        val keys=listOf("1","2","3","4","5","6","7","8","9","*","0","#")
-                        keys.chunked(3).forEach { row ->
-                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                                row.forEach { key ->
-                                    Surface(onClick={number+=key;playKeyTone(key)},shape=CircleShape,color=surface,modifier=Modifier.padding(7.dp).size(72.dp)) {
-                                        Box(contentAlignment=Alignment.Center) { Text(key,fontSize=27.sp,color=primaryText) }
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center) {
-                            Spacer(Modifier.width(54.dp))
-                            Surface(onClick={dial(number)},shape=CircleShape,color=green,modifier=Modifier.size(64.dp)) {
-                                Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Call,null,tint=Color.White,modifier=Modifier.size(28.dp)) }
-                            }
-                            Spacer(Modifier.width(18.dp))
-                            IconButton(onClick={number=number.dropLast(1)}) { Icon(Icons.Default.Backspace,null,tint=secondaryText) }
-                        }
-                    }
-                    "Recents" -> {
-                        if(!hasCallLogPermission) {
-                            Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                                Icon(Icons.Default.History,null,tint=secondaryText,modifier=Modifier.size(54.dp))
-                                Text("Allow call history access to view recent calls",fontSize=14.sp,color=secondaryText,textAlign=TextAlign.Center,modifier=Modifier.padding(18.dp))
-                                Button(onClick={callLogPermission.launch(Manifest.permission.READ_CALL_LOG)}) { Text("Allow call history") }
-                            }
-                        } else if(recents.isEmpty()) {
-                            Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { Text("No recent calls",color=secondaryText) }
-                        } else LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp),contentPadding=PaddingValues(top=8.dp,bottom=92.dp)) {
-                            items(recents) { call ->
-                                Row(Modifier.fillMaxWidth().clickable { number=call.number; tab="Keypad" }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                                    Box(Modifier.size(44.dp).clip(CircleShape).background(if(dark) Color(0xFF303139) else Color(0xFFE5E5ED)),contentAlignment=Alignment.Center) {
-                                        Icon(if(call.type==CallLog.Calls.OUTGOING_TYPE) Icons.Default.Call else Icons.Default.CallReceived,null,tint=if(call.type==CallLog.Calls.MISSED_TYPE) Color(0xFFE14D5A) else green)
-                                    }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(call.name.ifBlank { call.number.ifBlank { "Unknown" } },color=primaryText,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                                        Text(call.number+"  ·  "+when(call.type) { CallLog.Calls.INCOMING_TYPE -> "Incoming"; CallLog.Calls.OUTGOING_TYPE -> "Outgoing"; CallLog.Calls.MISSED_TYPE -> "Missed"; else -> "Call" },color=secondaryText,fontSize=12.sp)
-                                    }
-                                    Text(SimpleDateFormat("dd MMM, h:mm a",Locale.getDefault()).format(Date(call.date)),color=secondaryText,fontSize=11.sp)
-                                    IconButton(onClick={dial(call.number)}) { Icon(Icons.Default.Call,null,tint=green) }
-                                }
-                                HorizontalDivider(color=divider)
-                            }
-                        }
-                    }
-                    else -> Column(Modifier.fillMaxSize().padding(horizontal=18.dp)) {
-                        OutlinedTextField(value=query,onValueChange={query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,
-                            placeholder={Text("Search contacts")},leadingIcon={Icon(Icons.Default.Search,null)},shape=RoundedCornerShape(18.dp))
-                        if(!hasContactsPermission) {
-                            Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                                Icon(Icons.Default.Contacts,null,tint=secondaryText,modifier=Modifier.size(52.dp))
-                                Text("Allow contacts access to see your contacts",color=secondaryText,textAlign=TextAlign.Center,modifier=Modifier.padding(18.dp))
-                                Button(onClick={contactsPermission.launch(Manifest.permission.READ_CONTACTS)}) { Text("Allow contacts") }
-                            }
-                        } else if(visibleContacts.isEmpty()) {
-                            Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { Text("No contacts found",color=secondaryText) }
-                        } else LazyColumn(contentPadding=PaddingValues(vertical=12.dp)) {
-                            items(visibleContacts,key={it.name+it.number}) { contact ->
-                                Row(Modifier.fillMaxWidth().clickable { dial(contact.number) }.padding(vertical=10.dp,horizontal=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                                    Box(Modifier.size(46.dp).clip(CircleShape).background(if(dark) Color(0xFF303139) else Color(0xFFE5E5ED)),contentAlignment=Alignment.Center) {
-                                        Text(contact.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",fontSize=18.sp,color=secondaryText,fontWeight=FontWeight.SemiBold)
-                                    }
-                                    Spacer(Modifier.width(13.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(contact.name,color=primaryText,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                                        Text(contact.number,color=secondaryText,fontSize=12.sp)
-                                    }
-                                    if(contact.starred) Icon(Icons.Default.Star,null,tint=Color(0xFFFFB52E),modifier=Modifier.size(18.dp))
-                                    IconButton(onClick={dial(contact.number)}) { Icon(Icons.Default.Call,null,tint=green) }
-                                }
-                                HorizontalDivider(color=divider)
-                            }
-                        }
-                    }
-                }
-            }
-            if(tab=="Recents") {
-                Surface(
-                    onClick={tab="Keypad"},
-                    shape=CircleShape,
-                    color=green,
-                    shadowElevation=8.dp,
-                    modifier=Modifier.align(Alignment.BottomCenter).padding(bottom=12.dp).size(62.dp)
-                ) {
-                    Box(contentAlignment=Alignment.Center) {
-                        Icon(Icons.Default.Dialpad,null,tint=Color.White,modifier=Modifier.size(27.dp))
-                    }
-                }
-            }
-        }
-
-        NavigationBar(containerColor=surface) {
-            listOf("Favorites" to Icons.Default.Star,"Recents" to Icons.Default.History,"Contacts" to Icons.Default.Contacts,"Keypad" to Icons.Default.Dialpad).forEach { (label,icon) ->
-                NavigationBarItem(selected=tab==label,onClick={tab=label},icon={Icon(icon,null)},label={Text(label,fontSize=10.sp)},
-                    colors=NavigationBarItemDefaults.colors(selectedIconColor=green,selectedTextColor=green,indicatorColor=if(dark) Color(0xFF183C29) else Color(0xFFE8F8EE),unselectedIconColor=secondaryText,unselectedTextColor=secondaryText))
-            }
+        NavigationBar(containerColor=Color.Transparent) {
+            NavigationBarItem(selected=false,onClick=onRecordings,icon={Icon(Icons.Default.Voicemail,null)},label={Text("Recorded calls")})
+            NavigationBarItem(selected=false,onClick=onNote,icon={Icon(Icons.Default.Notes,null)},label={Text("Call notes")})
+            NavigationBarItem(selected=false,onClick=onDelete,icon={Icon(Icons.Default.Delete,null)},label={Text("Delete")})
         }
     }
 }
 
-private fun loadRecentCalls(context:android.content.Context):List<RecentCall> {
-    if(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) return emptyList()
-    val result=mutableListOf<RecentCall>()
+@Composable
+private fun CallSettingsPage(fg:Color,muted:Color,card:Color,line:Color,onBack:()->Unit,onItem:(String)->Unit) {
+    val sections=listOf(listOf("Mobile networks","Call recording","Call-forwarding settings","Call waiting","Incoming call settings","Identify unknown numbers","Blocklist","Location","Auto-answer","Advanced settings"),listOf("Privacy","Feedback"))
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
+            Text("Call settings",fontSize=27.sp,color=fg,modifier=Modifier.padding(start=12.dp))
+        }
+        LazyColumn(contentPadding=PaddingValues(horizontal=18.dp,vertical=8.dp)) {
+            sections.forEach { section -> item {
+                Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth().padding(bottom=12.dp)) {
+                    Column(Modifier.padding(horizontal=14.dp)) {
+                        section.forEach { label ->
+                            Row(Modifier.fillMaxWidth().clickable{onItem(label)}.padding(vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(label,color=fg,fontSize=15.sp)
+                                    if(label=="Call waiting") Text("During a call, notify me of other incoming calls",color=muted,fontSize=11.sp)
+                                    if(label=="Location") Text("Show contact location, don't auto-dial country code",color=muted,fontSize=11.sp)
+                                }
+                                if(label=="Call recording" || label=="Auto-answer") Text("Off",color=muted,fontSize=12.sp)
+                                Icon(Icons.Default.ChevronRight,null,tint=muted)
+                            }
+                            if(label!=section.last()) HorizontalDivider(color=line)
+                        }
+                    }
+                }
+            } }
+        }
+    }
+}
+
+@Composable
+private fun RecentRow(c:DialCall,dark:Boolean,fg:Color,muted:Color,line:Color,green:Color,red:Color,onOpen:()->Unit,onCall:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onOpen).padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(if(dark) Color(0xFF343438) else Color(0xFFE7E7EC)),contentAlignment=Alignment.Center) {
+            Icon(if(c.type==CallLog.Calls.MISSED_TYPE) Icons.Default.CallMissed else if(c.type==CallLog.Calls.OUTGOING_TYPE) Icons.Default.CallMade else Icons.Default.CallReceived,null,tint=if(c.type==CallLog.Calls.MISSED_TYPE) red else green)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(c.name.ifBlank{c.number.ifBlank{"Unknown"}},color=if(c.type==CallLog.Calls.MISSED_TYPE) red else fg,fontSize=15.sp,fontWeight=FontWeight.Medium)
+            Text(c.number+"  ·  "+SimpleDateFormat("h:mm a",Locale.getDefault()).format(Date(c.date))+"  "+c.account,color=muted,fontSize=12.sp)
+        }
+        IconButton(onClick=onOpen) { Icon(Icons.Default.ChevronRight,null,tint=muted) }
+        IconButton(onClick=onCall) { Icon(Icons.Default.Call,null,tint=green) }
+    }
+    HorizontalDivider(color=line)
+}
+@Composable
+private fun ContactRow(c:DialContact,dark:Boolean,fg:Color,muted:Color,line:Color,onClick:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(if(dark) Color(0xFF343438) else Color(0xFFE7E7EC)),contentAlignment=Alignment.Center) {
+            Text(c.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",color=muted,fontSize=18.sp,fontWeight=FontWeight.SemiBold)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) { Text(c.name,color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium);Text(c.number,color=muted,fontSize=12.sp) }
+        if(c.starred) Icon(Icons.Default.Star,null,tint=Color(0xFFFFB52E),modifier=Modifier.size(18.dp))
+        Icon(Icons.Default.ChevronRight,null,tint=muted)
+    }
+    HorizontalDivider(color=line)
+}
+@Composable
+private fun DialSearch(value:String,onChange:(String)->Unit,field:Color,fg:Color,muted:Color) {
+    OutlinedTextField(value=value,onValueChange=onChange,modifier=Modifier.fillMaxWidth(),singleLine=true,placeholder={Text("Search contacts",color=muted)},
+        leadingIcon={Icon(Icons.Default.Search,null,tint=muted)},trailingIcon={if(value.isNotBlank()) IconButton(onClick={onChange("")}) { Icon(Icons.Default.Close,null,tint=muted) }},
+        shape=RoundedCornerShape(24.dp),colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=field,unfocusedContainerColor=field,focusedBorderColor=Color.Transparent,unfocusedBorderColor=Color.Transparent,focusedTextColor=fg,unfocusedTextColor=fg))
+}
+@Composable
+private fun PermissionPanel(message:String,button:String,muted:Color,onClick:()->Unit) {
+    Column(Modifier.fillMaxWidth().padding(28.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+        Icon(Icons.Default.Security,null,tint=muted,modifier=Modifier.size(46.dp));Text(message,color=muted,textAlign=TextAlign.Center,modifier=Modifier.padding(14.dp))
+        Button(onClick=onClick) { Text(button) }
+    }
+}
+@Composable
+private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String)->Unit,onDelete:()->Unit,onCall:()->Unit,sims:List<DialSim>) {
+    Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally) {
+        if(number.isNotBlank()) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text(number,Modifier.weight(1f),fontSize=26.sp,color=green,textAlign=TextAlign.Center)
+            IconButton(onClick=onDelete) { Icon(Icons.Default.Backspace,null,tint=muted) }
+        }
+        listOf("1","2","3","4","5","6","7","8","9","*","0","#").chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
+                row.forEach { k -> Column(Modifier.size(68.dp).clip(CircleShape).clickable{onKey(k)},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                    Text(k,fontSize=27.sp,color=fg);Text(when(k){"2"->"ABC";"3"->"DEF";"4"->"GHI";"5"->"JKL";"6"->"MNO";"7"->"PQRS";"8"->"TUV";"9"->"WXYZ";"0"->"+";else->""},fontSize=8.sp,color=muted)
+                } }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=8.dp),horizontalArrangement=Arrangement.Center) {
+            if(sims.size>1) sims.take(2).forEach { sim ->
+                Button(onClick=onCall,modifier=Modifier.weight(1f).padding(horizontal=3.dp),shape=RoundedCornerShape(24.dp),colors=ButtonDefaults.buttonColors(containerColor=green)) {
+                    Icon(Icons.Default.Call,null,modifier=Modifier.size(15.dp));Spacer(Modifier.width(5.dp));Text(sim.name.take(10),fontSize=11.sp,maxLines=1)
+                }
+            } else Button(onClick=onCall,shape=CircleShape,modifier=Modifier.size(60.dp),colors=ButtonDefaults.buttonColors(containerColor=green)) { Icon(Icons.Default.Call,null,tint=Color.White) }
+        }
+    }
+}
+@Composable
+private fun DialFab(green:Color,onClick:()->Unit) {
+    Box(Modifier.fillMaxSize(),contentAlignment=Alignment.BottomCenter) {
+        Surface(onClick=onClick,shape=CircleShape,color=green,shadowElevation=8.dp,modifier=Modifier.padding(bottom=12.dp).size(60.dp)) {
+            Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Dialpad,null,tint=Color.White,modifier=Modifier.size(26.dp)) }
+        }
+    }
+}
+@Composable
+private fun AddFab(green:Color,onClick:()->Unit) {
+    Box(Modifier.fillMaxSize(),contentAlignment=Alignment.BottomEnd) {
+        Surface(onClick=onClick,shape=CircleShape,color=green,shadowElevation=8.dp,modifier=Modifier.padding(end=18.dp,bottom=14.dp).size(56.dp)) {
+            Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Add,null,tint=Color.White,modifier=Modifier.size(28.dp)) }
+        }
+    }
+}
+@Composable
+private fun ContactAction(label:String,icon:androidx.compose.ui.graphics.vector.ImageVector,tint:Color,fg:Color,onClick:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=14.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(label,Modifier.weight(1f),color=fg,fontSize=15.sp);Icon(icon,null,tint=tint)
+    }
+}
+private fun callSummary(c:DialCall):String {
+    val type=when(c.type){CallLog.Calls.INCOMING_TYPE->"Incoming";CallLog.Calls.OUTGOING_TYPE->"Outgoing";CallLog.Calls.MISSED_TYPE->"Missed";CallLog.Calls.REJECTED_TYPE->"Rejected";else->"Call"}
+    val duration=if(c.duration>0) (c.duration/60).toString()+"m "+(c.duration%60)+"s" else "Didn't connect"
+    return type+" · "+duration+" · "+c.account
+}
+private fun playDialTone(key:String) {
     try {
-        context.contentResolver.query(CallLog.Calls.CONTENT_URI,
-            arrayOf(CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER,CallLog.Calls.TYPE,CallLog.Calls.DATE),
-            null,null,CallLog.Calls.DATE+" DESC")?.use { cursor ->
-            val nameIndex=cursor.getColumnIndex(CallLog.Calls.CACHED_NAME)
-            val numberIndex=cursor.getColumnIndex(CallLog.Calls.NUMBER)
-            val typeIndex=cursor.getColumnIndex(CallLog.Calls.TYPE)
-            val dateIndex=cursor.getColumnIndex(CallLog.Calls.DATE)
-            while(cursor.moveToNext()) result.add(RecentCall(cursor.getString(nameIndex).orEmpty(),cursor.getString(numberIndex).orEmpty(),cursor.getInt(typeIndex),cursor.getLong(dateIndex)))
-        }
-    } catch (_:SecurityException) { }
-    return result
+        val tone=when(key){"*"->ToneGenerator.TONE_DTMF_S;"#"->ToneGenerator.TONE_DTMF_P;else->ToneGenerator.TONE_DTMF_0+(key.firstOrNull()?.digitToIntOrNull()?:0)}
+        val tg=ToneGenerator(AudioManager.STREAM_DTMF,70);tg.startTone(tone,100);Handler(Looper.getMainLooper()).postDelayed({try{tg.release()}catch(_:Exception){}},140)
+    } catch (_:Exception) {}
 }
-
-private fun loadPhoneContacts(context:android.content.Context):List<PhoneContact> {
-    if(ContextCompat.checkSelfPermission(context,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED) return emptyList()
-    val result=mutableListOf<PhoneContact>()
+private fun startDialCall(ctx:Context,n:String,sim:DialSim?) {
+    val intent=Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(n)))
+    if(sim?.accountId!=null) try {
+        val telecom=ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        telecom.callCapablePhoneAccounts.firstOrNull{it.id==sim.accountId}?.let{intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,it)}
+    } catch (_:Exception) {}
+    try { ctx.startActivity(intent) } catch (_:SecurityException) { try{ctx.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(n))))}catch(_:Exception){} } catch (_:Exception) {}
+}
+private fun readDialSims(ctx:Context):List<DialSim> {
+    val out=mutableListOf<DialSim>()
     try {
-        context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.Contacts.STARRED),
-            null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC")?.use { cursor ->
-            val nameIndex=cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-            val numberIndex=cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-            val starIndex=cursor.getColumnIndex(ContactsContract.Contacts.STARRED)
-            while(cursor.moveToNext()) {
-                val name=cursor.getString(nameIndex).orEmpty()
-                val number=cursor.getString(numberIndex).orEmpty()
-                if(name.isNotBlank() && number.isNotBlank()) result.add(PhoneContact(name,number,cursor.getInt(starIndex)==1))
+        val sm=ctx.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+        val tm=ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        sm.activeSubscriptionInfoList.orEmpty().forEach { info ->
+            val handle=tm.callCapablePhoneAccounts.firstOrNull{it.id==info.subscriptionId.toString()}
+            out.add(DialSim(info.subscriptionId,info.displayName?.toString()?.ifBlank{"SIM "+(info.simSlotIndex+1)} ?: "SIM "+(info.simSlotIndex+1),handle?.id))
+        }
+    } catch (_:Exception) {}
+    return out
+}
+private fun readDialCalls(ctx:Context):List<DialCall> {
+    if(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) return emptyList()
+    val out=mutableListOf<DialCall>()
+    try {
+        ctx.contentResolver.query(CallLog.Calls.CONTENT_URI,arrayOf(CallLog.Calls._ID,CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER,CallLog.Calls.TYPE,CallLog.Calls.DATE,CallLog.Calls.DURATION,CallLog.Calls.PHONE_ACCOUNT_ID),null,null,CallLog.Calls.DATE+" DESC")?.use { c ->
+            val ix=(0..6).map{c.getColumnIndex(c.getColumnName(it))}
+            while(c.moveToNext()) {
+                val account=c.getString(ix[6]).orEmpty()
+                out.add(DialCall(c.getLong(ix[0]),c.getString(ix[1]).orEmpty(),c.getString(ix[2]).orEmpty(),c.getInt(ix[3]),c.getLong(ix[4]),c.getLong(ix[5]),if(account.isBlank()) "" else "SIM"))
             }
         }
-    } catch (_:SecurityException) { }
-    return result.distinctBy { it.number }
+    } catch (_:Exception) {}
+    return out
 }
+private fun readDialContacts(ctx:Context):List<DialContact> {
+    if(ContextCompat.checkSelfPermission(ctx,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED) return emptyList()
+    val out=mutableListOf<DialContact>()
+    try {
+        ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.Contacts.STARRED),null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC")?.use { c ->
+            val id=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID);val name=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val num=c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);val star=c.getColumnIndex(ContactsContract.Contacts.STARRED)
+            while(c.moveToNext()) out.add(DialContact(c.getLong(id),c.getString(name).orEmpty(),c.getString(num).orEmpty(),c.getInt(star)==1))
+        }
+    } catch (_:Exception) {}
+    return out.distinctBy{it.id}
+}
+private fun readDialContact(ctx:Context,id:Long):DialContactDetail {
+    var name="Contact";val phones=mutableListOf<Pair<String,String>>();val emails=mutableListOf<Pair<String,String>>();val addresses=mutableListOf<Pair<String,String>>();var birthday:String?=null
+    try {
+        ctx.contentResolver.query(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,id),arrayOf(ContactsContract.Contacts.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())name=it.getString(0).orEmpty()}
+        ctx.contentResolver.query(ContactsContract.Data.CONTENT_URI,arrayOf(ContactsContract.Data.MIMETYPE,ContactsContract.Data.DATA1,ContactsContract.Data.DATA2,ContactsContract.Data.DATA3),ContactsContract.Data.CONTACT_ID+"=?",arrayOf(id.toString()),null)?.use { c ->
+            while(c.moveToNext()) {
+                val mime=c.getString(0);val value=c.getString(1).orEmpty();val type=c.getInt(2)
+                val label=c.getString(3)?.takeIf{it.isNotBlank()} ?: "Other"
+                when(mime) {
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE -> if(value.isNotBlank()) phones.add(value to label)
+                    ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE -> if(value.isNotBlank()) emails.add(value to label)
+                    ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE -> if(value.isNotBlank()) addresses.add(value to label)
+                    ContactsContract.CommonDataKinds.Event.CONTENT_ITEM_TYPE -> if(type==ContactsContract.CommonDataKinds.Event.TYPE_BIRTHDAY) birthday=value
+                }
+            }
+        }
+    } catch (_:Exception) {}
+    return DialContactDetail(id,name,phones.distinct(),emails.distinct(),addresses.distinct(),birthday)
+}
+private fun readDialGroups(ctx:Context):List<String> {
+    val out=mutableListOf<String>()
+    try { ctx.contentResolver.query(ContactsContract.Groups.CONTENT_URI,arrayOf(ContactsContract.Groups.TITLE),null,null,ContactsContract.Groups.TITLE+" ASC")?.use{while(it.moveToNext())out.add(it.getString(0).orEmpty())} } catch (_:Exception) {}
+    return out
+}
+private fun openEditContact(ctx:Context,id:Long) { try{ctx.startActivity(Intent(Intent.ACTION_EDIT,ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,id)))}catch(_:Exception){} }
+private fun openSms(ctx:Context,n:String) { try{ctx.startActivity(Intent(Intent.ACTION_SENDTO,Uri.parse("smsto:"+Uri.encode(n))))}catch(_:Exception){} }
+private fun openVideo(ctx:Context,n:String) { try{ctx.startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(n))).putExtra("android.telecom.extra.START_CALL_WITH_VIDEO_STATE",3))}catch(_:Exception){try{ctx.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(n))))}catch(_:Exception){}} }
+private fun openLink(ctx:Context,url:String) { try{ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}catch(_:Exception){} }
+private fun openAndroidSettings(ctx:Context,action:String) { try{ctx.startActivity(Intent(action))}catch(_:Exception){openAndroidCallSettings(ctx)} }
+private fun openAndroidCallSettings(ctx:Context) { try{ctx.startActivity(Intent("android.telephony.action.CALL_SETTINGS"))}catch(_:Exception){try{ctx.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))}catch(_:Exception){}} }
