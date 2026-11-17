@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -48,11 +49,12 @@ fun AppleBootScreen() {
                 val scale = minOf(size.width, size.height) / 24f
                 val left = (size.width - 24f * scale) / 2f
                 val top = (size.height - 24f * scale) / 2f
-                drawContext.transform.translate(left, top)
-                drawContext.transform.scale(scale, scale, pivot = androidx.compose.ui.geometry.Offset.Zero)
-                drawPath(appleLogo, Color.White)
-                drawContext.transform.scale(1f / scale, 1f / scale, pivot = androidx.compose.ui.geometry.Offset.Zero)
-                drawContext.transform.translate(-left, -top)
+                withTransform({
+                    translate(left, top)
+                    scale(scale, scale, pivot = androidx.compose.ui.geometry.Offset.Zero)
+                }) {
+                    drawPath(appleLogo, Color.White)
+                }
             }
             Spacer(Modifier.height(38.dp))
             Box(
@@ -61,8 +63,7 @@ fun AppleBootScreen() {
                     .background(Color(0xFF454545))
             ) {
                 Box(
-                    modifier = Modifier.fillMaxSize()
-                        .width(126.dp * progress)
+                    modifier = Modifier.width(126.dp * progress).height(3.dp)
                         .clip(RoundedCornerShape(50))
                         .background(Color.White)
                 )
