@@ -404,6 +404,7 @@ fun LauncherRoot(db: LauncherDb) {
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
     val widgetBounds = remember { mutableStateMapOf<Int, Rect>() }
     val folderBounds = remember { mutableStateMapOf<String, Rect>() }
+    val folderMemberBounds = remember { mutableStateMapOf<String, Rect>() }
     var dockBounds by remember { mutableStateOf(Rect.Zero) }
     val dockAppBounds = remember { mutableStateMapOf<String, Rect>() }
 
@@ -722,7 +723,7 @@ fun LauncherRoot(db: LauncherDb) {
                 else listOf(Color(0xFF25265E), Color(0xFF62528D), Color(0xFFB36F8B), Color(0xFFE4A17C))
             ) else Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
         ).pointerInput(drawer, controlCenter, locked, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, page) {
-            if (!drawer && !controlCenter && !settings && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+            if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (appBounds.values.none { it.contains(down.position) } && widgetBounds.values.none { it.contains(down.position) } && folderBounds.values.none { it.contains(down.position) }) {
@@ -766,7 +767,7 @@ fun LauncherRoot(db: LauncherDb) {
             Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
         }
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
-            renderEffect = if (controlCenter && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(20f, 20f) else null
+            renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -976,7 +977,17 @@ fun LauncherRoot(db: LauncherDb) {
                             AppIcon(
                                 app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
                                 onBounds={ key,rect -> dockAppBounds[key]=rect },
-                                onDragStart={ draggingApp=dockApp; draggingFromDock=true; dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center; pendingDragPage=page },
+                                onDragStart={
+                                    draggingApp=dockApp
+                                    draggingFromDock=true
+                                    draggingFromFolder=false
+                                    dragSourceFolderId=null
+                                    dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center
+                                    dragOriginBounds=dockAppBounds[packageName] ?: Rect.Zero
+                                    dragOriginPage=page
+                                    dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
+                                    pendingDragPage=page
+                                },
                                 onDrag={ delta -> dragPosition+=delta },
                                 onDragEnd={ finishIconDrag() },
                                 onClick={ activity.launch(dockApp) }
@@ -1067,25 +1078,63 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if(openFolderId!=null) {
             val folder=folders.firstOrNull { it.id==openFolderId }
-            if(folder==null) openFolderId=null else AlertDialog(
-                onDismissRequest={openFolderId=null},
-                title={Text(folder.title)},
-                text={
-                    Column(Modifier.heightIn(max=380.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        folder.packages.mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }.forEach { app ->
-                            Row(Modifier.fillMaxWidth().clickable {
-                                openFolderId=null
-                                activity.launch(app)
-                            }.padding(vertical=9.dp),verticalAlignment=Alignment.CenterVertically) {
-                                Image(app.icon.toBitmap(96,96).asImageBitmap(),null,Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
-                                Spacer(Modifier.width(12.dp))
-                                Text(app.label,color=fg)
+            if(folder==null) openFolderId=null else {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha=.22f)).clickable(
+                    interactionSource=remember { MutableInteractionSource() },indication=null
+                ){openFolderId=null},contentAlignment=Alignment.Center) {
+                    Surface(
+                        modifier=Modifier.fillMaxWidth(.86f).heightIn(min=270.dp,max=440.dp)
+                            .onGloballyPositioned { folderOverlayBounds=it.boundsInRoot() }
+                            .clickable(interactionSource=remember { MutableInteractionSource() },indication=null) {},
+                        shape=RoundedCornerShape(34.dp),
+                        color=Color(0xDDE9EEF4),
+                        border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.72f)),
+                        shadowElevation=28.dp
+                    ) {
+                        Column(Modifier.padding(horizontal=20.dp,vertical=18.dp)) {
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                                Text(folder.title,color=Color(0xFF20242C),fontSize=21.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                IconButton(onClick={openFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
                             }
+                            Spacer(Modifier.height(12.dp))
+                            val folderApps=folder.packages.distinct().mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }
+                            LazyVerticalGrid(
+                                columns=GridCells.Fixed(3),
+                                modifier=Modifier.fillMaxWidth().weight(1f,false),
+                                horizontalArrangement=Arrangement.spacedBy(8.dp),
+                                verticalArrangement=Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(folderApps.size) { index ->
+                                    val app=folderApps[index]
+                                    AppIcon(
+                                        app=app,labels=true,fg=Color(0xFF242A33),size=54.dp,
+                                        onBounds={ key,rect -> folderMemberBounds[key]=rect },
+                                        onDragStart={
+                                            draggingApp=app
+                                            draggingFromDock=false
+                                            draggingFromFolder=true
+                                            dragSourceFolderId=folder.id
+                                            dragPosition=folderMemberBounds[app.packageName]?.center ?: folderOverlayBounds.center
+                                            dragOriginBounds=folderMemberBounds[app.packageName] ?: Rect.Zero
+                                            dragOriginPage=folder.page
+                                            dragOriginSlot=folder.slot
+                                            pendingDragPage=folder.page
+                                        },
+                                        onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition) },
+                                        onDragEnd={ finishIconDrag() },
+                                        onClick={
+                                            openFolderId=null
+                                            if(app.packageName=="internal:settings") settings=true else activity.launch(app)
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text("Drag an app outside to remove it from this folder",color=Color(0xFF66707C),fontSize=11.sp,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth())
                         }
                     }
-                },
-                confirmButton={TextButton(onClick={openFolderId=null}){Text("Done")}}
-            )
+                }
+            }
         }
         if (widgetPickerOpen) {
             AlertDialog(
