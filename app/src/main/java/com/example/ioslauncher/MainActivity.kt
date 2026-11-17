@@ -897,12 +897,12 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                         pageApps.forEach { app ->
                             val cell=gridCells["app:"+app.packageName] ?: return@forEach
-                            val center=appBounds[app.packageName]?.center ?: dragPosition
-                            val translation=if(draggingApp?.packageName==app.packageName) dragPosition-center else Offset.Zero
-                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW,cellH),contentAlignment=Alignment.Center) {
+                            val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-x")
+                            val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-y")
+                            Box(Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH).graphicsLayer { alpha=if(draggingApp?.packageName==app.packageName) .10f else 1f },contentAlignment=Alignment.Center) {
                                 AppIcon(
                                     app=app,labels=labels && hideText=="Off",fg=fg,index=0,animationSpeed=animationSpeed,
-                                    dragTranslation=translation,isDragging=draggingApp?.packageName==app.packageName,
+                                    dragTranslation=Offset.Zero,isDragging=false,
                                     size=62.dp,
                                     draggableEnabled=false,
                                     onBounds={ key,rect -> appBounds[key]=rect },
@@ -912,25 +912,35 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                         visibleFolders.forEach { folder ->
                             val cell=gridCells["folder:"+folder.id] ?: return@forEach
-                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW,cellH)
+                            val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-x")
+                            val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-y")
+                            Box(Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
                                 .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() },contentAlignment=Alignment.Center) {
                                 FolderTile(folder,apps,fg,onClick={openFolderId=folder.id})
                             }
                         }
                         if(showWeatherWidget && targetPage==weatherWidgetPage) {
                             val cell=gridCells["widget:-1001"]
-                            if(cell!=null) Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*2,cellH*2)
+                            if(cell!=null) {
+                                val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-x")
+                                val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-y")
+                                Box(Modifier.offset(x=wx,y=wy).size(cellW*2,cellH*2).graphicsLayer { alpha=if(draggingWidgetId==-1001) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[-1001]=it.boundsInRoot(); if(draggingWidgetId==-1001) widgetCanvasBounds=it.boundsInRoot() }) {
                                 HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth(),Color(0xFFFFB648))
+                                }
                             }
                         }
                         if(showTodayWidget && targetPage==todayWidgetPage) {
                             val cell=gridCells["widget:-1002"]
-                            if(cell!=null) Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*2,cellH*2)
+                            if(cell!=null) {
+                                val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-x")
+                                val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-y")
+                                Box(Modifier.offset(x=wx,y=wy).size(cellW*2,cellH*2).graphicsLayer { alpha=if(draggingWidgetId==-1002) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[-1002]=it.boundsInRoot(); if(draggingWidgetId==-1002) widgetCanvasBounds=it.boundsInRoot() }) {
                                 HomeWidget("TODAY",SimpleDateFormat("d",Locale.getDefault()).format(Date()),
                                     SimpleDateFormat("EEEE",Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
                                     Icons.Default.CalendarMonth,Modifier.fillMaxWidth(),Color(0xFFEF6375))
+                                }
                             }
                         }
                         widgetInfoMap.forEach { (widgetId,info) ->
@@ -938,7 +948,9 @@ fun LauncherRoot(db: LauncherDb) {
                             val custom=widgetSizes[widgetId] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
                             val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                             val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,rows)
-                            Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*spanX,cellH*spanY)
+                            val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-x-$widgetId")
+                            val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-y-$widgetId")
+                            Box(Modifier.offset(x=wx,y=wy).size(cellW*spanX,cellH*spanY).graphicsLayer { alpha=if(draggingWidgetId==widgetId) .12f else 1f }
                                 .onGloballyPositioned { widgetBounds[widgetId]=it.boundsInRoot(); if(draggingWidgetId==widgetId) widgetCanvasBounds=it.boundsInRoot() }) {
                                 AndroidView(factory={ activity.widgetHost.createView(it,widgetId,info) },modifier=Modifier.fillMaxSize())
                                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp).clip(CircleShape)
@@ -1004,13 +1016,6 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
 
-        draggingApp?.let { dragged ->
-            val bitmap=remember(dragged.packageName) { dragged.icon.toBitmap(144,144).asImageBitmap() }
-            val half=with(density){34.dp.toPx()}
-            Image(bitmap,contentDescription="Moving ${dragged.label}",
-                modifier=Modifier.offset { IntOffset((dragPosition.x-half).toInt(),(dragPosition.y-half).toInt()) }
-                    .size(68.dp).clip(RoundedCornerShape(18.dp)).shadow(12.dp,RoundedCornerShape(18.dp)).graphicsLayer { alpha=.96f })
-        }
         if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
             val half=with(density){52.dp.toPx()}
             val label=when(draggingWidgetId) {
@@ -1135,6 +1140,13 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
+        }
+        draggingApp?.let { dragged ->
+            val bitmap=remember(dragged.packageName) { dragged.icon.toBitmap(144,144).asImageBitmap() }
+            val half=with(density){34.dp.toPx()}
+            Image(bitmap,contentDescription="Moving ${dragged.label}",
+                modifier=Modifier.offset { IntOffset((dragPosition.x-half).toInt(),(dragPosition.y-half).toInt()) }
+                    .size(68.dp).clip(RoundedCornerShape(18.dp)).shadow(12.dp,RoundedCornerShape(18.dp)).graphicsLayer { alpha=.96f })
         }
         if (widgetPickerOpen) {
             AlertDialog(
