@@ -1,6 +1,6 @@
 package com.example.ioslauncher
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -14,23 +14,28 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun AppleBootScreen() {
     val progress by animateFloatAsState(
         targetValue = 1f,
-        animationSpec = tween(durationMillis = 2450, easing = FastOutSlowInEasing),
-        label = "bootProgress"
+        animationSpec = tween(durationMillis = 2600, easing = LinearEasing),
+        label = "appleBootProgress"
     )
+
+    // The supplied 24x24 SVG path, rendered in white on the black boot screen.
+    val appleLogo = PathParser().parsePathString(
+        "M12 5.5c0 -3 1.5 -4.5 4.5 -4.5 0 3 -1.5 4.5 -4.5 4.5Zm-1.327 1.633c-.642 -.295 -1.378 -.633 -2.337 -.633 -2.129 0 -5.323 2.129 -5.323 6.387C3.013 17.145 5.713 23 8.336 23c.798 0 1.33 -.266 1.863 -.532 .532 -.266 1.064 -.532 1.863 -.532 .798 0 1.463 .266 2.129 .532 .665 .266 1.33 .532 2.129 .532 1.835 0 3.707 -2.864 4.666 -6.044 -.882 -.32 -2.646 -1.971 -2.646 -4.069 0 -2.706 1.237 -3.923 1.855 -4.33C19.08 7.186 17.528 6.5 16.32 6.5c-.96 0 -1.864 .338 -2.654 .633 -.613 .228 -1.157 .432 -1.604 .432 -.448 0 -.89 -.204 -1.389 -.432Z"
+    ).toPath().apply { fillType = PathFillType.EvenOdd }
+
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center
@@ -39,31 +44,15 @@ fun AppleBootScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Canvas(modifier = Modifier.width(88.dp).height(104.dp)) {
-                val sx = size.width / 100f
-                val sy = size.height / 118f
-                val apple = Path().apply {
-                    moveTo(50f*sx, 29f*sy)
-                    cubicTo(40f*sx, 18f*sy, 23f*sx, 21f*sy, 14f*sx, 34f*sy)
-                    cubicTo(2f*sx, 51f*sy, 12f*sx, 82f*sy, 25f*sx, 99f*sy)
-                    cubicTo(33f*sx, 110f*sy, 40f*sx, 105f*sy, 50f*sx, 105f*sy)
-                    cubicTo(61f*sx, 105f*sy, 67f*sx, 111f*sy, 77f*sx, 99f*sy)
-                    cubicTo(88f*sx, 84f*sy, 99f*sx, 53f*sy, 87f*sx, 36f*sy)
-                    cubicTo(77f*sx, 22f*sy, 60f*sx, 20f*sy, 50f*sx, 29f*sy)
-                    close()
-                }
-                drawPath(apple, Color.White, style = Fill)
-                val bite = Path().apply {
-                    addOval(androidx.compose.ui.geometry.Rect(73f*sx, 44f*sy, 96f*sx, 68f*sy))
-                }
-                drawPath(bite, Color.Black, style = Fill)
-                val leaf = Path().apply {
-                    moveTo(51f*sx, 23f*sy)
-                    cubicTo(52f*sx, 9f*sy, 65f*sx, 1f*sy, 79f*sx, 2f*sy)
-                    cubicTo(78f*sx, 16f*sy, 67f*sx, 25f*sy, 51f*sx, 23f*sy)
-                    close()
-                }
-                drawPath(leaf, Color.White, style = Fill)
+            Canvas(modifier = Modifier.width(92.dp).height(92.dp)) {
+                val scale = minOf(size.width, size.height) / 24f
+                val left = (size.width - 24f * scale) / 2f
+                val top = (size.height - 24f * scale) / 2f
+                drawContext.transform.translate(left, top)
+                drawContext.transform.scale(scale, scale, pivot = androidx.compose.ui.geometry.Offset.Zero)
+                drawPath(appleLogo, Color.White)
+                drawContext.transform.scale(1f / scale, 1f / scale, pivot = androidx.compose.ui.geometry.Offset.Zero)
+                drawContext.transform.translate(-left, -top)
             }
             Spacer(Modifier.height(38.dp))
             Box(
@@ -72,7 +61,8 @@ fun AppleBootScreen() {
                     .background(Color(0xFF454545))
             ) {
                 Box(
-                    modifier = Modifier.width(126.dp * progress).height(3.dp)
+                    modifier = Modifier.fillMaxSize()
+                        .width(126.dp * progress)
                         .clip(RoundedCornerShape(50))
                         .background(Color.White)
                 )
