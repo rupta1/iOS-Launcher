@@ -25,7 +25,7 @@ class SystemGestureService : AccessibilityService() {
     private val overlays = mutableListOf<View>()
     private var density = 1f
     private var edgeSize = 22
-    private var bottomSize = 34
+    private var bottomSize = 28
     private var navBarHeight = 0
     private val threshold get() = (58 * density).toInt()
     private val longSwipeMs = 260L
@@ -35,11 +35,11 @@ class SystemGestureService : AccessibilityService() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         density = resources.displayMetrics.density
         edgeSize = (22 * density).toInt()
-        bottomSize = (34 * density).toInt()
+        bottomSize = (28 * density).toInt()
         navBarHeight = getNavigationBarHeight()
         addGestureZone(Gravity.START or Gravity.TOP, edgeSize, WindowManager.LayoutParams.MATCH_PARENT, 0, 0, Zone.LEFT)
         addGestureZone(Gravity.END or Gravity.TOP, edgeSize, WindowManager.LayoutParams.MATCH_PARENT, 0, 0, Zone.RIGHT)
-        addGestureZone(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, WindowManager.LayoutParams.MATCH_PARENT, bottomSize, 0, navBarHeight, Zone.BOTTOM)
+        addGestureZone(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, (120 * density).toInt(), bottomSize, 0, navBarHeight, Zone.BOTTOM)
     }
 
     private enum class Zone { LEFT, RIGHT, BOTTOM }
@@ -108,9 +108,7 @@ class SystemGestureService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
-    override fun onInterrupt() {
-        removeGestureZones()
-    }
+    override fun onInterrupt() = Unit
 
     override fun onDestroy() {
         removeGestureZones()
