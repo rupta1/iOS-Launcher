@@ -483,7 +483,7 @@ fun LauncherRoot(db: LauncherDb) {
         fun capacityFor(index: Int): Int {
             val widgetCells = homeWidgets.count { it.second == index } * 4
             val builtInCells = (if (showWeatherWidget && index == weatherWidgetPage) 4 else 0) + (if (showTodayWidget && index == todayWidgetPage) 4 else 0)
-            return (columns * rows.coerceAtLeast(1) - widgetCells - builtInCells).coerceAtLeast(1)
+            return (columns * rows.coerceAtLeast(1) - widgetCells - builtInCells - folders.count { it.page==index }).coerceAtLeast(1)
         }
         apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
             val explicitPage = appPageAssignments[app.packageName]
@@ -624,6 +624,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
+    LaunchedEffect(page) { appBounds.clear(); widgetBounds.clear(); folderBounds.clear() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -857,6 +858,21 @@ fun LauncherRoot(db: LauncherDb) {
                             Box(Modifier.offset(x=cellW*cell.column,y=cellH*cell.row).size(cellW*spanX,cellH*spanY)
                                 .onGloballyPositioned { widgetBounds[widgetId]=it.boundsInRoot(); if(draggingWidgetId==widgetId) widgetCanvasBounds=it.boundsInRoot() }) {
                                 AndroidView(factory={ activity.widgetHost.createView(it,widgetId,info) },modifier=Modifier.fillMaxSize())
+                                Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp).clip(CircleShape)
+                                    .background(Color(0x88333333)).pointerInput(widgetId) {
+                                        detectDragGestures(
+                                            onDrag={ change,amount ->
+                                                change.consume()
+                                                val current=widgetSizes[widgetId] ?: (custom.first to custom.second)
+                                                val w=(current.first+with(density){amount.x.toDp()}).coerceIn(110.dp,cellW*columns)
+                                                val h=(current.second+with(density){amount.y.toDp()}).coerceIn(90.dp,cellH*rows)
+                                                widgetSizes=widgetSizes+(widgetId to (w to h))
+                                                db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
+                                            }
+                                        )
+                                    }) {
+                                    Icon(Icons.Default.OpenInFull,null,tint=Color.White,modifier=Modifier.padding(5.dp))
+                                }
                             }
                         }
                     }
