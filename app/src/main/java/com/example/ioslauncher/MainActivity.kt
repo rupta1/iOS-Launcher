@@ -1690,6 +1690,9 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         } } catch (_:Exception) { null }
         if(cameraId != null) try { cameraManager.setTorchMode(cameraId,!torchOn); torchOn=!torchOn } catch (_:Exception) { open(Intent(Settings.ACTION_SETTINGS)) }
     }
+    val torchPermission = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if(granted) toggleTorch()
+    }
     val wifiOn = state.transport=="Wi-Fi"
     val bluetoothOn = state.bluetooth=="On"
     val airplaneOn = try { android.provider.Settings.Global.getInt(context.contentResolver,android.provider.Settings.Global.AIRPLANE_MODE_ON,0)==1 } catch (_:Exception) { false }
@@ -1795,7 +1798,10 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
         }
         Spacer(Modifier.height(14.dp))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-            IosUtilityButton(if(torchOn) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,"Flashlight",Modifier.weight(1f)) { toggleTorch() }
+            IosUtilityButton(if(torchOn) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,"Flashlight",Modifier.weight(1f)) {
+                if(ContextCompat.checkSelfPermission(context,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED) toggleTorch()
+                else torchPermission.launch(Manifest.permission.CAMERA)
+            }
             IosUtilityButton(Icons.Default.Timer,"Timer",Modifier.weight(1f)) { open(Intent(android.provider.AlarmClock.ACTION_SET_TIMER)) }
             IosUtilityButton(Icons.Default.Calculate,"Calculator",Modifier.weight(1f)) {
                 val launch=context.packageManager.getLaunchIntentForPackage("com.google.android.calculator")
