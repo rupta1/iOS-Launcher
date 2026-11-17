@@ -490,17 +490,27 @@ fun LauncherRoot(db: LauncherDb) {
         val result = mutableMapOf<Int, MutableList<InstalledApp>>()
         var defaultPage = 0
         fun capacityFor(index: Int): Int {
-            val widgetCells = homeWidgets.count { it.second == index } * 4
-            val builtInCells = (if (showWeatherWidget && index == weatherWidgetPage) 4 else 0) + (if (showTodayWidget && index == todayWidgetPage) 4 else 0)
-            return (columns * rows.coerceAtLeast(1) - widgetCells - builtInCells - folders.count { it.page==index }).coerceAtLeast(1)
+            val densityScale=context.resources.displayMetrics.density.coerceAtLeast(1f)
+            val screenWidthDp=context.resources.displayMetrics.widthPixels/densityScale
+            val screenHeightDp=context.resources.displayMetrics.heightPixels/densityScale
+            val cellWidth=(screenWidthDp/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+            val cellHeight=(screenHeightDp/rows.coerceAtLeast(1)).coerceAtLeast(1f)
+            val widgetCells=homeWidgets.filter { it.second==index }.sumOf { (id,_) ->
+                val info=AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
+                if(info==null) 4 else {
+                    val spanX=kotlin.math.ceil(info.minWidth.coerceAtLeast(110)/cellWidth).toInt().coerceIn(1,columns)
+                    val spanY=kotlin.math.ceil(info.minHeight.coerceAtLeast(90)/cellHeight).toInt().coerceIn(1,rows)
+                    spanX*spanY
+                }
+            }
+            val builtInCells=(if(showWeatherWidget && weatherWidgetPage==index) 4 else 0)+(if(showTodayWidget && todayWidgetPage==index) 4 else 0)
+            return (columns*rows.coerceAtLeast(1)-widgetCells-builtInCells-folders.count { it.page==index }).coerceAtLeast(1)
         }
         apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
-            val explicitPage = appPageAssignments[app.packageName]
-            val destination = if (explicitPage != null) explicitPage.coerceAtLeast(0) else {
-                while ((result[defaultPage]?.size ?: 0) >= capacityFor(defaultPage)) defaultPage++
-                defaultPage
-            }
+            var destination=(appPageAssignments[app.packageName] ?: defaultPage).coerceAtLeast(0)
+            while((result[destination]?.size ?: 0)>=capacityFor(destination)) destination++
             result.getOrPut(destination) { mutableListOf() }.add(app)
+            if(appPageAssignments[app.packageName]==null) defaultPage=destination
         }
         val maxPage = maxOf(
             result.keys.maxOrNull() ?: 0,
