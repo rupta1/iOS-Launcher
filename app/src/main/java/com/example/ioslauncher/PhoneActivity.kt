@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -273,11 +274,88 @@ private fun IosDialer() {
                                 items(shownContacts,key={it.id}) { c -> ContactRow(c,dark,fg,muted,line,{showContact(c.id)}) }
                             }
                         }
-                        else -> Column(Modifier.fillMaxSize().padding(horizontal=22.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                        "Keypad" -> Column(
+                            Modifier.fillMaxSize().padding(horizontal=22.dp),
+                            horizontalAlignment=Alignment.CenterHorizontally
+                        ) {
+                            Spacer(Modifier.height(10.dp))
+                            if(dial.isNotBlank()) {
+                                val digits=dial.filter(Char::isDigit)
+                                val matches=contacts.filter { digits.isNotBlank() && it.number.filter(Char::isDigit).contains(digits) }.take(2)
+                                AnimatedVisibility(
+                                    visible=true,
+                                    enter=fadeIn(tween(180))+slideInVertically(tween(180)){ -it/3 },
+                                    exit=fadeOut(tween(120))
+                                ) {
+                                    Surface(
+                                        modifier=Modifier.fillMaxWidth().padding(bottom=8.dp),
+                                        shape=RoundedCornerShape(18.dp),
+                                        color=if(dark) Color(0xFF202023) else Color(0xFFE9E9EF)
+                                    ) {
+                                        Column(Modifier.padding(horizontal=14.dp,vertical=10.dp)) {
+                                            matches.forEach { match ->
+                                                Row(
+                                                    Modifier.fillMaxWidth().clickable{showContact(match.id)}.padding(vertical=5.dp),
+                                                    verticalAlignment=Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Default.Person,null,tint=blue)
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(match.name,color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                                        Text(match.number,color=muted,fontSize=11.sp)
+                                                    }
+                                                    Text("Open",color=blue,fontSize=12.sp)
+                                                }
+                                            }
+                                            Row(Modifier.fillMaxWidth().padding(top=4.dp),horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                                                Text(
+                                                    "Create New Contact",
+                                                    Modifier.weight(1f).clickable {
+                                                        try {
+                                                            ctx.startActivity(Intent(ContactsContract.Intents.Insert.ACTION)
+                                                                .setType(ContactsContract.RawContacts.CONTENT_TYPE)
+                                                                .putExtra(ContactsContract.Intents.Insert.PHONE,dial))
+                                                        } catch (_:Exception) {}
+                                                    }.padding(vertical=8.dp),
+                                                    color=green,fontSize=12.sp,fontWeight=FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    "Add to Existing Contact",
+                                                    Modifier.weight(1f).clickable {
+                                                        try {
+                                                            ctx.startActivity(Intent(Intent.ACTION_INSERT_OR_EDIT)
+                                                                .setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE)
+                                                                .putExtra(ContactsContract.Intents.Insert.PHONE,dial))
+                                                        } catch (_:Exception) {}
+                                                    }.padding(vertical=8.dp),
+                                                    color=blue,fontSize=12.sp,fontWeight=FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.weight(1f))
                             DialPad(dial,fg,muted,green,onKey={key(it)},onDelete={dial=dial.dropLast(1)},onCall={
                                 if(sims.size>1) simChooser=true else callNumber(dial,sims.firstOrNull())
                             },sims=sims)
+                            Spacer(Modifier.weight(1f))
                         }
+                        "Voicemail" -> Column(
+                            Modifier.fillMaxSize().padding(28.dp),
+                            horizontalAlignment=Alignment.CenterHorizontally,
+                            verticalArrangement=Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.Voicemail,null,tint=muted,modifier=Modifier.size(58.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text("Voicemail",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Voicemail messages provided by your carrier will appear here when supported.",
+                                color=muted,fontSize=14.sp,textAlign=TextAlign.Center
+                            )
+                        }
+                        else -> Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally) {}
                     }
                     }
                     Column(Modifier.fillMaxSize()) {
@@ -291,60 +369,125 @@ private fun IosDialer() {
                         try { ctx.startActivity(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)) } catch (_:Exception) {}
                     }
                 }
-                NavigationBar(containerColor=card) {
-                    listOf("Favorites" to Icons.Default.Star,"Recents" to Icons.Default.History,"Contacts" to Icons.Default.Contacts,"Keypad" to Icons.Default.Dialpad).forEach { (label,icon) ->
-                        NavigationBarItem(selected=tab==label,onClick={tab=label;query="";keypadOpen=false},icon={Icon(icon,null)},label={Text(label,fontSize=10.sp)},
-                            colors=NavigationBarItemDefaults.colors(selectedIconColor=green,selectedTextColor=green,indicatorColor=if(dark) Color(0xFF183C29) else Color(0xFFE8F8EE),unselectedIconColor=muted,unselectedTextColor=muted))
+                NavigationBar(containerColor=if(dark) Color(0xFF1C1C1E) else Color(0xFFF1F1F4),contentColor=fg) {
+                    listOf(
+                        "Favorites" to Icons.Default.Star,
+                        "Recents" to Icons.Default.History,
+                        "Contacts" to Icons.Default.Contacts,
+                        "Keypad" to Icons.Default.Dialpad,
+                        "Voicemail" to Icons.Default.Voicemail
+                    ).forEach { (label,icon) ->
+                        NavigationBarItem(
+                            selected=tab==label,
+                            onClick={tab=label;query="";keypadOpen=false},
+                            icon={Icon(icon,null,modifier=Modifier.size(23.dp))},
+                            label={Text(label,fontSize=9.sp,maxLines=1)},
+                            colors=NavigationBarItemDefaults.colors(
+                                selectedIconColor=blue,
+                                selectedTextColor=blue,
+                                indicatorColor=Color.Transparent,
+                                unselectedIconColor=muted,
+                                unselectedTextColor=muted
+                            )
+                        )
                     }
                 }
             }
         }
     }
 
-    if(topMenu) AlertDialog(
-        onDismissRequest={topMenu=false},
-        title={Text("Settings",color=fg,fontWeight=FontWeight.SemiBold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Surface(shape=RoundedCornerShape(18.dp),color=card) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Keypad sounds",color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                            Text("Play tones when tapping dialpad keys",color=muted,fontSize=12.sp)
-                        }
-                        Switch(checked=keypadSound,onCheckedChange={keypadSound=it;prefs.edit().putBoolean("keypad_sound",it).apply()})
+    if(topMenu) Dialog(onDismissRequest={topMenu=false}) {
+        Surface(
+            modifier=Modifier.fillMaxWidth().padding(12.dp),
+            shape=RoundedCornerShape(30.dp),
+            color=if(dark) Color(0xFF1C1C1E) else Color(0xFFF7F7FA),
+            tonalElevation=6.dp
+        ) {
+            Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(13.dp)) {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Phone Settings",color=fg,fontSize=25.sp,fontWeight=FontWeight.Bold)
+                        Text("Customize your calling experience",color=muted,fontSize=12.sp)
+                    }
+                    IconButton(onClick={topMenu=false}) {
+                        Icon(Icons.Default.Close,null,tint=muted)
                     }
                 }
-                Surface(shape=RoundedCornerShape(18.dp),color=card) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Default.DarkMode,null,tint=muted)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Appearance",color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                            Text("Follow system · "+if(dark) "Dark" else "Light",color=muted,fontSize=12.sp)
+                Text("SOUNDS & FEEDBACK",color=muted,fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.sp)
+                Surface(shape=RoundedCornerShape(20.dp),color=card) {
+                    Column(Modifier.padding(horizontal=15.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(vertical=13.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Surface(shape=CircleShape,color=if(dark) Color(0xFF343438) else Color(0xFFE9E9EF),modifier=Modifier.size(38.dp)) {
+                                Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.VolumeUp,null,tint=blue) }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Keypad sounds",color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                Text("Play tones when dialing numbers",color=muted,fontSize=11.sp)
+                            }
+                            Switch(checked=keypadSound,onCheckedChange={keypadSound=it;prefs.edit().putBoolean("keypad_sound",it).apply()})
                         }
-                        Icon(Icons.Default.CheckCircle,null,tint=green)
+                        HorizontalDivider(color=line)
+                        Row(Modifier.fillMaxWidth().padding(vertical=14.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Surface(shape=CircleShape,color=if(dark) Color(0xFF343438) else Color(0xFFE9E9EF),modifier=Modifier.size(38.dp)) {
+                                Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.DarkMode,null,tint=blue) }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Appearance",color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                Text("Automatically follows system · "+if(dark) "Dark" else "Light",color=muted,fontSize=11.sp)
+                            }
+                            Icon(Icons.Default.CheckCircle,null,tint=green)
+                        }
                     }
                 }
-                Surface(onClick={
-                    topMenu=false
-                    dialogTitle="Blocklist"
-                    dialogText=blocked.joinToString("\n")
-                },shape=RoundedCornerShape(18.dp),color=card) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Default.Block,null,tint=muted)
+                Text("CALL MANAGEMENT",color=muted,fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.sp)
+                Surface(
+                    onClick={
+                        topMenu=false
+                        dialogTitle="Blocklist"
+                        dialogText=blocked.joinToString("\n")
+                    },
+                    shape=RoundedCornerShape(20.dp),color=card
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal=15.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Surface(shape=CircleShape,color=if(dark) Color(0xFF343438) else Color(0xFFE9E9EF),modifier=Modifier.size(38.dp)) {
+                            Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Block,null,tint=red) }
+                        }
                         Spacer(Modifier.width(12.dp))
-                        Text("Blocked numbers",color=fg,fontSize=15.sp)
-                        Spacer(Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text("Blocked numbers",color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                            Text(blocked.size.toString()+" blocked",color=muted,fontSize=11.sp)
+                        }
                         Icon(Icons.Default.ChevronRight,null,tint=muted)
                     }
                 }
+                Text("SYSTEM",color=muted,fontSize=10.sp,fontWeight=FontWeight.Bold,letterSpacing=1.sp)
+                Surface(
+                    onClick={topMenu=false;openAndroidCallSettings(ctx)},
+                    shape=RoundedCornerShape(20.dp),color=card
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal=15.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Surface(shape=CircleShape,color=if(dark) Color(0xFF343438) else Color(0xFFE9E9EF),modifier=Modifier.size(38.dp)) {
+                            Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Settings,null,tint=muted) }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("System calling settings",color=fg,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                            Text("SIM, forwarding and carrier options",color=muted,fontSize=11.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight,null,tint=muted)
+                    }
+                }
+                Button(
+                    onClick={topMenu=false},
+                    modifier=Modifier.fillMaxWidth().height(48.dp),
+                    shape=RoundedCornerShape(16.dp),
+                    colors=ButtonDefaults.buttonColors(containerColor=blue)
+                ) { Text("Done",fontWeight=FontWeight.SemiBold) }
             }
-        },
-        confirmButton={TextButton(onClick={topMenu=false}) { Text("Done",color=green) }},
-        shape=RoundedCornerShape(28.dp),
-        containerColor=if(dark) Color(0xFF252529) else Color(0xFFF7F7FA)
-    )
+        }
+    }
     if(simChooser) AlertDialog(onDismissRequest={simChooser=false},title={Text("Choose SIM")},text={
         Column { sims.forEach { sim -> Row(Modifier.fillMaxWidth().clickable{simChooser=false;callNumber(dial,sim)}.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
             Icon(Icons.Default.SimCard,null,tint=green);Spacer(Modifier.width(12.dp));Text(sim.name)
@@ -530,10 +673,28 @@ private fun PermissionPanel(message:String,button:String,muted:Color,onClick:()-
 }
 @Composable
 private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String)->Unit,onDelete:()->Unit,onCall:()->Unit,sims:List<DialSim>) {
-    Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally) {
-        AnimatedVisibility(visible=number.isNotBlank(),enter=fadeIn(tween(140))+slideInVertically(tween(140)){it/3},exit=fadeOut(tween(100))+slideOutVertically(tween(100)){it/3}) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                Text(number,Modifier.weight(1f),fontSize=26.sp,color=green,textAlign=TextAlign.Center,maxLines=1)
+    val keyBg=if(fg.red<0.5f) Color(0xFFE5E5EA) else Color(0xFF2C2C2E)
+    Column(
+        Modifier.fillMaxWidth().padding(top=8.dp,bottom=8.dp),
+        horizontalAlignment=Alignment.CenterHorizontally
+    ) {
+        AnimatedVisibility(
+            visible=number.isNotBlank(),
+            enter=fadeIn(tween(160))+slideInVertically(tween(160)){it/3},
+            exit=fadeOut(tween(110))+slideOutVertically(tween(110)){it/3}
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(54.dp),
+                verticalAlignment=Alignment.CenterVertically
+            ) {
+                Text(
+                    number,
+                    Modifier.weight(1f),
+                    fontSize=29.sp,
+                    color=green,
+                    textAlign=TextAlign.Center,
+                    maxLines=1
+                )
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).pointerInput(Unit) {
                         coroutineScope {
@@ -557,22 +718,55 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
                         }
                     },
                     contentAlignment=Alignment.Center
-                ) { Icon(Icons.Default.Backspace,null,tint=muted) }
+                ) { Icon(Icons.Default.Backspace,null,tint=muted,modifier=Modifier.size(22.dp)) }
             }
         }
+        Spacer(Modifier.height(10.dp))
         listOf("1","2","3","4","5","6","7","8","9","*","0","#").chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                row.forEach { k -> Column(Modifier.size(68.dp).clip(CircleShape).clickable{onKey(k)},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                    Text(k,fontSize=27.sp,color=fg);Text(when(k){"2"->"ABC";"3"->"DEF";"4"->"GHI";"5"->"JKL";"6"->"MNO";"7"->"PQRS";"8"->"TUV";"9"->"WXYZ";"0"->"+";else->""},fontSize=8.sp,color=muted)
-                } }
+            Row(
+                Modifier.fillMaxWidth().padding(vertical=5.dp),
+                horizontalArrangement=Arrangement.SpaceEvenly,
+                verticalAlignment=Alignment.CenterVertically
+            ) {
+                row.forEach { k ->
+                    Column(
+                        Modifier.size(70.dp).clip(CircleShape).background(keyBg)
+                            .clickable { onKey(k) },
+                        horizontalAlignment=Alignment.CenterHorizontally,
+                        verticalArrangement=Arrangement.Center
+                    ) {
+                        Text(k,fontSize=29.sp,color=fg,fontWeight=FontWeight.Normal)
+                        Text(
+                            when(k) {
+                                "2"->"ABC";"3"->"DEF";"4"->"GHI";"5"->"JKL";"6"->"MNO"
+                                "7"->"PQRS";"8"->"TUV";"9"->"WXYZ";"0"->"+"
+                                else->""
+                            },
+                            fontSize=8.sp,color=if(fg.red<0.5f) Color(0xFF66666D) else Color(0xFFB7B7BC),
+                            letterSpacing=1.sp
+                        )
+                    }
+                }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=8.dp),horizontalArrangement=Arrangement.Center) {
-            if(sims.size>1) sims.take(2).forEach { sim ->
-                Button(onClick=onCall,modifier=Modifier.weight(1f).padding(horizontal=3.dp),shape=RoundedCornerShape(24.dp),colors=ButtonDefaults.buttonColors(containerColor=green)) {
-                    Icon(Icons.Default.Call,null,modifier=Modifier.size(15.dp));Spacer(Modifier.width(5.dp));Text(sim.name.take(10),fontSize=11.sp,maxLines=1)
-                }
-            } else Button(onClick=onCall,shape=CircleShape,modifier=Modifier.size(60.dp),colors=ButtonDefaults.buttonColors(containerColor=green)) { Icon(Icons.Default.Call,null,tint=Color.White) }
+        Spacer(Modifier.height(13.dp))
+        Surface(
+            onClick=onCall,
+            shape=CircleShape,
+            color=green,
+            shadowElevation=8.dp,
+            modifier=Modifier.size(76.dp)
+        ) {
+            Box(contentAlignment=Alignment.Center) {
+                Icon(Icons.Default.Call,null,tint=Color.White,modifier=Modifier.size(31.dp))
+            }
+        }
+        if(sims.size>1) {
+            Text(
+                "Choose a SIM after tapping call",
+                color=muted,fontSize=10.sp,
+                modifier=Modifier.padding(top=7.dp)
+            )
         }
     }
 }
