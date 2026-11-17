@@ -468,7 +468,7 @@ fun LauncherRoot(db: LauncherDb) {
                 db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
             }
             widgetSlotAssignments=widgetSlotAssignments+(id to newSlot)
-            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
             when(id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
                 -1002 -> { todayWidgetPage=destinationPage; db.put("today_widget_page",destinationPage.toString()) }
@@ -605,7 +605,7 @@ fun LauncherRoot(db: LauncherDb) {
                 if(targetWidget!=null) {
                     val oldAppSlot=appSlotAssignments[dragged.packageName] ?: 0
                     widgetSlotAssignments=widgetSlotAssignments+(targetWidget to oldAppSlot)
-                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
                 }
                 appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
                 appSlotAssignments=appSlotAssignments+(dragged.packageName to newSlot)
@@ -756,7 +756,7 @@ fun LauncherRoot(db: LauncherDb) {
                                                 draggingWidgetId=widgetKey
                                                 widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
                                                 widgetDragPosition=global
-                                                pendingDragPage=targetPage.coerceAtLeast(0)
+                                                pendingDragPage=page.coerceAtLeast(0)
                                             }
                                             folderKey!=null -> {
                                                 val folder=folders.firstOrNull { it.id==folderKey }
@@ -834,7 +834,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 }
                                 if(widgetUpdates.isNotEmpty()) {
                                     widgetSlotAssignments=widgetSlotAssignments+widgetUpdates
-                                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
                                 }
                             }
                         }
