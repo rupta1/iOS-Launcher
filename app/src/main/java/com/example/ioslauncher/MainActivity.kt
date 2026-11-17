@@ -824,10 +824,17 @@ fun LauncherRoot(db: LauncherDb) {
                         val gridCells=remember(gridTiles,columns,rows,fillCells) { calculateHomeGridCells(gridTiles,columns,rows,fillCells) }
                         LaunchedEffect(targetPage,gridCells,fillCells) {
                             if(fillCells) {
-                                val appUpdates=pageApps.mapNotNull { app -> gridCells["app:"+app.packageName]?.let { app.packageName to (it.row*columns+it.column) } }.toMap()
-                                val widgetUpdates=gridTiles.filter { it.key.startsWith("widget:") }.mapNotNull { tile ->
-                                    gridCells[tile.key]?.let { tile.key.removePrefix("widget:").toIntOrNull()?.let { id -> id to (it.row*columns+it.column) } }
-                                }.toMap()
+                                val appUpdates=mutableMapOf<String,Int>()
+                                pageApps.forEach { app ->
+                                    val cell=gridCells["app:"+app.packageName]
+                                    if(cell!=null) appUpdates[app.packageName]=cell.row*columns+cell.column
+                                }
+                                val widgetUpdates=mutableMapOf<Int,Int>()
+                                gridTiles.filter { it.key.startsWith("widget:") }.forEach { tile ->
+                                    val id=tile.key.removePrefix("widget:").toIntOrNull()
+                                    val cell=gridCells[tile.key]
+                                    if(id!=null && cell!=null) widgetUpdates[id]=cell.row*columns+cell.column
+                                }
                                 if(appUpdates.isNotEmpty()) {
                                     appSlotAssignments=appSlotAssignments+appUpdates
                                     db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
