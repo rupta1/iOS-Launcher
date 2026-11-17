@@ -766,6 +766,8 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    val startedOnItem = appBounds.values.any { it.contains(down.position) } || widgetBounds.values.any { it.contains(down.position) } || folderBounds.values.any { it.contains(down.position) }
+                    if (startedOnItem) return@awaitEachGesture
                     if (appBounds.values.none { it.contains(down.position) } && widgetBounds.values.none { it.contains(down.position) } && folderBounds.values.none { it.contains(down.position) }) {
                     var dx = 0f
                     var dy = 0f
@@ -1464,8 +1466,6 @@ fun ControlCenter(state: DeviceState, dark: Boolean, onDark:(Boolean)->Unit, onC
             .pointerInput(onClose) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed=false)
-                    val startedOnItem = appBounds.values.any { it.contains(down.position) } || widgetBounds.values.any { it.contains(down.position) } || folderBounds.values.any { it.contains(down.position) }
-                    if (startedOnItem) return@awaitEachGesture
                     var totalY = 0f
                     var closed = false
                     while (!closed) {
