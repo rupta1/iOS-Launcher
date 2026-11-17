@@ -77,6 +77,9 @@ private fun IosPhoneScreen() {
                 Text("Phone",fontSize=32.sp,fontWeight=FontWeight.Bold,color=Color(0xFF15151A))
                 Text("Calls and contacts",fontSize=13.sp,color=Color(0xFF777780))
             }
+            if(tab=="Contacts") IconButton(onClick={
+                try { context.startActivity(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)) } catch (_:Exception) { }
+            }) { Icon(Icons.Default.PersonAdd,null,tint=Color(0xFF30B968)) }
             IconButton(onClick={
                 try { context.startActivity(Intent("android.settings.APPLICATION_DETAILS_SETTINGS",Uri.parse("package:"+context.packageName))) } catch (_:Exception) { }
             }) { Icon(Icons.Default.Settings,null,tint=Color(0xFF6D6D75)) }
