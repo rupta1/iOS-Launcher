@@ -35,6 +35,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -665,6 +666,7 @@ private fun copyPhoneNumber(ctx:Context,number:String) {
     try { (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Phone number",number)) } catch (_:Exception) {}
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
     onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
@@ -925,6 +927,7 @@ private fun RecentRow(c:DialCall,dark:Boolean,fg:Color,muted:Color,line:Color,gr
     }
     HorizontalDivider(color=line)
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContactRow(c:DialContact,dark:Boolean,fg:Color,muted:Color,line:Color,onClick:()->Unit) {
     val ctx=LocalContext.current
