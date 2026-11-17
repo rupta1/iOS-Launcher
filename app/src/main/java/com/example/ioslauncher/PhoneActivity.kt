@@ -118,6 +118,7 @@ private fun IosDialer() {
     var filter by remember { mutableStateOf("All calls") }
     var filterMenu by remember { mutableStateOf(false) }
     var topMenu by remember { mutableStateOf(false) }
+    var overflowMenu by remember { mutableStateOf(false) }
     val recentScrollConnection = remember(keypadOpen) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -229,8 +230,12 @@ private fun IosDialer() {
                 Row(Modifier.fillMaxWidth().padding(start=22.dp,end=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(if(tab=="Recents") "Recents" else tab,Modifier.weight(1f),fontSize=32.sp,fontWeight=FontWeight.Bold,color=fg)
                     Box {
-                        IconButton(onClick={topMenu=true}) { Icon(Icons.Default.Settings,null,tint=fg) }
-                        // Settings are presented in the iOS-style sheet below the main content.
+                        IconButton(onClick={overflowMenu=true}) { Icon(Icons.Default.MoreHoriz,null,tint=fg) }
+                        DropdownMenu(expanded=overflowMenu,onDismissRequest={overflowMenu=false}) {
+                            DropdownMenuItem(text={Text("Phone settings")},leadingIcon={Icon(Icons.Default.Settings,null)},onClick={overflowMenu=false;topMenu=true})
+                            DropdownMenuItem(text={Text("Blocked numbers")},leadingIcon={Icon(Icons.Default.Block,null)},onClick={overflowMenu=false;dialogTitle="Blocklist";dialogText=blocked.joinToString("\\n")})
+                            DropdownMenuItem(text={Text("System calling settings")},leadingIcon={Icon(Icons.Default.PhoneAndroid,null)},onClick={overflowMenu=false;openAndroidCallSettings(ctx)})
+                        }
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -663,6 +668,7 @@ private fun copyPhoneNumber(ctx:Context,number:String) {
 @Composable
 private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Boolean,dark:Boolean,card:Color,field:Color,fg:Color,muted:Color,line:Color,green:Color,blue:Color,red:Color,
     onBack:()->Unit,onCall:(String)->Unit,onSms:(String)->Unit,onVideo:(String)->Unit,onWhatsApp:(String)->Unit,onTelegram:(String)->Unit,onEdit:()->Unit,onFavorite:()->Unit,onHistory:()->Unit,onCallDetail:(DialCall)->Unit,onRingtone:()->Unit,onQr:()->Unit,onBlock:()->Unit,onDelete:()->Unit,onShare:()->Unit) {
+    val ctx=LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val history=calls.filter { call -> c.phones.any{it.first==call.number} }
     val panel=if(dark) Color(0xFF242428) else Color.White
@@ -675,6 +681,8 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
             Box {
                 IconButton(onClick={menu=true}) { Icon(Icons.Default.MoreHoriz,null,tint=fg) }
                 DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
+                    DropdownMenuItem(text={Text("Copy number")},leadingIcon={Icon(Icons.Default.ContentCopy,null)},onClick={menu=false;copyPhoneNumber(ctx,c.phones.firstOrNull()?.first.orEmpty())})
+                    DropdownMenuItem(text={Text(if(c.starred) "Remove from Favorites" else "Add to Favorites")},leadingIcon={Icon(Icons.Default.Favorite,null)},onClick={menu=false;onFavorite()})
                     DropdownMenuItem(text={Text("Share contact")},leadingIcon={Icon(Icons.Default.Share,null)},onClick={menu=false;onShare()})
                     DropdownMenuItem(text={Text("Block contact")},leadingIcon={Icon(Icons.Default.Block,null)},onClick={menu=false;onBlock()})
                     DropdownMenuItem(text={Text("Delete contact")},leadingIcon={Icon(Icons.Default.Delete,null)},onClick={menu=false;onDelete()})
@@ -700,7 +708,7 @@ private fun ContactPage(c:DialContactDetail,calls:List<DialCall>,allHistory:Bool
                 ContactSectionCard(panel,dark) {
                     c.phones.forEachIndexed { index,p ->
                         Row(Modifier.fillMaxWidth().padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f).combinedClickable(onClick={},onLongClick={copyPhoneNumber(LocalContext.current,p.first)})) {
+                            Column(Modifier.weight(1f).combinedClickable(onClick={},onLongClick={copyPhoneNumber(ctx,p.first)})) {
                                 Text(p.first,color=blue,fontSize=16.sp,fontWeight=FontWeight.Medium)
                                 Text(p.second.ifBlank{"mobile"}.replaceFirstChar{it.uppercase()},color=muted,fontSize=12.sp,modifier=Modifier.padding(top=3.dp))
                             }
