@@ -54,6 +54,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -837,55 +838,67 @@ fun LauncherRoot(db: LauncherDb) {
         }
              .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings, locked) {
                 if (!drawer && !controlCenter && !settings && openFolderId==null && !locked) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart={ local ->
-                            val global=local
-                            val appKey=appBounds.entries.firstOrNull { it.value.contains(global) }?.key
-                            val widgetKey=widgetBounds.entries.firstOrNull { entry ->
-                                entry.value.contains(global) && widgetResizeHandleBounds[entry.key]?.contains(global)!=true &&
-                                    (entry.key<0 || widgetHandleBounds[entry.key]?.contains(global)==true)
-                            }?.key
-                            when {
-                                appKey!=null -> {
-                                    val app=apps.firstOrNull { it.packageName==appKey }
-                                    if(app!=null) {
-                                        draggingApp=app
-                                        draggingFromDock=false
-                                        draggingFromFolder=false
-                                        dragSourceFolderId=null
-                                        dragPosition=global
-                                        dragOriginBounds=appBounds[appKey] ?: Rect.Zero
-                                        dragOriginPage=page
-                                        dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
-                                        pendingDragPage=page
-                                    }
-                                }
-                                widgetKey!=null -> {
-                                    draggingWidgetId=widgetKey
-                                    widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
-                                    widgetDragPosition=global
+                    awaitEachGesture {
+                        val down=awaitFirstDown(requireUnconsumed=false)
+                        val globalDown=down.position
+                        val appKey=appBounds.entries.firstOrNull { it.value.contains(globalDown) }?.key
+                        val widgetKey=widgetBounds.entries.firstOrNull { entry ->
+                            entry.value.contains(globalDown) && widgetResizeHandleBounds[entry.key]?.contains(globalDown)!=true &&
+                                (entry.key<0 || widgetHandleBounds[entry.key]?.contains(globalDown)==true)
+                        }?.key
+                        if(appKey==null && widgetKey==null) return@awaitEachGesture
+                        val longPress=awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                        when {
+                            appKey!=null -> {
+                                val app=apps.firstOrNull { it.packageName==appKey }
+                                if(app!=null) {
+                                    draggingApp=app
+                                    draggingFromDock=false
+                                    draggingFromFolder=false
+                                    dragSourceFolderId=null
+                                    dragPosition=longPress.position
+                                    dragOriginBounds=appBounds[appKey] ?: Rect.Zero
+                                    dragOriginPage=page
+                                    dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
                                     pendingDragPage=page
                                 }
                             }
-                        },
-                        onDrag={ change, amount ->
-                            if(draggingApp!=null) { change.consume(); dragPosition+=amount; updateDragEdge(dragPosition) }
-                            else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) { change.consume(); widgetDragPosition+=amount; updateDragEdge(widgetDragPosition) }
-                        },
-                        onDragEnd={
+                            widgetKey!=null -> {
+                                draggingWidgetId=widgetKey
+                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
+                                widgetDragPosition=longPress.position
+                                pendingDragPage=page
+                            }
+                        }
+                        var endedNormally=false
+                        while(true) {
+                            val event=awaitPointerEvent(PointerEventPass.Initial)
+                            val change=event.changes.firstOrNull { it.id==down.id } ?: break
+                            if(!change.pressed) {
+                                endedNormally=true
+                                break
+                            }
+                            val delta=change.position-change.previousPosition
+                            if(draggingApp!=null) {
+                                change.consume()
+                                dragPosition+=delta
+                                updateDragEdge(dragPosition)
+                            } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+                                change.consume()
+                                widgetDragPosition+=delta
+                                updateDragEdge(widgetDragPosition)
+                            }
+                        }
+                        if(endedNormally) {
                             if(draggingApp!=null) finishIconDrag()
                             else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
-                        },
-                        onDragCancel={
+                        } else {
                             draggingApp=null
                             draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
-                            draggingFromDock=false
-                            draggingFromFolder=false
-                            dragSourceFolderId=null
                             dragEdgeDirection=0
                             pendingDragPage=page
                         }
-                    )
+                    }
                 }
             }
     ) {
