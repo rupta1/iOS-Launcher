@@ -564,12 +564,14 @@ fun LauncherRoot(db: LauncherDb) {
         fun removeFromSourceFolder() {
             val source=dragSourceFolderId
             if(source!=null) {
-                folders=folders.mapNotNull { folder ->
-                    if(folder.id!=source) folder
-                    else {
-                        val remaining=folder.packages.filterNot { it==dragged.packageName }
-                        if(remaining.isEmpty()) null else folder.copy(packages=remaining)
-                    }
+                val sourceFolder=folders.firstOrNull { it.id==source }
+                val remaining=sourceFolder?.packages.orEmpty().filterNot { it==dragged.packageName }
+                folders=folders.filterNot { it.id==source }.toMutableList().also { updated ->
+                    if(remaining.size>1 && sourceFolder!=null) updated.add(sourceFolder.copy(packages=remaining))
+                }
+                if(remaining.size==1 && sourceFolder!=null) {
+                    appPageAssignments=appPageAssignments+(remaining.first() to sourceFolder.page)
+                    appSlotAssignments=appSlotAssignments+(remaining.first() to sourceFolder.slot)
                 }
                 persistFolders()
             }
@@ -617,7 +619,9 @@ fun LauncherRoot(db: LauncherDb) {
                 val overlapArea=overlap.width.coerceAtLeast(0f)*overlap.height.coerceAtLeast(0f)
                 val minArea=minOf(movingRect.width*movingRect.height,targetBounds.width*targetBounds.height).coerceAtLeast(1f)
                 val centered=targetBounds.contains(dragPosition)
-                val createFolder=centered && overlapArea/minArea>=0.42f
+                val createFolder=centered && overlapArea/minArea>=0.62f &&
+                    kotlin.math.abs(dragPosition.x-targetBounds.center.x)<=targetBounds.width*.30f &&
+                    kotlin.math.abs(dragPosition.y-targetBounds.center.y)<=targetBounds.height*.30f
                 if(createFolder) {
                     removeFromSourceFolder()
                     val existingFolder=folders.firstOrNull { targetApp in it.packages }
@@ -679,6 +683,25 @@ fun LauncherRoot(db: LauncherDb) {
     }
     LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
     LaunchedEffect(page) { appBounds.clear(); widgetBounds.clear(); folderBounds.clear() }
+    LaunchedEffect(apps,folders,dockPackages) {
+        val installed=apps.map { it.packageName }.toSet()
+        val seen=mutableSetOf<String>()
+        val cleaned=folders.mapNotNull { folder ->
+            val members=folder.packages.filter { it in installed && seen.add(it) }.distinct()
+            when {
+                members.size>1 -> folder.copy(packages=members)
+                members.size==1 -> {
+                    appPageAssignments=appPageAssignments+(members.first() to folder.page)
+                    appSlotAssignments=appSlotAssignments+(members.first() to folder.slot)
+                    null
+                }
+                else -> null
+            }
+        }
+        if(cleaned!=folders) { folders=cleaned; db.put("home_folders",encodeHomeFolders(cleaned)) }
+        val safeDock=dockPackages.distinct().filter { it in installed && it !in seen }.take(5)
+        if(safeDock!=dockPackages) { dockPackages=safeDock; db.put("dock_packages",safeDock.joinToString("|")) }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
