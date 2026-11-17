@@ -1032,8 +1032,7 @@ fun LauncherRoot(db: LauncherDb) {
                                 Box(
                                     Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp)
                                         .onGloballyPositioned { widgetHandleBounds[widgetId]=it.boundsInRoot() }
-                                        .clip(CircleShape).background(Color(0x88333333))
-
+                                        .clip(CircleShape).background(Color(0x88333333)),
                                     contentAlignment=Alignment.Center
                                 ) { Text("⠿",color=Color.White,fontSize=19.sp) }
                                 Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp)
