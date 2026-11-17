@@ -909,7 +909,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
     ) {
         if (systemWallpaper != null) {
-            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize())
+            Image(systemWallpaper, contentDescription="Device wallpaper", contentScale=androidx.compose.ui.layout.ContentScale.Crop, modifier=Modifier.fillMaxSize().graphicsLayer { renderEffect = if (drawer && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f,18f) else null })
         }
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
             renderEffect = if ((drawer || controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
