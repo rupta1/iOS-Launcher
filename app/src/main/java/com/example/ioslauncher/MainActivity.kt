@@ -784,8 +784,6 @@ fun LauncherRoot(db: LauncherDb) {
             if (!drawer && !controlCenter && !settings && openFolderId==null && !locked && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val startedOnItem = appBounds.values.any { it.contains(down.position) } || widgetBounds.values.any { it.contains(down.position) } || folderBounds.values.any { it.contains(down.position) }
-                    if (startedOnItem) return@awaitEachGesture
                     if (appBounds.values.none { it.contains(down.position) } && widgetBounds.values.none { it.contains(down.position) } && folderBounds.values.none { it.contains(down.position) }) {
                     var dx = 0f
                     var dy = 0f
@@ -793,6 +791,7 @@ fun LauncherRoot(db: LauncherDb) {
                     while (!finished) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) { finished=true; break }
                         if (!change.pressed) break
                         val delta = change.position - change.previousPosition
                         dx += delta.x
