@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.isSystemInDarkTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -212,7 +213,7 @@ private fun IosDialer() {
                 Row(Modifier.fillMaxWidth().padding(start=22.dp,end=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(if(tab=="Recents") "Recents" else tab,Modifier.weight(1f),fontSize=32.sp,fontWeight=FontWeight.Bold,color=fg)
                     Box {
-                        IconButton(onClick={topMenu=true}) { Icon(Icons.Outlined.Settings,null,tint=fg) }
+                        IconButton(onClick={topMenu=true}) { Icon(Icons.Default.Settings,null,tint=fg) }
                         // Settings are presented in the iOS-style sheet below the main content.
                     }
                 }
@@ -277,17 +278,19 @@ private fun IosDialer() {
                         }
                     }
                     }
-                    AnimatedVisibility(
-                        visible=tab=="Recents" && !keypadOpen,
-                        enter=scaleIn(tween(220))+fadeIn(tween(180))+slideInVertically(tween(220)){ it/2 },
-                        exit=scaleOut(tween(150))+fadeOut(tween(120))+slideOutVertically(tween(150)){ it/2 }
-                    ) { DialFab(green) { keypadOpen=true } }
+                    Column(Modifier.fillMaxSize()) {
+                        AnimatedVisibility(
+                            visible=tab=="Recents" && !keypadOpen,
+                            enter=scaleIn(tween(220))+fadeIn(tween(180))+slideInVertically(tween(220)){ it/2 },
+                            exit=scaleOut(tween(150))+fadeOut(tween(120))+slideOutVertically(tween(150)){ it/2 }
+                        ) { DialFab(green) { keypadOpen=true } }
+                    }
                     if(tab=="Contacts") AddFab(green) {
                         try { ctx.startActivity(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)) } catch (_:Exception) {}
                     }
                 }
                 NavigationBar(containerColor=card) {
-                    listOf("Favorites" to Icons.Outlined.StarBorder,"Recents" to Icons.Outlined.History,"Contacts" to Icons.Outlined.Contacts,"Keypad" to Icons.Outlined.Dialpad).forEach { (label,icon) ->
+                    listOf("Favorites" to Icons.Default.Star,"Recents" to Icons.Default.History,"Contacts" to Icons.Default.Contacts,"Keypad" to Icons.Default.Dialpad).forEach { (label,icon) ->
                         NavigationBarItem(selected=tab==label,onClick={tab=label;query="";keypadOpen=false},icon={Icon(icon,null)},label={Text(label,fontSize=10.sp)},
                             colors=NavigationBarItemDefaults.colors(selectedIconColor=green,selectedTextColor=green,indicatorColor=if(dark) Color(0xFF183C29) else Color(0xFFE8F8EE),unselectedIconColor=muted,unselectedTextColor=muted))
                     }
@@ -312,13 +315,13 @@ private fun IosDialer() {
                 }
                 Surface(shape=RoundedCornerShape(18.dp),color=card) {
                     Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.DarkMode,null,tint=muted)
+                        Icon(Icons.Default.DarkMode,null,tint=muted)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Appearance",color=fg,fontSize=15.sp,fontWeight=FontWeight.Medium)
                             Text("Follow system · "+if(dark) "Dark" else "Light",color=muted,fontSize=12.sp)
                         }
-                        Icon(Icons.Outlined.CheckCircle,null,tint=green)
+                        Icon(Icons.Default.CheckCircle,null,tint=green)
                     }
                 }
                 Surface(onClick={
@@ -327,11 +330,11 @@ private fun IosDialer() {
                     dialogText=blocked.joinToString("\n")
                 },shape=RoundedCornerShape(18.dp),color=card) {
                     Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Block,null,tint=muted)
+                        Icon(Icons.Default.Block,null,tint=muted)
                         Spacer(Modifier.width(12.dp))
                         Text("Blocked numbers",color=fg,fontSize=15.sp)
                         Spacer(Modifier.weight(1f))
-                        Icon(Icons.Outlined.ChevronRight,null,tint=muted)
+                        Icon(Icons.Default.ChevronRight,null,tint=muted)
                     }
                 }
             }
@@ -485,7 +488,7 @@ private fun CallSettingsPage(fg:Color,muted:Color,card:Color,line:Color,onBack:(
 private fun RecentRow(c:DialCall,dark:Boolean,fg:Color,muted:Color,line:Color,green:Color,red:Color,onOpen:()->Unit,onCall:()->Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick=onOpen).padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(if(dark) Color(0xFF343438) else Color(0xFFE7E7EC)),contentAlignment=Alignment.Center) {
-            Icon(if(c.type==CallLog.Calls.MISSED_TYPE) Icons.Outlined.CallMissed else if(c.type==CallLog.Calls.OUTGOING_TYPE) Icons.Outlined.CallMade else Icons.Outlined.CallReceived,null,tint=if(c.type==CallLog.Calls.MISSED_TYPE) red else green)
+            Icon(if(c.type==CallLog.Calls.MISSED_TYPE) Icons.Default.CallMissed else if(c.type==CallLog.Calls.OUTGOING_TYPE) Icons.Default.CallMade else Icons.Default.CallReceived,null,tint=if(c.type==CallLog.Calls.MISSED_TYPE) red else green)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -537,18 +540,19 @@ private fun DialPad(number:String,fg:Color,muted:Color,green:Color,onKey:(String
                             if(longPress==null) {
                                 if(number.isNotEmpty()) onDelete()
                             } else {
-                                var pressed=true
-                                while(pressed) {
-                                    onDelete()
-                                    delay(85)
-                                    val event=awaitPointerEvent()
-                                    pressed=event.changes.any { it.pressed }
+                                val repeatJob=launch {
+                                    while(true) {
+                                        onDelete()
+                                        delay(85)
+                                    }
                                 }
+                                waitForUpOrCancellation()
+                                repeatJob.cancel()
                             }
                         }
                     },
                     contentAlignment=Alignment.Center
-                ) { Icon(Icons.Outlined.Backspace,null,tint=muted) }
+                ) { Icon(Icons.Default.Backspace,null,tint=muted) }
             }
         }
         listOf("1","2","3","4","5","6","7","8","9","*","0","#").chunked(3).forEach { row ->
