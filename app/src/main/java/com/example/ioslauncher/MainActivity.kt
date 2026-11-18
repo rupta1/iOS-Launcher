@@ -1150,14 +1150,20 @@ fun LauncherRoot(db: LauncherDb) {
         .pointerInput(apps,drawer,controlCenter,settings,openFolderId,columns,effectiveRows) {
             if(!drawer&&!controlCenter&&!settings&&openFolderId==null) awaitEachGesture {
                 val down=awaitFirstDown(requireUnconsumed=false)
-                val appKey=appBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
-                val widgetKey=widgetBounds.entries.firstOrNull{e->e.value.contains(down.position)&&widgetResizeHandleBounds[e.key]?.contains(down.position)!=true}?.key
+                val homeAppKey=appBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
+                val dockAppKey=dockAppBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
+                val appKey=homeAppKey ?: dockAppKey
+                // Android widgets keep their normal touch handling; only the explicit grip starts a workspace move.
+                val widgetKey=widgetBounds.entries.firstOrNull{e->
+                    widgetHandleBounds[e.key]?.contains(down.position)==true &&
+                    widgetResizeHandleBounds[e.key]?.contains(down.position)!=true
+                }?.key
                 if(appKey==null&&widgetKey==null)return@awaitEachGesture
                 val long=awaitLongPressOrCancellation(down.id)?:return@awaitEachGesture
                 if(appKey!=null) {
                     val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
-                    draggingApp=app;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null
-                    dragPosition=long.position;dragOriginBounds=appBounds[appKey]?:Rect.Zero
+                    draggingApp=app;draggingFromDock=homeAppKey==null;draggingFromFolder=false;dragSourceFolderId=null
+                    dragPosition=long.position;dragOriginBounds=appBounds[appKey]?:dockAppBounds[appKey]?:Rect.Zero
                     dragOriginPage=page;dragOriginSlot=appSlotAssignments[appKey]?:slotAt(dragOriginBounds.center);pendingDragPage=page
                 } else if(widgetKey!=null) {
                     draggingWidgetId=widgetKey;widgetCanvasBounds=widgetBounds[widgetKey]?:Rect.Zero
@@ -1201,14 +1207,27 @@ fun LauncherRoot(db: LauncherDb) {
                     Spacer(Modifier.height(14.dp))
                     Button(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
                 }
-            } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned{
-                val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[page]=bounds
-                draggingApp?.let{app->updateGridDragPreview(dragPosition,"app:"+app.packageName)}
-            }) {
+            } else AnimatedContent(
+                targetState=page,
+                transitionSpec={
+                    if(targetState>initialState)
+                        (slideInHorizontally(tween(260)){it}+fadeIn(tween(170))) togetherWith
+                            (slideOutHorizontally(tween(260)){-it}+fadeOut(tween(130)))
+                    else
+                        (slideInHorizontally(tween(260)){-it}+fadeIn(tween(170))) togetherWith
+                            (slideOutHorizontally(tween(260)){it}+fadeOut(tween(130)))
+                },
+                label="home-screen-page",
+                modifier=Modifier.weight(1f).fillMaxWidth()
+            ) { renderedPage ->
+                BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned{
+                    val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
+                    draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
+                }) {
                 val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/effectiveRows.coerceAtLeast(1)
-                val pageApps=pageAppSlices.getOrNull(page.coerceAtLeast(0)).orEmpty()
-                val pageFolders=folders.filter{it.page==page}
-                val pageWidgets=homeWidgets.filter{it.second==page}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
+                val pageFolders=folders.filter{it.page==renderedPage}
+                val pageWidgets=homeWidgets.filter{it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
                 val tiles=buildList {
                     pageApps.forEachIndexed{i,app->add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName]?:appSlotAssignments[app.packageName]?:i))}
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot))}
@@ -1223,7 +1242,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
-                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f}) {
+                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
                         AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
@@ -1232,7 +1251,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val cell=cells["folder:"+folder.id]?:return@forEach
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-y")
-                    Box(Modifier.offset(x,y).size(cw,ch).onGloballyPositioned{folderBounds[folder.id]=it.boundsInRoot()}){FolderTile(folder,apps,fg){openFolderId=folder.id}}
+                    Box(Modifier.offset(x,y).size(cw,ch).onGloballyPositioned{folderBounds[folder.id]=it.boundsInRoot()},contentAlignment=Alignment.Center){FolderTile(folder,apps,fg){openFolderId=folder.id}}
                 }
                 pageWidgets.forEach{(id,info)->
                     val cell=cells["widget:"+id]?:return@forEach
@@ -1246,6 +1265,7 @@ fun LauncherRoot(db: LauncherDb) {
                         Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
                     }
                 }
+            }
             }
             Row(Modifier.fillMaxWidth().padding(vertical=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
                 repeat(pageCount){i->Box(Modifier.padding(horizontal=4.dp).size(if(page==i)8.dp else 6.dp).clip(CircleShape).background(if(page==i)Color(0xFF1685F8)else fg.copy(alpha=.28f)).clickable{page=i})}
@@ -1262,7 +1282,9 @@ fun LauncherRoot(db: LauncherDb) {
             Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark) .13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
-                        AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
+                        AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,
+                            onBounds={key,rect->dockAppBounds[key]=rect},
+                            onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
                     if(dockPackages.isEmpty())Text("Hold an app to edit your Home Screen",color=fg.copy(alpha=.6f),fontSize=11.sp)
                 }
