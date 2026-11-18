@@ -794,24 +794,36 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
+    var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun updateDragEdge(position: Offset) {
         val widthPx = activity.window.decorView.width.toFloat()
-        val edgePx = with(density) { 34.dp.toPx() }
+        val edgePx = with(density) { 56.dp.toPx() }
         val direction = when {
             position.x <= edgePx -> -1
             position.x >= widthPx - edgePx -> 1
             else -> 0
         }
-        if (direction == 0) dragEdgeDirection = 0
-        else if (direction != dragEdgeDirection) {
+        if (direction == 0) {
+            dragEdgeDirection = 0
+            lastEdgePageAdvanceAt = 0L
+            return
+        }
+        val now = android.os.SystemClock.uptimeMillis()
+        val shouldAdvance = direction != dragEdgeDirection ||
+            (now - lastEdgePageAdvanceAt) >= 520L
+        if (shouldAdvance) {
             val currentPage = pendingDragPage.coerceAtLeast(0)
             val lastPage = (pageCount - 1).coerceAtLeast(0)
             if (direction > 0 && currentPage >= lastPage) {
                 extraHomePages += 1
                 pendingDragPage = currentPage + 1
-            } else pendingDragPage = (currentPage + direction).coerceAtLeast(0)
+            } else {
+                pendingDragPage = (currentPage + direction).coerceAtLeast(0)
+            }
             dragEdgeDirection = direction
+            lastEdgePageAdvanceAt = now
             page = pendingDragPage
+            dragPreviewSlots = emptyMap()
         }
     }
     fun finishIconDrag() {
@@ -1529,33 +1541,22 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 val dialogView=androidx.compose.ui.platform.LocalView.current
                 val dialogWindow=(dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                 SideEffect {
-                    if (Build.VERSION.SDK_INT >= 31) dialogWindow?.let { window ->
-                        // Keep the dialog window wrap-content so Android blurs only the
-                        // backdrop directly behind this modal, not the entire screen.
+                    dialogWindow?.let { window ->
+                        // Transparent dialog window; do not blur or dim the launcher
+                        // backdrop. The translucent glass treatment is confined to Surface.
                         window.setBackgroundDrawableResource(android.R.color.transparent)
-                        // Restrict the dialog window to the modal's measured bounds.
-                        // BLUR_BEHIND then affects only the pixels underneath this glass panel.
+                        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                        window.setGravity(android.view.Gravity.CENTER)
-                        window.attributes=window.attributes.apply {
-                            blurBehindRadius=with(density) { 30.dp.roundToPx() }
-                            dimAmount=0f
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            window.attributes=window.attributes.apply {
+                                blurBehindRadius=0
+                                dimAmount=0f
+                            }
                         }
                     }
                 }
                 Surface(
-                    modifier=Modifier.fillMaxWidth(.84f).onSizeChanged { size ->
-                        if (size.width > 0 && size.height > 0) {
-                            dialogWindow?.let { window ->
-                                val attrs=window.attributes
-                                if (attrs.width != size.width || attrs.height != size.height) {
-                                    window.setLayout(size.width,size.height)
-                                    window.setGravity(android.view.Gravity.CENTER)
-                                }
-                            }
-                        }
-                    },
+                    modifier=Modifier.fillMaxWidth(.84f),
                     shape=RoundedCornerShape(30.dp),
                     color=Color.Black.copy(alpha=.30f),
                     border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.24f)),
