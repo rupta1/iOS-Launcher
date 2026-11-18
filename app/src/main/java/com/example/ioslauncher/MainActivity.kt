@@ -1235,7 +1235,7 @@ fun LauncherRoot(db: LauncherDb) {
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                         add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)))
                     }
-                    draggingApp?.takeIf{moving->page==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
+                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
                 }
                 val cells=remember(tiles,columns,effectiveRows,fillCells){calculateHomeGridCells(tiles,columns,effectiveRows,fillCells)}
                 pageApps.forEachIndexed{index,app->
