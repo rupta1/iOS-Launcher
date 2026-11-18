@@ -481,8 +481,8 @@ fun LauncherRoot(db: LauncherDb) {
         // Never use another page's root bounds during AnimatedContent. Its outgoing
         // page can be translated while the incoming page is still being measured.
         return homeGridBoundsByPage[pageIndex]?.takeIf { it.width>0f && it.height>0f }
-            ?: if (pageIndex == page) homeGridBounds.takeIf { it.width>0f && it.height>0f } ?: Rect.Zero
-            else Rect.Zero
+            ?: homeGridBounds.takeIf { it.width>0f && it.height>0f }
+            ?: Rect.Zero
     }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var widgetPickerOpen by remember { mutableStateOf(false) }
