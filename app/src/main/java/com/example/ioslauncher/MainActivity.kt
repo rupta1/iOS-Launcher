@@ -748,6 +748,61 @@ fun LauncherRoot(db: LauncherDb) {
         db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
         dragPreviewSlots=emptyMap()
     }
+    /**
+     * Remove vacant workspace pages and compact the remaining pages without
+     * changing the relative order of populated pages. Called only after a drag
+     * commits, so a temporarily empty page during a drag is never deleted.
+     */
+    fun normalizeHomePages(
+        movingPackage: String? = null,
+        excludedPackage: String? = null,
+        movingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
+        destinationPage: Int = page
+    ) {
+        val appPages = linkedMapOf<String, Int>()
+        pageAppSlices.forEachIndexed { index, pageApps ->
+            pageApps.forEach { app ->
+                if (app.packageName != movingPackage && app.packageName != excludedPackage) appPages[app.packageName] = index
+            }
+        }
+        if (movingPackage != null) appPages[movingPackage] = destinationPage.coerceAtLeast(0)
+
+        val widgetPages: MutableMap<Int, Int> = homeWidgets.toMap().toMutableMap()
+        if (movingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID && movingWidgetId >= 0) {
+            widgetPages[movingWidgetId] = destinationPage.coerceAtLeast(0)
+        }
+        val occupied = mutableSetOf(0)
+        occupied.addAll(appPages.values)
+        occupied.addAll(widgetPages.values)
+        occupied.addAll(folders.map { it.page })
+        if (showWeatherWidget) occupied.add(weatherWidgetPage)
+        if (showTodayWidget) occupied.add(todayWidgetPage)
+        val orderedPages = occupied.filter { it >= 0 }.distinct().sorted()
+        val pageMap = orderedPages.mapIndexed { newIndex, oldIndex -> oldIndex to newIndex }.toMap()
+
+        appPageAssignments = appPages.mapNotNull { (pkg, oldPage) ->
+            pageMap[oldPage]?.let { pkg to it }
+        }.toMap()
+        homeWidgets = widgetPages.mapNotNull { (id, oldPage) ->
+            pageMap[oldPage]?.let { id to it }
+        }
+        folders = folders.mapNotNull { folder ->
+            pageMap[folder.page]?.let { folder.copy(page = it) }
+        }
+        weatherWidgetPage = pageMap[weatherWidgetPage] ?: 0
+        todayWidgetPage = pageMap[todayWidgetPage] ?: 0
+        extraHomePages = 0
+
+        val oldCurrent = page.coerceAtLeast(0)
+        page = pageMap[oldCurrent] ?: (pageMap.values.maxOrNull() ?: 0)
+        pendingDragPage = page
+        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
+        db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString() + ":" + it.second })
+        db.put("home_folders", encodeHomeFolders(folders))
+        db.put("weather_widget_page", weatherWidgetPage.toString())
+        db.put("today_widget_page", todayWidgetPage.toString())
+        db.put("extra_home_pages", "0")
+    }
     fun finishWidgetDrag() {
         val id=draggingWidgetId
         val destinationPage=pendingDragPage.coerceAtLeast(0)
@@ -814,61 +869,6 @@ fun LauncherRoot(db: LauncherDb) {
         folders.maxOfOrNull { it.page } ?: 0,
         0
     )
-    /**
-     * Remove vacant workspace pages and compact the remaining pages without
-     * changing the relative order of populated pages. Called only after a drag
-     * commits, so a temporarily empty page during a drag is never deleted.
-     */
-    fun normalizeHomePages(
-        movingPackage: String? = null,
-        excludedPackage: String? = null,
-        movingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
-        destinationPage: Int = page
-    ) {
-        val appPages = linkedMapOf<String, Int>()
-        pageAppSlices.forEachIndexed { index, pageApps ->
-            pageApps.forEach { app ->
-                if (app.packageName != movingPackage && app.packageName != excludedPackage) appPages[app.packageName] = index
-            }
-        }
-        if (movingPackage != null) appPages[movingPackage] = destinationPage.coerceAtLeast(0)
-
-        val widgetPages = homeWidgets.toMutableMap()
-        if (movingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID && movingWidgetId >= 0) {
-            widgetPages[movingWidgetId] = destinationPage.coerceAtLeast(0)
-        }
-        val occupied = mutableSetOf(0)
-        occupied.addAll(appPages.values)
-        occupied.addAll(widgetPages.values)
-        occupied.addAll(folders.map { it.page })
-        if (showWeatherWidget) occupied.add(weatherWidgetPage)
-        if (showTodayWidget) occupied.add(todayWidgetPage)
-        val orderedPages = occupied.filter { it >= 0 }.distinct().sorted()
-        val pageMap = orderedPages.mapIndexed { newIndex, oldIndex -> oldIndex to newIndex }.toMap()
-
-        appPageAssignments = appPages.mapNotNull { (pkg, oldPage) ->
-            pageMap[oldPage]?.let { pkg to it }
-        }.toMap()
-        homeWidgets = widgetPages.mapNotNull { (id, oldPage) ->
-            pageMap[oldPage]?.let { id to it }
-        }
-        folders = folders.mapNotNull { folder ->
-            pageMap[folder.page]?.let { folder.copy(page = it) }
-        }
-        weatherWidgetPage = pageMap[weatherWidgetPage] ?: 0
-        todayWidgetPage = pageMap[todayWidgetPage] ?: 0
-        extraHomePages = 0
-
-        val oldCurrent = page.coerceAtLeast(0)
-        page = pageMap[oldCurrent] ?: (pageMap.values.maxOrNull() ?: 0)
-        pendingDragPage = page
-        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
-        db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString() + ":" + it.second })
-        db.put("home_folders", encodeHomeFolders(folders))
-        db.put("weather_widget_page", weatherWidgetPage.toString())
-        db.put("today_widget_page", todayWidgetPage.toString())
-        db.put("extra_home_pages", "0")
-    }
     fun advanceDragPage(direction:Int) {
         if(direction==0) return
         val next=(pendingDragPage+direction).coerceAtLeast(0)
