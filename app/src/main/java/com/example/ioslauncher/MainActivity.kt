@@ -1924,7 +1924,26 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
     var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
     var selectedBounds by remember { mutableStateOf(Rect.Zero) }
     val gridState=rememberLazyListState()
-    val appRows=remember(apps) { apps.chunked(4) }
+    var selectedCategory by remember { mutableStateOf("All") }
+    val categories=listOf("All","Communication","Entertainment","Photography","Shopping","Tools","Other")
+    fun categoryOf(app:InstalledApp):String {
+        val value=(app.label+" "+app.packageName).lowercase(Locale.getDefault())
+        return when {
+            listOf("phone","dialer","message","sms","whatsapp","telegram","signal","gmail","mail","outlook","contacts").any { it in value } -> "Communication"
+            listOf("youtube","netflix","music","spotify","video","prime","game","hotstar","mx player").any { it in value } -> "Entertainment"
+            listOf("camera","photo","gallery","snapseed","lightroom","instagram").any { it in value } -> "Photography"
+            listOf("amazon","flipkart","shopping","store","meesho","myntra").any { it in value } -> "Shopping"
+            listOf("setting","calculator","clock","file","browser","chrome","maps","calendar","notes").any { it in value } -> "Tools"
+            else -> "Other"
+        }
+    }
+    val visibleApps=remember(apps,search,selectedCategory) {
+        val query=search.trim().lowercase(Locale.getDefault())
+        apps.filter { app ->
+            (query.isEmpty() || app.label.lowercase(Locale.getDefault()).contains(query) || app.packageName.lowercase(Locale.getDefault()).contains(query)) &&
+                (query.isNotEmpty() || selectedCategory=="All" || categoryOf(app)==selectedCategory)
+        }
+    }
     Box(Modifier.fillMaxSize().background(Color(0xFF101724).copy(alpha=transparency))) {
         Column(
             Modifier.fillMaxSize()
@@ -1935,7 +1954,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("App Library",color=Color.White,fontSize=28.sp,fontWeight=FontWeight.Bold)
-                    Text("${apps.size} apps",color=Color.White.copy(alpha=.66f),fontSize=12.sp)
+                    Text("${visibleApps.size} apps",color=Color.White.copy(alpha=.66f),fontSize=12.sp)
                 }
                 IconButton(onClick=onClose) {
                     Icon(Icons.Default.Close,null,tint=Color.White,modifier=Modifier.size(24.dp))
@@ -1971,7 +1990,20 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                     }
                 }
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                categories.forEach { category ->
+                    val selected=selectedCategory==category
+                    Surface(onClick={selectedCategory=category;selectedApp=null},shape=RoundedCornerShape(18.dp),
+                        color=if(selected) Color.White else Color.White.copy(alpha=.12f),
+                        border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(selected) .9f else .16f))) {
+                        Text(category,color=if(selected) Color(0xFF202633) else Color.White,fontSize=12.sp,
+                            fontWeight=if(selected) FontWeight.SemiBold else FontWeight.Medium,
+                            modifier=Modifier.padding(horizontal=13.dp,vertical=8.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
             LazyVerticalGrid(
                 columns=GridCells.Fixed(4),
                 state=rememberLazyGridState(),
@@ -1980,7 +2012,7 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                 horizontalArrangement=Arrangement.spacedBy(8.dp),
                 contentPadding=PaddingValues(top=4.dp,bottom=30.dp)
             ) {
-                items(items=apps,key={ app -> app.packageName },contentType={ "app-icon" }) { app ->
+                items(items=visibleApps,key={ app -> app.packageName },contentType={ "app-icon" }) { app ->
                     DrawerAppIcon(
                         app=app,labels=true,
                         onBounds={ rect -> if(selectedApp?.packageName==app.packageName && selectedBounds!=rect) selectedBounds=rect },
