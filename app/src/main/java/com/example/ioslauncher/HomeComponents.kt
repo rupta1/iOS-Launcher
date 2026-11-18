@@ -189,7 +189,8 @@ fun AppIcon(
     dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false, draggableEnabled:Boolean=true,
     animateOnEntry:Boolean=true,
     onBounds:(String,Rect)->Unit={ _, _ -> }, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={ _ -> },
-    onDragEnd:()->Unit={}, onLongClick:(()->Unit)?=null, onClick:()->Unit
+    onDragEnd:()->Unit={}, onDragCancel:()->Unit=onDragEnd,
+    onLongClick:(()->Unit)?=null, onClick:()->Unit
 ) {
     var shown by remember(app.packageName,animateOnEntry) { mutableStateOf(!animateOnEntry) }
     LaunchedEffect(app.packageName,animateOnEntry) {
@@ -215,7 +216,7 @@ fun AppIcon(
                     onDragStart={ onDragStart() },
                     onDrag={ change, amount -> change.consume(); onDrag(amount) },
                     onDragEnd=onDragEnd,
-                    onDragCancel=onDragEnd
+                    onDragCancel=onDragCancel
                 )
             } else Modifier)
             .combinedClickable(
