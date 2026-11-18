@@ -823,8 +823,11 @@ fun LauncherRoot(db: LauncherDb) {
         } else {
             // Recalculate using the destination page's current grid bounds and tile model;
             // the preview may have been cleared during the last edge-page transition.
-            val spanX=kotlin.math.ceil(widgetCanvasBounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-            val spanY=kotlin.math.ceil(widgetCanvasBounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
+            val destinationGrid=gridBoundsFor(destinationPage)
+            val destinationCellW=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+            val destinationCellH=(destinationGrid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+            val spanX=kotlin.math.ceil(widgetCanvasBounds.width/destinationCellW).toInt().coerceIn(1,columns)
+            val spanY=kotlin.math.ceil(widgetCanvasBounds.height/destinationCellH).toInt().coerceIn(1,effectiveRows)
             updateGridDragPreview(widgetDragPosition,"widget:"+id,spanX,spanY)
             applyGridDragPreview(destinationPage)
             when(id) {
@@ -835,7 +838,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if(dragPreviewSlots.isNotEmpty()) applyGridDragPreview(destinationPage)
         persistWidgetPositions()
-        extraHomePages=0
+        extraHomePages=maxOf(extraHomePages,(destinationPage-(pageAppSlices.size-1).coerceAtLeast(0)).coerceAtLeast(0))
         draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
         dragPreviewSlots=emptyMap()
         dragEdgeDirection=0
@@ -844,39 +847,32 @@ fun LauncherRoot(db: LauncherDb) {
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
+    fun lastHomePage():Int = maxOf(
+        (pageAppSlices.size-1).coerceAtLeast(0),
+        appPageAssignments.values.maxOrNull() ?: 0,
+        homeWidgets.maxOfOrNull { it.second } ?: 0,
+        if(showWeatherWidget) weatherWidgetPage else 0,
+        if(showTodayWidget) todayWidgetPage else 0,
+        folders.maxOfOrNull { it.page } ?: 0,
+        0
+    )
     fun advanceDragPage(direction:Int) {
-        val currentPage=pendingDragPage.coerceAtLeast(0)
-        // Derive the rightmost page from persisted destinations as well as the
-        // current rendered slices. This avoids a stale pageAppSlices snapshot in
-        // the long-lived pointerInput coroutine limiting a second/third drag.
-        val assignedLast=appPageAssignments.values.maxOrNull() ?: 0
-        val widgetLast=maxOf(
-            homeWidgets.maxOfOrNull { it.second } ?: 0,
-            if(showWeatherWidget) weatherWidgetPage else 0,
-            if(showTodayWidget) todayWidgetPage else 0
-        )
-        val folderLast=folders.maxOfOrNull { it.page } ?: 0
-        val renderedLast=(pageAppSlices.size-1).coerceAtLeast(0)
-        val lastPage=maxOf(renderedLast,assignedLast,widgetLast,folderLast,currentPage)
-        if(direction>0 && currentPage>=lastPage) {
-            // Always create the next page when the pointer continues past the
-            // right edge; there is no source-page or original-page ceiling.
-            extraHomePages=maxOf(extraHomePages,currentPage+1-renderedLast)
-            pendingDragPage=currentPage+1
-        } else {
-            pendingDragPage=(currentPage+direction).coerceAtLeast(0)
+        if(direction==0) return
+        val next=(pendingDragPage+direction).coerceAtLeast(0)
+        if(direction>0 && next>lastHomePage()) {
+            extraHomePages=maxOf(extraHomePages,next-(pageAppSlices.size-1).coerceAtLeast(0))
         }
-        page=pendingDragPage
+        pendingDragPage=next
+        page=next
         dragPreviewSlots=emptyMap()
+        appBounds.clear()
+        widgetBounds.clear()
+        folderBounds.clear()
     }
-    fun updateDragEdge(position: Offset) {
-        val widthPx=activity.window.decorView.width.toFloat()
-        val edgePx=with(density){64.dp.toPx()}
-        val direction=when {
-            position.x<=edgePx -> -1
-            position.x>=widthPx-edgePx -> 1
-            else -> 0
-        }
+    fun updateDragEdge(position:Offset) {
+        val width=activity.window.decorView.width.toFloat()
+        val edge=with(density){56.dp.toPx()}
+        val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
         if(direction==0) {
             dragEdgeDirection=0
             lastEdgePageAdvanceAt=0L
@@ -890,13 +886,26 @@ fun LauncherRoot(db: LauncherDb) {
     }
     LaunchedEffect(draggingApp?.packageName,draggingWidgetId,dragEdgeDirection) {
         if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
-            while(true) {
-                kotlinx.coroutines.delay(650L)
+            while(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+                kotlinx.coroutines.delay(520L)
                 if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
                     advanceDragPage(dragEdgeDirection)
                     lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
-                } else break
+                }
             }
+        }
+    }
+    LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
+        kotlinx.coroutines.withFrameNanos { }
+        val app=draggingApp
+        if(app!=null) updateGridDragPreview(dragPosition,"app:"+app.packageName)
+        else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+            val grid=gridBoundsFor(pendingDragPage)
+            val cw=(grid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+            val ch=(grid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+            val sx=kotlin.math.ceil(widgetCanvasBounds.width/cw).toInt().coerceIn(1,columns)
+            val sy=kotlin.math.ceil(widgetCanvasBounds.height/ch).toInt().coerceIn(1,effectiveRows)
+            updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,sx,sy)
         }
     }
     fun finishIconDrag() {
@@ -956,7 +965,9 @@ fun LauncherRoot(db: LauncherDb) {
             appSlotAssignments=appSlotAssignments-dragged.packageName
         } else {
             val destinationAppKeys=pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
-            val targetApp=appBounds.entries.firstOrNull { it.key!=dragged.packageName && it.key in destinationAppKeys && it.value.contains(dragPosition) }?.key
+            val targetApp=if(targetPage==page) appBounds.entries.firstOrNull {
+                it.key!=dragged.packageName && it.key in destinationAppKeys && it.value.contains(dragPosition)
+            }?.key else null
             if(targetApp!=null) {
                 val targetBounds=appBounds[targetApp] ?: Rect.Zero
                 val sourceBounds=dragOriginBounds.takeIf { it.width>0f && it.height>0f } ?: Rect(dragPosition.x-36f,dragPosition.y-36f,dragPosition.x+36f,dragPosition.y+36f)
@@ -1004,7 +1015,7 @@ fun LauncherRoot(db: LauncherDb) {
         saveAssignments()
         dragPreviewSlots=emptyMap()
         page=targetPage
-        extraHomePages=0
+        extraHomePages=maxOf(extraHomePages,(targetPage-(pageAppSlices.size-1).coerceAtLeast(0)).coerceAtLeast(0))
         draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
     }
 
@@ -1263,8 +1274,11 @@ fun LauncherRoot(db: LauncherDb) {
                             if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && targetPage==pendingDragPage &&
                                 none { it.key=="widget:"+draggingWidgetId }) {
                                 val bounds=widgetBounds[draggingWidgetId] ?: widgetCanvasBounds
-                                val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns) else 2.coerceAtMost(columns)
-                                val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows) else 2.coerceAtMost(effectiveRows)
+                                val destinationGrid=gridBoundsFor(targetPage)
+                                val destinationCellW=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+                                val destinationCellH=(destinationGrid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+                                val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/destinationCellW).toInt().coerceIn(1,columns) else 2.coerceAtMost(columns)
+                                val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/destinationCellH).toInt().coerceIn(1,effectiveRows) else 2.coerceAtMost(effectiveRows)
                                 add(HomeGridTile("widget:"+draggingWidgetId,dragPreviewSlots["widget:"+draggingWidgetId] ?: dragPreviewSlots.size,spanX,spanY))
                             }
                         }
