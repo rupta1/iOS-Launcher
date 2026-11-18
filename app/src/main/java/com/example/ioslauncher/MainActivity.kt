@@ -1226,7 +1226,7 @@ fun LauncherRoot(db: LauncherDb) {
                         if(dockApp!=null) {
                             HomeEntryMotion(
                                 revision=homeEntryRevision,
-                                order=pageApps.size+folders.size+dockPackages.indexOf(packageName),
+                                order=apps.size+folders.size+dockPackages.indexOf(packageName),
                                 modifier=Modifier
                             ) {
                                 AppIcon(
