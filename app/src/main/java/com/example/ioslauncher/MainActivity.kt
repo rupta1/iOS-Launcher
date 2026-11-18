@@ -1126,7 +1126,14 @@ fun LauncherRoot(db: LauncherDb) {
         .pointerInput(drawer,controlCenter,settings,openFolderId,page,pageCount,minusScreen,homeStyle,swipeDownAction,draggingApp,draggingWidgetId) {
             if(!drawer&&!controlCenter&&!settings&&openFolderId==null&&draggingApp==null&&draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
-                    val down=awaitFirstDown(requireUnconsumed=false)
+                    val down=awaitFirstDown(requireUnconsumed=false,pass=PointerEventPass.Initial)
+                    // Let app/widget drags own their gesture; don't let the page-swipe
+                    // recognizer consume the same pointer stream.
+                    val startsOnDraggable=appBounds.values.any{it.contains(down.position)} ||
+                        dockAppBounds.values.any{it.contains(down.position)} ||
+                        folderMemberBounds.values.any{it.contains(down.position)} ||
+                        widgetHandleBounds.values.any{it.contains(down.position)}
+                    if(startsOnDraggable)return@awaitEachGesture
                     val edge=with(density){28.dp.toPx()}
                     if(down.position.x<edge||down.position.x>size.width-edge||down.position.y>size.height-edge)return@awaitEachGesture
                     var dx=0f;var dy=0f
@@ -1166,8 +1173,23 @@ fun LauncherRoot(db: LauncherDb) {
                     widgetResizeHandleBounds[e.key]?.contains(down.position)!=true
                 }?.key else null
                 if(appKey==null&&widgetKey==null)return@awaitEachGesture
-                val long=awaitLongPressOrCancellation(down.id)?:return@awaitEachGesture
-                long.consume()
+                // Detect the hold ourselves on the Initial pass. The child icon's
+                // combinedClickable can consume the Main-pass long-press, which would
+                // otherwise cancel the parent's drag recognizer before it starts.
+                val holdStart=down.uptimeMillis
+                val longPressTimeout=viewConfiguration.longPressTimeoutMillis
+                var long: androidx.compose.ui.input.pointer.PointerInputChange?=null
+                while(long==null) {
+                    val event=awaitPointerEvent(PointerEventPass.Initial)
+                    val change=event.changes.firstOrNull{it.id==down.id}?:return@awaitEachGesture
+                    if(!change.pressed)return@awaitEachGesture
+                    val moved=change.position-down.position
+                    if(moved.getDistance()>viewConfiguration.touchSlop)return@awaitEachGesture
+                    if(change.uptimeMillis-holdStart>=longPressTimeout) {
+                        change.consume()
+                        long=change
+                    }
+                }
                 if(appKey!=null) {
                     val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
                     draggingApp=app
