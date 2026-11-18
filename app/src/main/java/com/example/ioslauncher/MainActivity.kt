@@ -1166,7 +1166,7 @@ fun LauncherRoot(db: LauncherDb) {
                     widgetResizeHandleBounds[e.key]?.contains(down.position)!=true
                 }?.key else null
                 if(appKey==null&&widgetKey==null)return@awaitEachGesture
-                val long=awaitLongPressOrCancellation(down.id,pass=PointerEventPass.Initial)?:return@awaitEachGesture
+                val long=awaitLongPressOrCancellation(down.id)?:return@awaitEachGesture
                 long.consume()
                 if(appKey!=null) {
                     val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
