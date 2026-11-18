@@ -102,7 +102,7 @@ class HomeWorkspaceEngineTest {
         val plan = HomeWorkspaceEngine.plan(
             listOf(
                 WorkspaceItem("widget", 0, 0, 2, 2, WorkspaceItemKind.WIDGET),
-                WorkspaceItem("app", 0, 0)
+                WorkspaceItem("app", 0, 1)
             ),
             columns = 3,
             rows = 2
