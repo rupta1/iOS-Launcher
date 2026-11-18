@@ -1065,7 +1065,16 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                         var endedNormally=false
                         while(true) {
-                            val event=awaitPointerEvent(PointerEventPass.Initial)
+                            // Continue polling while the pointer is held at an edge; Android
+                            // does not emit move events for a stationary finger.
+                            val event=kotlinx.coroutines.withTimeoutOrNull(80L) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                            }
+                            if(event==null) {
+                                if(draggingApp!=null) updateDragEdge(dragPosition)
+                                else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) updateDragEdge(widgetDragPosition)
+                                continue
+                            }
                             val change=event.changes.firstOrNull { it.id==down.id } ?: break
                             if(!change.pressed) {
                                 endedNormally=true
