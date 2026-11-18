@@ -481,7 +481,6 @@ fun LauncherRoot(db: LauncherDb) {
         // Never use another page's root bounds during AnimatedContent. Its outgoing
         // page can be translated while the incoming page is still being measured.
         return homeGridBoundsByPage[pageIndex]?.takeIf { it.width>0f && it.height>0f }
-            ?: homeGridBounds.takeIf { it.width>0f && it.height>0f }
             ?: Rect.Zero
     }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
@@ -1287,6 +1286,22 @@ fun LauncherRoot(db: LauncherDb) {
                                 val measured=it.boundsInRoot()
                                 homeGridBoundsByPage[targetPage]=measured
                                 if(targetPage==page || homeGridBounds.width<=0f) homeGridBounds=measured
+
+                                // The first preview attempt can happen before AnimatedContent
+                                // has measured the incoming page. Rebuild it as soon as that
+                                // destination grid reports its real root bounds.
+                                if(targetPage==pendingDragPage && measured.width>0f && measured.height>0f) {
+                                    val movingApp=draggingApp
+                                    if(movingApp!=null) {
+                                        updateGridDragPreview(dragPosition,"app:"+movingApp.packageName)
+                                    } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+                                        val cellW=(measured.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+                                        val cellH=(measured.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+                                        val spanX=kotlin.math.ceil(widgetCanvasBounds.width/cellW).toInt().coerceIn(1,columns)
+                                        val spanY=kotlin.math.ceil(widgetCanvasBounds.height/cellH).toInt().coerceIn(1,effectiveRows)
+                                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,spanX,spanY)
+                                    }
+                                }
                             }
 
                     ) {
@@ -1348,6 +1363,27 @@ fun LauncherRoot(db: LauncherDb) {
                                 if(widgetUpdates.isNotEmpty()) {
                                     widgetSlotAssignments=widgetSlotAssignments+widgetUpdates
                                     db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
+                                }
+                            }
+                        }
+                        // Render a visible destination placeholder for an app that is
+                        // being moved from another page. The floating drag image follows
+                        // the finger; this translucent tile shows the exact drop slot.
+                        draggingApp?.takeIf { targetPage==pendingDragPage && pageApps.none { app -> app.packageName==it.packageName } }?.let { moving ->
+                            val cell=gridCells["app:"+moving.packageName]
+                            if(cell!=null) {
+                                val ghostBitmap=remember(moving.packageName) { moving.icon.toBitmap(144,144).asImageBitmap() }
+                                Box(
+                                    Modifier.offset(x=cellW*cell.column,y=cellH*cell.row)
+                                        .size(cellW,cellH)
+                                        .padding(horizontal=5.dp,vertical=4.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(Color.White.copy(alpha=.24f))
+                                        .border(1.dp,Color.White.copy(alpha=.58f),RoundedCornerShape(18.dp)),
+                                    contentAlignment=Alignment.Center
+                                ) {
+                                    Image(ghostBitmap,contentDescription="Drop preview for ${moving.label}",
+                                        modifier=Modifier.size(62.dp).graphicsLayer { alpha=.58f })
                                 }
                             }
                         }
