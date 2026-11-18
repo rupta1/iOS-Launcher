@@ -1354,7 +1354,8 @@ fun LauncherRoot(db: LauncherDb) {
             Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
                 repeat(pageCount) { index ->
                     Box(Modifier.padding(horizontal=4.dp).size(if(page==index) 9.dp else 7.dp)
-                        .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f)))
+                        .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f))
+                        .clickable { page=index })
                 }
             }
             AnimatedVisibility(visible=homeEditMode, enter=fadeIn(tween(140))+scaleIn(spring(dampingRatio=.86f,stiffness=520f)), exit=fadeOut(tween(100))) {
