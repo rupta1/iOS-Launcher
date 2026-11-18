@@ -502,6 +502,12 @@ fun LauncherRoot(db: LauncherDb) {
 
     var pendingDragPage by remember { mutableIntStateOf(0) }
     var homeGridBounds by remember { mutableStateOf(Rect.Zero) }
+    // AnimatedContent keeps both pages composed during a swipe. Keep each page's
+    // measured grid bounds separately so backward drags never calculate a drop
+    // against the outgoing page's stale bounds.
+    val homeGridBoundsByPage = remember { mutableStateMapOf<Int, Rect>() }
+    fun gridBoundsFor(pageIndex:Int):Rect =
+        homeGridBoundsByPage[pageIndex]?.takeIf { it.width>0f && it.height>0f } ?: homeGridBounds
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var widgetPickerOpen by remember { mutableStateOf(false) }
     var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
@@ -652,16 +658,18 @@ fun LauncherRoot(db: LauncherDb) {
 
     fun persistDock() { db.put("dock_packages", dockPackages.joinToString("|")) }
     fun persistFolders() { db.put("home_folders", encodeHomeFolders(folders)) }
-    fun slotAt(position:Offset):Int {
-        val cellW=(homeGridBounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(homeGridBounds.height / effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-        val col=((position.x-homeGridBounds.left)/cellW).toInt().coerceIn(0,columns-1)
-        val row=((position.y-homeGridBounds.top)/cellH) .toInt().coerceIn(0,effectiveRows-1)
+    fun slotAt(position:Offset,pageIndex:Int=page):Int {
+        val bounds=gridBoundsFor(pageIndex)
+        val cellW=(bounds.width / columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(bounds.height / effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val col=((position.x-bounds.left)/cellW).toInt().coerceIn(0,columns-1)
+        val row=((position.y-bounds.top)/cellH).toInt().coerceIn(0,effectiveRows-1)
         return row*columns+col
     }
-    fun widgetSlotAt(position:Offset,id:Int):Int {
-        val cellW=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+    fun widgetSlotAt(position:Offset,id:Int,pageIndex:Int=pendingDragPage):Int {
+        val bounds=gridBoundsFor(pageIndex)
+        val cellW=(bounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(bounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val bounds=widgetCanvasBounds
         val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/cellW).toInt().coerceIn(1,columns) else 1
         val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/cellH) .toInt().coerceIn(1,effectiveRows) else 1
@@ -738,7 +746,7 @@ fun LauncherRoot(db: LauncherDb) {
                     kotlin.math.ceil(b.width/cw).toInt().coerceIn(1,columns),
                     kotlin.math.ceil(b.height/ch).toInt().coerceIn(1,effectiveRows)))
         }
-        val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1) else slotAt(position)
+        val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1,pendingDragPage) else slotAt(position,pendingDragPage)
         val moving=DragGridPlacement(movingKey,slot,movingSpanX.coerceIn(1,columns),movingSpanY.coerceIn(1,effectiveRows))
         val ordered=items.sortedWith(compareBy<DragGridPlacement>{it.slot}.thenBy{it.key}).toMutableList()
         val col=slot%columns.coerceAtLeast(1); val row=slot/columns.coerceAtLeast(1)
@@ -1207,7 +1215,11 @@ fun LauncherRoot(db: LauncherDb) {
                 } else Column(Modifier.fillMaxSize()) {
                                         BoxWithConstraints(
                         Modifier.weight(1f).fillMaxWidth()
-                            .onGloballyPositioned { homeGridBounds=it.boundsInRoot() }
+                            .onGloballyPositioned {
+                                val measured=it.boundsInRoot()
+                                homeGridBoundsByPage[targetPage]=measured
+                                if(targetPage==page || homeGridBounds.width<=0f) homeGridBounds=measured
+                            }
 
                     ) {
                         val cellW=maxWidth/columns.coerceAtLeast(1)
