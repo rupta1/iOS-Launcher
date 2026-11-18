@@ -669,6 +669,45 @@ fun LauncherRoot(db: LauncherDb) {
         val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(effectiveRows-spanY).coerceAtLeast(0))
         return row*columns+col
     }
+    val showLabels = labels && hideText == "Off"
+    val folderPackages = remember(folders) { folders.flatMap { it.packages }.toSet() }
+    val pageAppSlices = remember(apps, homeWidgets, columns, rows, effectiveRows, showLabels, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments, folders, dockPackages) {
+        val result = mutableMapOf<Int, MutableList<InstalledApp>>()
+        var defaultPage = 0
+        fun capacityFor(index: Int): Int {
+            val densityScale=context.resources.displayMetrics.density.coerceAtLeast(1f)
+            val screenWidthDp=context.resources.displayMetrics.widthPixels/densityScale
+            val cellWidth=(screenWidthDp/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+            val cellHeight=(availableGridHeightDp/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+            val widgetCells=homeWidgets.filter { it.second==index }.sumOf { (id,_) ->
+                val info=AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
+                if(info==null) 4 else {
+                    val spanX=kotlin.math.ceil(info.minWidth.coerceAtLeast(110)/cellWidth).toInt().coerceIn(1,columns)
+                    val spanY=kotlin.math.ceil(info.minHeight.coerceAtLeast(90)/cellHeight) .toInt().coerceIn(1,effectiveRows)
+                    spanX*spanY
+                }
+            }
+            val builtInCells=(if(showWeatherWidget && weatherWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)+(if(showTodayWidget && todayWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)
+            return (columns*effectiveRows.coerceAtLeast(1)-widgetCells-builtInCells-folders.count { it.page==index }).coerceAtLeast(1)
+        }
+        apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
+            var destination=(appPageAssignments[app.packageName] ?: defaultPage).coerceAtLeast(0)
+            while((result[destination]?.size ?: 0)>=capacityFor(destination)) destination++
+            result.getOrPut(destination) { mutableListOf() }.add(app)
+            if(appPageAssignments[app.packageName]==null) defaultPage=destination
+        }
+        val maxPage = maxOf(
+            result.keys.maxOrNull() ?: 0,
+            homeWidgets.maxOfOrNull { it.second } ?: 0,
+            if (showWeatherWidget) weatherWidgetPage else 0,
+            if (showTodayWidget) todayWidgetPage else 0,
+            folders.maxOfOrNull { it.page } ?: 0
+        )
+        (0..maxPage).map { pageIndex ->
+            val pageItems = result[pageIndex]?.toList().orEmpty()
+            pageItems.sortedBy { app -> appSlotAssignments[app.packageName] ?: pageItems.indexOf(app) }
+        }
+    }
     fun updateGridDragPreview(position:Offset,movingKey:String,movingSpanX:Int=1,movingSpanY:Int=1) {
         if(homeGridBounds.width<=0f || homeGridBounds.height<=0f) return
         val cw=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
@@ -793,45 +832,6 @@ fun LauncherRoot(db: LauncherDb) {
         dragEdgeDirection=0
         page=destinationPage
         pendingDragPage=page
-    }
-    val showLabels = labels && hideText == "Off"
-    val folderPackages = remember(folders) { folders.flatMap { it.packages }.toSet() }
-    val pageAppSlices = remember(apps, homeWidgets, columns, rows, effectiveRows, showLabels, showWeatherWidget, showTodayWidget, weatherWidgetPage, todayWidgetPage, appPageAssignments, appSlotAssignments, folders, dockPackages) {
-        val result = mutableMapOf<Int, MutableList<InstalledApp>>()
-        var defaultPage = 0
-        fun capacityFor(index: Int): Int {
-            val densityScale=context.resources.displayMetrics.density.coerceAtLeast(1f)
-            val screenWidthDp=context.resources.displayMetrics.widthPixels/densityScale
-            val cellWidth=(screenWidthDp/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-            val cellHeight=(availableGridHeightDp/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-            val widgetCells=homeWidgets.filter { it.second==index }.sumOf { (id,_) ->
-                val info=AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
-                if(info==null) 4 else {
-                    val spanX=kotlin.math.ceil(info.minWidth.coerceAtLeast(110)/cellWidth).toInt().coerceIn(1,columns)
-                    val spanY=kotlin.math.ceil(info.minHeight.coerceAtLeast(90)/cellHeight) .toInt().coerceIn(1,effectiveRows)
-                    spanX*spanY
-                }
-            }
-            val builtInCells=(if(showWeatherWidget && weatherWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)+(if(showTodayWidget && todayWidgetPage==index) minOf(2,effectiveRows)*minOf(2,columns) else 0)
-            return (columns*effectiveRows.coerceAtLeast(1)-widgetCells-builtInCells-folders.count { it.page==index }).coerceAtLeast(1)
-        }
-        apps.filterNot { it.packageName in folderPackages || it.packageName in dockPackages }.forEach { app ->
-            var destination=(appPageAssignments[app.packageName] ?: defaultPage).coerceAtLeast(0)
-            while((result[destination]?.size ?: 0)>=capacityFor(destination)) destination++
-            result.getOrPut(destination) { mutableListOf() }.add(app)
-            if(appPageAssignments[app.packageName]==null) defaultPage=destination
-        }
-        val maxPage = maxOf(
-            result.keys.maxOrNull() ?: 0,
-            homeWidgets.maxOfOrNull { it.second } ?: 0,
-            if (showWeatherWidget) weatherWidgetPage else 0,
-            if (showTodayWidget) todayWidgetPage else 0,
-            folders.maxOfOrNull { it.page } ?: 0
-        )
-        (0..maxPage).map { pageIndex ->
-            val pageItems = result[pageIndex]?.toList().orEmpty()
-            pageItems.sortedBy { app -> appSlotAssignments[app.packageName] ?: pageItems.indexOf(app) }
-        }
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
