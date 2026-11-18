@@ -674,11 +674,16 @@ fun LauncherRoot(db: LauncherDb) {
         val cw=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
         val ch=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val items=mutableListOf<DragGridPlacement>()
-        // Never reuse app/widget bounds from the page the drag just left.
-        currentPageAppKeys.forEach { k ->
-            val b=appBounds[k] ?: Rect.Zero
-            if(b.width>0f && b.height>0f && "app:"+k!=movingKey)
-                items.add(DragGridPlacement("app:"+k,appSlotAssignments[k] ?: slotAt(b.center)))
+        // Build occupied app cells from the destination page's model, not from
+        // currentPageAppKeys/appBounds (those can still describe the page we dragged from
+        // while AnimatedContent is transitioning).
+        val destinationApps=pageAppSlices.getOrNull(pendingDragPage.coerceAtLeast(0)).orEmpty()
+        destinationApps.forEachIndexed { index, app ->
+            val key="app:"+app.packageName
+            if(key!=movingKey) {
+                val requested=appSlotAssignments[app.packageName] ?: index
+                items.add(DragGridPlacement(key,requested))
+            }
         }
         folders.filter { it.page==pendingDragPage }.forEach { folder ->
             if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot))
@@ -768,6 +773,11 @@ fun LauncherRoot(db: LauncherDb) {
             widgetSlotAssignments=widgetSlotAssignments-id
             widgetPositions=widgetPositions-id
         } else {
+            // Recalculate using the destination page's current grid bounds and tile model;
+            // the preview may have been cleared during the last edge-page transition.
+            val spanX=kotlin.math.ceil(widgetCanvasBounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns)
+            val spanY=kotlin.math.ceil(widgetCanvasBounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
+            updateGridDragPreview(widgetDragPosition,"widget:"+id,spanX,spanY)
             applyGridDragPreview(destinationPage)
             when(id) {
                 -1001 -> { weatherWidgetPage=destinationPage; db.put("weather_widget_page",destinationPage.toString()) }
@@ -924,7 +934,8 @@ fun LauncherRoot(db: LauncherDb) {
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
         } else {
-            val targetApp=appBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
+            val destinationAppKeys=pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
+            val targetApp=appBounds.entries.firstOrNull { it.key!=dragged.packageName && it.key in destinationAppKeys && it.value.contains(dragPosition) }?.key
             if(targetApp!=null) {
                 val targetBounds=appBounds[targetApp] ?: Rect.Zero
                 val sourceBounds=dragOriginBounds.takeIf { it.width>0f && it.height>0f } ?: Rect(dragPosition.x-36f,dragPosition.y-36f,dragPosition.x+36f,dragPosition.y+36f)
@@ -955,6 +966,10 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             } else {
                 removeFromSourceFolder()
+                // Rebuild the final preview against the destination page at drop time.
+                // Edge paging clears transient previews; without this, a release immediately
+                // after a page transition can reuse the source page's/default slot.
+                updateGridDragPreview(dragPosition,"app:"+dragged.packageName)
                 applyGridDragPreview(targetPage)
                 appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
             }
