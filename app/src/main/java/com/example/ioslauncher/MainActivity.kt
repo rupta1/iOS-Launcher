@@ -235,12 +235,15 @@ class MainActivity : ComponentActivity() {
     private val widgetManager by lazy { AppWidgetManager.getInstance(this) }
     var wallpaperRevision by mutableIntStateOf(0)
         private set
+    var appRefreshRevision by mutableIntStateOf(0)
+        private set
     var homeUnlockRevision by mutableIntStateOf(0)
         private set
     private var wasDeviceLocked = false
 
     override fun onResume() {
         super.onResume()
+        appRefreshRevision++
         // Pick up wallpaper changes made in Android's system wallpaper picker.
         wallpaperRevision++
         val keyguard = getSystemService(android.app.KeyguardManager::class.java)
@@ -534,8 +537,50 @@ fun LauncherRoot(db: LauncherDb) {
     val density = LocalDensity.current
     val uninstallDropZoneHeight = with(density) { 112.dp.toPx() }
     var drawer by remember { mutableStateOf(false) }
+    var pendingUninstallApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var awaitingUninstallPackage by remember { mutableStateOf<String?>(null) }
+    var uninstallRequestResumeRevision by remember { mutableIntStateOf(0) }
     var drawerTransparency by remember { mutableFloatStateOf(db.get("drawer_transparency","0.30").toFloatOrNull()?.coerceIn(0f,.80f) ?: .30f) }
     var drawerBlur by remember { mutableFloatStateOf(db.get("drawer_blur","20").toFloatOrNull()?.coerceIn(0f,32f) ?: 20f) }
+    LaunchedEffect(drawer,drawerBlur) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val window=activity.window
+            val params=window.attributes
+            if (drawer && drawerBlur > 0f) {
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                params.blurBehindRadius=with(density) { drawerBlur.dp.roundToPx() }
+                params.dimAmount=0f
+            } else {
+                params.blurBehindRadius=0
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            }
+            window.attributes=params
+        }
+    }
+    LaunchedEffect(activity.appRefreshRevision,awaitingUninstallPackage) {
+        val packageName=awaitingUninstallPackage ?: return@LaunchedEffect
+        if (activity.appRefreshRevision <= uninstallRequestResumeRevision) return@LaunchedEffect
+        val stillInstalled=try {
+            context.packageManager.getApplicationInfo(packageName,0)
+            true
+        } catch (_:PackageManager.NameNotFoundException) { false }
+        if (!stillInstalled) {
+            apps=activity.loadApps()
+            val updatedFolders=folders.mapNotNull { folder ->
+                val members=folder.packages.filterNot { it==packageName }
+                if(members.size>1) folder.copy(packages=members) else null
+            }
+            folders=updatedFolders
+            db.put("home_folders",encodeHomeFolders(updatedFolders))
+            dockPackages=dockPackages.filterNot { it==packageName }
+            db.put("dock_packages",dockPackages.joinToString("|"))
+            appPageAssignments=appPageAssignments-packageName
+            appSlotAssignments=appSlotAssignments-packageName
+            db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+            db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+        }
+        awaitingUninstallPackage=null
+    }
     var controlCenter by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -783,13 +828,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
         if(dragPosition.y<uninstallDropZoneHeight && !dragged.packageName.startsWith("internal:")) {
-            removeFromSourceFolder()
-            activity.uninstall(dragged)
-            apps=apps.filterNot { it.packageName==dragged.packageName }
-            appPageAssignments=appPageAssignments-dragged.packageName
-            appSlotAssignments=appSlotAssignments-dragged.packageName
-            dockPackages=dockPackages.filterNot { it==dragged.packageName }; persistDock()
-            saveAssignments()
+            pendingUninstallApp=dragged
             draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
         }
@@ -1332,7 +1371,7 @@ fun LauncherRoot(db: LauncherDb) {
             modifier=Modifier.fillMaxSize()
         ) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off",
-                drawerTransparency, {activity.launch(it)}, {drawer=false})
+                drawerTransparency, drawerBlur, {activity.launch(it)}, {drawer=false})
         }
         AnimatedVisibility(visible=controlCenter, enter=androidx.compose.animation.slideInVertically { -it }, exit=androidx.compose.animation.slideOutVertically { -it }) {
             ControlCenter(deviceState, dark, { themeMode=if(it) "dark" else "light"; db.put("theme_mode",themeMode) }, {controlCenter=false})
@@ -1367,6 +1406,7 @@ fun LauncherRoot(db: LauncherDb) {
                 onRecentsArrangement={recentsArrangement=it;db.put("recents_arrangement",it)},
                 onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
                 onClose={settings=false},
+                onUninstallLauncher={ pendingUninstallApp=InstalledApp("iOS Style Launcher",context.packageName,context.packageManager.getApplicationIcon(context.packageName)) },
                 onDeviceSettings={
                     // Android requires users to approve restricted settings themselves
                     // for sideloaded apps before enabling an Accessibility service.
@@ -1466,6 +1506,39 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             Image(bitmap,contentDescription="Moving ${dragged.label}",
                 modifier=Modifier.offset { IntOffset((dragPosition.x-half).toInt(),(dragPosition.y-half).toInt()) }
                     .size(68.dp).clip(RoundedCornerShape(18.dp)).shadow(12.dp,RoundedCornerShape(18.dp)).graphicsLayer { alpha=.96f })
+        }
+        if (pendingUninstallApp != null) {
+            val target=pendingUninstallApp!!
+            androidx.compose.ui.window.Dialog(onDismissRequest={ pendingUninstallApp=null }) {
+                Surface(
+                    shape=RoundedCornerShape(30.dp,30.dp,30.dp,9.dp),
+                    color=Color(0xF4F7F8FC),
+                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.95f)),
+                    shadowElevation=26.dp
+                ) {
+                    Column(Modifier.padding(horizontal=24.dp,vertical=22.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                        Box(Modifier.size(54.dp).clip(RoundedCornerShape(20.dp,20.dp,20.dp,7.dp)).background(Color(0xFFE9E3FA)),contentAlignment=Alignment.Center) {
+                            Icon(Icons.Default.Delete,null,tint=Color(0xFF7554B8),modifier=Modifier.size(27.dp))
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text("Are you sure?",color=Color(0xFF20212A),fontSize=19.sp,fontWeight=FontWeight.SemiBold)
+                        Spacer(Modifier.height(7.dp))
+                        Text("Uninstall ${target.label} from this device?",color=Color(0xFF62636D),fontSize=14.sp,textAlign=TextAlign.Center)
+                        Spacer(Modifier.height(20.dp))
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                            TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color(0xFF555866)) }
+                            Button(onClick={
+                                pendingUninstallApp=null
+                                uninstallRequestResumeRevision=activity.appRefreshRevision
+                                awaitingUninstallPackage=target.packageName
+                                activity.uninstall(target)
+                            },modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF7655B8))) {
+                                Text("Yes, uninstall",maxLines=1)
+                            }
+                        }
+                    }
+                }
+            }
         }
         if (widgetPickerOpen) {
             AlertDialog(
@@ -1705,7 +1778,7 @@ fun DockButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: Str
 
 @Composable
 fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit, fg: Color, bg: Color, labels: Boolean,
-    transparency:Float, onLaunch: (InstalledApp)->Unit, onClose:()->Unit) {
+    transparency:Float, blur:Float, onLaunch: (InstalledApp)->Unit, onClose:()->Unit) {
     val context=LocalContext.current
     val density=LocalDensity.current
     var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
@@ -2066,7 +2139,7 @@ fun SettingsScreen(
     navigationMode:String, recentsArrangement:String, highRefreshRate:Boolean,
     themeMode:String, onThemeMode:(String)->Unit,
     drawerTransparency:Float, onDrawerTransparency:(Float)->Unit, drawerBlur:Float, onDrawerBlur:(Float)->Unit,
-    onAddWidget:()->Unit, onChooseWallpaper:()->Unit,
+    onUninstallLauncher:()->Unit, onAddWidget:()->Unit, onChooseWallpaper:()->Unit,
     onColumns:(Int)->Unit, onRows:(Int)->Unit, onLabels:(Boolean)->Unit, onHideText:(String)->Unit,
     onDark:(Boolean)->Unit, onHomeStyle:(String)->Unit, onMinusScreen:(String)->Unit,
     onSearchStyle:(String)->Unit, onSwipeDown:(String)->Unit, onAnimationSpeed:(String)->Unit,
@@ -2131,6 +2204,7 @@ fun SettingsScreen(
                 }
                 SettingChoice("Widgets","Add system or third-party widgets",fg,muted,onAddWidget)
                 SettingSwitch("Prefer highest supported refresh rate",highRefreshRate,fg,onHighRefreshRate)
+                SettingChoice("Uninstall launcher","Remove from device",fg,muted,onUninstallLauncher)
             }
             Surface(shape=RoundedCornerShape(18.dp),color=card,modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
