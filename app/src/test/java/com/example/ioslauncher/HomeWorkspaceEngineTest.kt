@@ -92,8 +92,8 @@ class HomeWorkspaceEngineTest {
             WorkspaceItem("app-d", 0, 3)
         )
         val plan = HomeWorkspaceEngine.plan(items, columns = 2, rows = 2)
-        assertEquals(4, plan.placements.size)
-        assertEquals(listOf("app-c"), plan.overflow.map { it.id })
+        assertEquals(1, plan.placements.size)
+        assertEquals(listOf("app-a", "app-b", "app-c", "app-d"), plan.overflow.map { it.id })
         assertEquals(1, plan.pageCount)
     }
 
