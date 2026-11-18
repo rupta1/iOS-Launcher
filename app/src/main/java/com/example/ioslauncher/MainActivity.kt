@@ -821,13 +821,14 @@ fun LauncherRoot(db: LauncherDb) {
      */
     fun normalizeHomePages(
         movingPackage: String? = null,
+        excludedPackage: String? = null,
         movingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
         destinationPage: Int = page
     ) {
         val appPages = linkedMapOf<String, Int>()
         pageAppSlices.forEachIndexed { index, pageApps ->
             pageApps.forEach { app ->
-                if (app.packageName != movingPackage) appPages[app.packageName] = index
+                if (app.packageName != movingPackage && app.packageName != excludedPackage) appPages[app.packageName] = index
             }
         }
         if (movingPackage != null) appPages[movingPackage] = destinationPage.coerceAtLeast(0)
@@ -962,6 +963,8 @@ fun LauncherRoot(db: LauncherDb) {
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
             saveAssignments()
+            normalizeHomePages(excludedPackage=dragged.packageName, destinationPage=page)
+            saveAssignments()
             draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
         }
@@ -1028,7 +1031,12 @@ fun LauncherRoot(db: LauncherDb) {
         saveAssignments()
         dragPreviewSlots=emptyMap()
         page=targetPage
-        normalizeHomePages(movingPackage=dragged.packageName, destinationPage=targetPage)
+        val isNowInFolder = folders.any { dragged.packageName in it.packages }
+        normalizeHomePages(
+            movingPackage=if (isNowInFolder || dragged.packageName in dockPackages) null else dragged.packageName,
+            excludedPackage=if (isNowInFolder || dragged.packageName in dockPackages) dragged.packageName else null,
+            destinationPage=targetPage
+        )
         saveAssignments()
         draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
     }
