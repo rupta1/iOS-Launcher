@@ -1150,43 +1150,77 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
-        .pointerInput(apps,drawer,controlCenter,settings,openFolderId,columns,effectiveRows) {
-            if(!drawer&&!controlCenter&&!settings&&openFolderId==null) awaitEachGesture {
-                val down=awaitFirstDown(requireUnconsumed=false)
+        .pointerInput(apps,drawer,controlCenter,settings,openFolderId,page,columns,effectiveRows) {
+            if(!drawer&&!controlCenter&&!settings) awaitEachGesture {
+                // All workspace drags are owned here. Observe the Initial pass so
+                // child clickables/widgets cannot steal the long-press or drag stream.
+                val down=awaitFirstDown(requireUnconsumed=false,pass=PointerEventPass.Initial)
                 val homeAppKey=appBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
                 val dockAppKey=dockAppBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
-                val appKey=homeAppKey ?: dockAppKey
-                // Android widgets keep their normal touch handling; only the explicit grip starts a workspace move.
-                val widgetKey=widgetBounds.entries.firstOrNull{e->
+                val folderAppKey=folderMemberBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
+                val appKey=homeAppKey ?: dockAppKey ?: folderAppKey
+                val folderSource=if(folderAppKey!=null) folders.firstOrNull{folderAppKey in it.packages} else null
+                // Widgets retain Android's own touch handling; only their dedicated grip starts a move.
+                val widgetKey=if(appKey==null) widgetBounds.entries.firstOrNull{e->
                     widgetHandleBounds[e.key]?.contains(down.position)==true &&
                     widgetResizeHandleBounds[e.key]?.contains(down.position)!=true
-                }?.key
+                }?.key else null
                 if(appKey==null&&widgetKey==null)return@awaitEachGesture
-                val long=awaitLongPressOrCancellation(down.id)?:return@awaitEachGesture
+                val long=awaitLongPressOrCancellation(down.id,pass=PointerEventPass.Initial)?:return@awaitEachGesture
                 if(appKey!=null) {
                     val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
-                    draggingApp=app;draggingFromDock=homeAppKey==null;draggingFromFolder=false;dragSourceFolderId=null
-                    dragPosition=long.position;dragOriginBounds=appBounds[appKey]?:dockAppBounds[appKey]?:Rect.Zero
-                    dragOriginPage=page;dragOriginSlot=appSlotAssignments[appKey]?:slotAt(dragOriginBounds.center);pendingDragPage=page
+                    draggingApp=app
+                    draggingFromDock=homeAppKey==null&&folderAppKey==null
+                    draggingFromFolder=folderSource!=null
+                    dragSourceFolderId=folderSource?.id
+                    dragPosition=long.position
+                    dragOriginBounds=appBounds[appKey]?:dockAppBounds[appKey]?:folderMemberBounds[appKey]?:Rect.Zero
+                    dragOriginPage=folderSource?.page?:page
+                    dragOriginSlot=folderSource?.slot?:appSlotAssignments[appKey]?:slotAt(dragOriginBounds.center)
+                    pendingDragPage=dragOriginPage
                 } else if(widgetKey!=null) {
-                    draggingWidgetId=widgetKey;widgetCanvasBounds=widgetBounds[widgetKey]?:Rect.Zero
-                    widgetDragPosition=long.position;pendingDragPage=page
+                    draggingWidgetId=widgetKey
+                    widgetCanvasBounds=widgetBounds[widgetKey]?:Rect.Zero
+                    widgetDragPosition=long.position
+                    pendingDragPage=page
                 }
-                var ended=false
+                var released=false
+                var cancelled=false
                 while(true) {
                     val event=awaitPointerEvent(PointerEventPass.Initial)
-                    val c=event.changes.firstOrNull{it.id==down.id}?:break
-                    if(!c.pressed){ended=true;break}
-                    val delta=c.position-c.previousPosition
-                    if(draggingApp!=null){c.consume();dragPosition+=delta;updateDragEdge(dragPosition);draggingApp?.let{updateGridDragPreview(dragPosition,"app:"+it.packageName)}}
-                    else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
-                        c.consume();widgetDragPosition+=delta;updateDragEdge(widgetDragPosition)
-                        val g=gridBoundsFor(pendingDragPage);val cw=(g.width/columns.coerceAtLeast(1)).coerceAtLeast(1f);val ch=(g.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,kotlin.math.ceil(widgetCanvasBounds.width/cw).toInt().coerceIn(1,columns),kotlin.math.ceil(widgetCanvasBounds.height/ch).toInt().coerceIn(1,effectiveRows))
+                    val change=event.changes.firstOrNull{it.id==down.id}?:run{cancelled=true;break}
+                    if(!change.pressed){released=true;break}
+                    val delta=change.position-change.previousPosition
+                    if(draggingApp!=null) {
+                        change.consume()
+                        dragPosition=change.position
+                        updateDragEdge(dragPosition)
+                        draggingApp?.let{updateGridDragPreview(dragPosition,"app:"+it.packageName)}
+                    } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        change.consume()
+                        widgetDragPosition=change.position
+                        updateDragEdge(widgetDragPosition)
+                        val grid=gridBoundsFor(pendingDragPage)
+                        val cellW=(grid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+                        val cellH=(grid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,
+                            kotlin.math.ceil(widgetCanvasBounds.width/cellW).toInt().coerceIn(1,columns),
+                            kotlin.math.ceil(widgetCanvasBounds.height/cellH).toInt().coerceIn(1,effectiveRows))
                     }
                 }
-                if(ended){if(draggingApp!=null)finishIconDrag() else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)finishWidgetDrag()}
-                else{draggingApp=null;draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page}
+                if(released) {
+                    if(draggingApp!=null) finishIconDrag()
+                    else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
+                } else if(cancelled) {
+                    draggingApp=null
+                    draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                    draggingFromDock=false
+                    draggingFromFolder=false
+                    dragSourceFolderId=null
+                    dragPreviewSlots=emptyMap()
+                    dragEdgeDirection=0
+                    pendingDragPage=page
+                }
             }
         }) {
         if(!drawer) Column(Modifier.fillMaxSize().padding(horizontal=18.dp).graphicsLayer {
