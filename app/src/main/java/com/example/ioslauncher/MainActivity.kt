@@ -1550,6 +1550,7 @@ private fun HomeEntryMotion(
             this.alpha=alpha
             translationY=offsetY.toPx()
         },
+        contentAlignment=Alignment.TopCenter,
         content=content
     )
 }
