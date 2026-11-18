@@ -406,10 +406,23 @@ class MainActivity : ComponentActivity() {
     }
 
     fun uninstall(app: InstalledApp) {
-        if (app.packageName.startsWith("internal:")) return
+        if (app.packageName.startsWith("internal:") || app.packageName.isBlank()) return
+        val packageUri=android.net.Uri.fromParts("package",app.packageName,null)
+        val uninstallIntent=Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+            data=packageUri
+            putExtra(Intent.EXTRA_RETURN_RESULT,true)
+        }
         try {
-            startActivity(Intent(Intent.ACTION_DELETE, android.net.Uri.parse("package:${app.packageName}")))
-        } catch (_: Exception) { }
+            startActivity(uninstallIntent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            try {
+                startActivity(Intent(Intent.ACTION_DELETE,packageUri))
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(this,"Unable to open Android's uninstall screen: ${error.localizedMessage ?: "Unknown error"}",android.widget.Toast.LENGTH_LONG).show()
+            }
+        } catch (error: Exception) {
+            android.widget.Toast.makeText(this,"Unable to open Android's uninstall screen: ${error.localizedMessage ?: "Unknown error"}",android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     fun launch(app: InstalledApp) {
@@ -1509,11 +1522,27 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
         }
         if (pendingUninstallApp != null) {
             val target=pendingUninstallApp!!
-            androidx.compose.ui.window.Dialog(onDismissRequest={ pendingUninstallApp=null }) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest={ pendingUninstallApp=null },
+                properties=androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth=false)
+            ) {
+                val dialogView=androidx.compose.ui.platform.LocalView.current
+                val dialogWindow=(dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+                SideEffect {
+                    if (Build.VERSION.SDK_INT >= 31) dialogWindow?.let { window ->
+                        window.setBackgroundDrawableResource(android.R.color.transparent)
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                        window.attributes=window.attributes.apply {
+                            blurBehindRadius=with(density) { 30.dp.roundToPx() }
+                            dimAmount=.18f
+                        }
+                    }
+                }
                 Surface(
-                    shape=RoundedCornerShape(30.dp,30.dp,30.dp,9.dp),
-                    color=Color(0xF4F7F8FC),
-                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.95f)),
+                    modifier=Modifier.fillMaxWidth(.84f),
+                    shape=RoundedCornerShape(30.dp),
+                    color=Color.White.copy(alpha=.70f),
+                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.42f)),
                     shadowElevation=26.dp
                 ) {
                     Column(Modifier.padding(horizontal=24.dp,vertical=22.dp),horizontalAlignment=Alignment.CenterHorizontally) {
@@ -1533,7 +1562,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                 awaitingUninstallPackage=target.packageName
                                 activity.uninstall(target)
                             },modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF7655B8))) {
-                                Text("Yes, uninstall",maxLines=1)
+                                Text("Yes",maxLines=1)
                             }
                         }
                     }
