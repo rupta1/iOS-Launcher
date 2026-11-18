@@ -923,7 +923,8 @@ fun LauncherRoot(db: LauncherDb) {
             draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
         }
-        val targetFolder=folderBounds.entries.firstOrNull { it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
+        val destinationFolderIds=folders.filter { it.page==targetPage }.map { it.id }.toSet()
+        val targetFolder=folderBounds.entries.firstOrNull { it.key in destinationFolderIds && it.key!=dragged.packageName && it.value.contains(dragPosition) }?.key
         if(targetFolder!=null) {
             removeFromSourceFolder()
             folders=folders.map { folder ->
@@ -961,6 +962,9 @@ fun LauncherRoot(db: LauncherDb) {
                     appSlotAssignments=appSlotAssignments-dragged.packageName-targetApp
                 } else {
                     removeFromSourceFolder()
+                    // Rebuild placement for this destination page as well when the
+                    // pointer is released directly over an app without creating a folder.
+                    updateGridDragPreview(dragPosition,"app:"+dragged.packageName)
                     applyGridDragPreview(targetPage)
                     appPageAssignments=appPageAssignments+(dragged.packageName to targetPage)
                 }
