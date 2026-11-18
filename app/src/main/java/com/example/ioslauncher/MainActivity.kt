@@ -1160,7 +1160,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
-             .pointerInput(apps, folders, dockPackages, columns, rows, drawer, controlCenter, settings) {
+             .pointerInput(apps, pageAppSlices, appPageAssignments, appSlotAssignments, folders, dockPackages, homeWidgets, widgetSlotAssignments, weatherWidgetPage, todayWidgetPage, showWeatherWidget, showTodayWidget, columns, rows, drawer, controlCenter, settings) {
                 if (!drawer && !controlCenter && !settings && openFolderId==null ) {
                     awaitEachGesture {
                         val down=awaitFirstDown(requireUnconsumed=false)
