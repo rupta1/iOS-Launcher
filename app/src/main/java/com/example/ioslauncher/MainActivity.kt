@@ -23,6 +23,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.geometry.Rect
@@ -1532,7 +1533,11 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         // Keep the dialog window wrap-content so Android blurs only the
                         // backdrop directly behind this modal, not the entire screen.
                         window.setBackgroundDrawableResource(android.R.color.transparent)
+                        // Restrict the dialog window to the modal's measured bounds.
+                        // BLUR_BEHIND then affects only the pixels underneath this glass panel.
+                        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                        window.setGravity(android.view.Gravity.CENTER)
                         window.attributes=window.attributes.apply {
                             blurBehindRadius=with(density) { 30.dp.roundToPx() }
                             dimAmount=0f
@@ -1540,9 +1545,19 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     }
                 }
                 Surface(
-                    modifier=Modifier.fillMaxWidth(.84f),
+                    modifier=Modifier.fillMaxWidth(.84f).onSizeChanged { size ->
+                        if (size.width > 0 && size.height > 0) {
+                            dialogWindow?.let { window ->
+                                val attrs=window.attributes
+                                if (attrs.width != size.width || attrs.height != size.height) {
+                                    window.setLayout(size.width,size.height)
+                                    window.setGravity(android.view.Gravity.CENTER)
+                                }
+                            }
+                        }
+                    },
                     shape=RoundedCornerShape(30.dp),
-                    color=Color.Black.copy(alpha=.70f),
+                    color=Color.Black.copy(alpha=.30f),
                     border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.24f)),
                     shadowElevation=26.dp
                 ) {
