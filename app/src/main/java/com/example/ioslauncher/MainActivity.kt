@@ -827,7 +827,9 @@ fun LauncherRoot(db: LauncherDb) {
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun advanceDragPage(direction:Int) {
         val currentPage=pendingDragPage.coerceAtLeast(0)
-        val lastPage=(pageCount-1).coerceAtLeast(0)
+        // Read the live extra-page state; pageCount is a composition snapshot and
+        // becomes stale while the pointerInput drag coroutine remains active.
+        val lastPage=(pageAppSlices.size+extraHomePages-1).coerceAtLeast(0)
         if(direction>0 && currentPage>=lastPage) {
             extraHomePages+=1
             pendingDragPage=currentPage+1
