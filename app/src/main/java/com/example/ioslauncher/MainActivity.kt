@@ -1366,24 +1366,26 @@ fun LauncherRoot(db: LauncherDb) {
                                 }
                             }
                         }
-                        // Render a visible destination placeholder for an app that is
-                        // being moved from another page. The floating drag image follows
-                        // the finger; this translucent tile shows the exact drop slot.
+                        // Use the exact same app tile and entry positioning as ordinary
+                        // home icons for the moving app's destination slot. This keeps the
+                        // native grid reflow/placeholder treatment consistent across pages.
                         draggingApp?.takeIf { targetPage==pendingDragPage && pageApps.none { app -> app.packageName==it.packageName } }?.let { moving ->
                             val cell=gridCells["app:"+moving.packageName]
                             if(cell!=null) {
-                                val ghostBitmap=remember(moving.packageName) { moving.icon.toBitmap(144,144).asImageBitmap() }
-                                Box(
-                                    Modifier.offset(x=cellW*cell.column,y=cellH*cell.row)
-                                        .size(cellW,cellH)
-                                        .padding(horizontal=5.dp,vertical=4.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color.White.copy(alpha=.24f))
-                                        .border(1.dp,Color.White.copy(alpha=.58f),RoundedCornerShape(18.dp)),
-                                    contentAlignment=Alignment.Center
+                                val x by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="moving-app-preview-x")
+                                val y by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="moving-app-preview-y")
+                                HomeEntryMotion(
+                                    revision=0,
+                                    order=pageApps.size,
+                                    modifier=Modifier.offset(x=x,y=y).size(cellW,cellH)
+                                        .graphicsLayer { alpha=.10f }
                                 ) {
-                                    Image(ghostBitmap,contentDescription="Drop preview for ${moving.label}",
-                                        modifier=Modifier.size(62.dp).graphicsLayer { alpha=.58f })
+                                    AppIcon(
+                                        app=moving,labels=labels && hideText=="Off",fg=fg,index=0,
+                                        animationSpeed=animationSpeed,dragTranslation=Offset.Zero,isDragging=false,
+                                        size=62.dp,draggableEnabled=false,animateOnEntry=false,
+                                        onClick={}
+                                    )
                                 }
                             }
                         }
