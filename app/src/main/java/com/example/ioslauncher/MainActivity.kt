@@ -571,10 +571,20 @@ fun LauncherRoot(db: LauncherDb) {
     var booting by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(2850); booting=false }
     var homeEntryRevision by remember { mutableIntStateOf(0) }
+    var homeEntryPage by remember { mutableIntStateOf(page) }
     LaunchedEffect(activity.homeUnlockRevision) {
-        // Do not animate on first composition, page swipes, or ordinary recompositions.
-        // A non-zero revision is emitted only after a completed keyguard unlock.
-        if (activity.homeUnlockRevision > 0) homeEntryRevision++
+        // Animate only the page visible at the moment the device finishes unlocking.
+        if (activity.homeUnlockRevision > 0) {
+            homeEntryPage = page
+            homeEntryRevision++
+            delay(900L)
+            homeEntryRevision = 0
+        }
+    }
+    LaunchedEffect(page) {
+        // Leaving the unlock page consumes the one-shot animation; swiping back
+        // must not replay it.
+        if (homeEntryRevision > 0 && page != homeEntryPage) homeEntryRevision = 0
     }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
@@ -1025,7 +1035,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
     ) {
         if (!drawer) {
-        Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 12.dp).graphicsLayer {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
             renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
             Spacer(Modifier.height(24.dp))
@@ -1130,7 +1140,7 @@ fun LauncherRoot(db: LauncherDb) {
                             val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-x")
                             val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-y")
                             HomeEntryMotion(
-                                revision=homeEntryRevision,
+                                revision=if (targetPage == homeEntryPage) homeEntryRevision else 0,
                                 order=iconIndex,
                                 modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
                                     .graphicsLayer { alpha=if(draggingApp?.packageName==app.packageName) .10f else 1f }
@@ -1140,6 +1150,7 @@ fun LauncherRoot(db: LauncherDb) {
                                     dragTranslation=Offset.Zero,isDragging=false,
                                     size=62.dp,
                                     draggableEnabled=false,
+                                    animateOnEntry=false,
                                     onBounds={ key,rect -> appBounds[key]=rect },
                                     onClick={ if(app.packageName=="internal:settings") settings=true else activity.launch(app) }
                                 )
@@ -1150,7 +1161,7 @@ fun LauncherRoot(db: LauncherDb) {
                             val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-x")
                             val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-y")
                             HomeEntryMotion(
-                                revision=homeEntryRevision,
+                                revision=if (targetPage == homeEntryPage) homeEntryRevision else 0,
                                 order=pageApps.size+folderIndex,
                                 modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
                                     .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() }
@@ -1244,6 +1255,7 @@ fun LauncherRoot(db: LauncherDb) {
                             ) {
                                 AppIcon(
                                     app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
+                                    animateOnEntry=false,
                                     onBounds={ key,rect -> dockAppBounds[key]=rect },
                                     onDragStart={
                                         draggingApp=dockApp
@@ -1506,11 +1518,15 @@ private fun HomeEntryMotion(
     modifier:Modifier=Modifier,
     content:@Composable BoxScope.()->Unit
 ) {
-    var entered by remember { mutableStateOf(false) }
+    var entered by remember { mutableStateOf(revision <= 0) }
     LaunchedEffect(revision) {
-        entered=false
-        delay((order.coerceAtLeast(0)*28L).coerceAtMost(420L))
-        entered=true
+        if (revision <= 0) {
+            entered=true
+        } else {
+            entered=false
+            delay((order.coerceAtLeast(0)*28L).coerceAtMost(420L))
+            entered=true
+        }
     }
     val scale by animateFloatAsState(
         targetValue=if(entered) 1f else .76f,
@@ -1591,11 +1607,14 @@ private fun iconResourceForLabel(label:String, packageName:String = ""):Int {
 fun AppIcon(
     app:InstalledApp, labels:Boolean, fg:Color, index:Int=0, animationSpeed:String="Fast", size:Dp=62.dp,
     dragTranslation:Offset=Offset.Zero, isDragging:Boolean=false, draggableEnabled:Boolean=true,
+    animateOnEntry:Boolean=true,
     onBounds:(String,Rect)->Unit={ _, _ -> }, onDragStart:()->Unit={}, onDrag:(Offset)->Unit={ _ -> },
     onDragEnd:()->Unit={}, onLongClick:(()->Unit)?=null, onClick:()->Unit
 ) {
-    var shown by remember(app.packageName) { mutableStateOf(false) }
-    LaunchedEffect(app.packageName) { shown=true }
+    var shown by remember(app.packageName,animateOnEntry) { mutableStateOf(!animateOnEntry) }
+    LaunchedEffect(app.packageName,animateOnEntry) {
+        if (animateOnEntry) shown=true else shown=true
+    }
     val duration = when(animationSpeed) { "Slow" -> 300; "Normal" -> 210; else -> 140 }
     val scale by animateFloatAsState(if(shown) 1f else .96f, spring(stiffness=androidx.compose.animation.core.Spring.StiffnessMediumLow), label="icon-scale")
     val alpha by animateFloatAsState(if(shown) 1f else 0f, androidx.compose.animation.core.tween(duration), label="icon-alpha")
