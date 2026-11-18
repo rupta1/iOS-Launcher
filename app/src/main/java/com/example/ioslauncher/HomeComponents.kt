@@ -192,6 +192,10 @@ fun AppIcon(
     onDragEnd:()->Unit={}, onDragCancel:()->Unit=onDragEnd,
     onLongClick:(()->Unit)?=null, onClick:()->Unit
 ) {
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnDragCancel by rememberUpdatedState(onDragCancel)
     var shown by remember(app.packageName,animateOnEntry) { mutableStateOf(!animateOnEntry) }
     LaunchedEffect(app.packageName,animateOnEntry) {
         if (animateOnEntry) shown=true else shown=true
@@ -213,10 +217,10 @@ fun AppIcon(
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
             .then(if(draggableEnabled) Modifier.pointerInput(app.packageName) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart={ onDragStart() },
-                    onDrag={ change, amount -> change.consume(); onDrag(amount) },
-                    onDragEnd=onDragEnd,
-                    onDragCancel=onDragCancel
+                    onDragStart={ currentOnDragStart() },
+                    onDrag={ change, amount -> change.consume(); currentOnDrag(amount) },
+                    onDragEnd={ currentOnDragEnd() },
+                    onDragCancel={ currentOnDragCancel() }
                 )
             } else Modifier)
             .combinedClickable(
