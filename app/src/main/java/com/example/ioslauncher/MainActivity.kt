@@ -1264,11 +1264,16 @@ fun LauncherRoot(db: LauncherDb) {
             ) { targetPage ->
                 val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
                 SideEffect {
-                    val visibleKeys=pageApps.map { it.packageName }.toSet()
-                    if(currentPageAppKeys!=visibleKeys) {
-                        currentPageAppKeys=visibleKeys
-                        // Drop stale hitboxes from pages that are no longer visible.
-                        appBounds.keys.filterNot { it in visibleKeys }.forEach { appBounds.remove(it) }
+                    // AnimatedContent composes the outgoing and incoming pages at
+                    // the same time. Only the active target page may own/clean the
+                    // shared app hitbox map; otherwise the outgoing page can run its
+                    // SideEffect after the incoming page and erase its drop targets.
+                    if (targetPage == page) {
+                        val visibleKeys=pageApps.map { it.packageName }.toSet()
+                        if(currentPageAppKeys!=visibleKeys) {
+                            currentPageAppKeys=visibleKeys
+                            appBounds.keys.filterNot { it in visibleKeys }.forEach { appBounds.remove(it) }
+                        }
                     }
                 }
                 if (targetPage < 0 && minusScreen == "Google Discover") {
