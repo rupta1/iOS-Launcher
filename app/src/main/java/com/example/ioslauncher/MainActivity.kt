@@ -1523,26 +1523,27 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
         if (pendingUninstallApp != null) {
             val target=pendingUninstallApp!!
             androidx.compose.ui.window.Dialog(
-                onDismissRequest={ pendingUninstallApp=null },
-                properties=androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth=false)
+                onDismissRequest={ pendingUninstallApp=null }
             ) {
                 val dialogView=androidx.compose.ui.platform.LocalView.current
                 val dialogWindow=(dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                 SideEffect {
                     if (Build.VERSION.SDK_INT >= 31) dialogWindow?.let { window ->
+                        // Keep the dialog window wrap-content so Android blurs only the
+                        // backdrop directly behind this modal, not the entire screen.
                         window.setBackgroundDrawableResource(android.R.color.transparent)
                         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                         window.attributes=window.attributes.apply {
                             blurBehindRadius=with(density) { 30.dp.roundToPx() }
-                            dimAmount=.18f
+                            dimAmount=0f
                         }
                     }
                 }
                 Surface(
                     modifier=Modifier.fillMaxWidth(.84f),
                     shape=RoundedCornerShape(30.dp),
-                    color=Color.White.copy(alpha=.70f),
-                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.42f)),
+                    color=Color.Black.copy(alpha=.70f),
+                    border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.24f)),
                     shadowElevation=26.dp
                 ) {
                     Column(Modifier.padding(horizontal=24.dp,vertical=22.dp),horizontalAlignment=Alignment.CenterHorizontally) {
@@ -1550,12 +1551,12 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                             Icon(Icons.Default.Delete,null,tint=Color(0xFF7554B8),modifier=Modifier.size(27.dp))
                         }
                         Spacer(Modifier.height(14.dp))
-                        Text("Are you sure?",color=Color(0xFF20212A),fontSize=19.sp,fontWeight=FontWeight.SemiBold)
+                        Text("Are you sure?",color=Color.White,fontSize=19.sp,fontWeight=FontWeight.SemiBold)
                         Spacer(Modifier.height(7.dp))
-                        Text("Uninstall ${target.label} from this device?",color=Color(0xFF62636D),fontSize=14.sp,textAlign=TextAlign.Center)
+                        Text("Uninstall ${target.label} from this device?",color=Color.White.copy(alpha=.76f),fontSize=14.sp,textAlign=TextAlign.Center)
                         Spacer(Modifier.height(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color(0xFF555866)) }
+                            TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color.White.copy(alpha=.82f)) }
                             Button(onClick={
                                 pendingUninstallApp=null
                                 uninstallRequestResumeRevision=activity.appRefreshRevision
