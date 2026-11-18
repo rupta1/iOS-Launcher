@@ -1169,16 +1169,35 @@ fun LauncherRoot(db: LauncherDb) {
                     awaitEachGesture {
                         val down=awaitFirstDown(requireUnconsumed=false)
                         val globalDown=down.position
+                        val appKey=appBounds.entries.firstOrNull { it.value.contains(globalDown) }?.key
                         val widgetKey=widgetBounds.entries.firstOrNull { entry ->
                             entry.value.contains(globalDown) && widgetResizeHandleBounds[entry.key]?.contains(globalDown)!=true &&
                                 (entry.key<0 || widgetHandleBounds[entry.key]?.contains(globalDown)==true)
                         }?.key
-                        if(widgetKey==null) return@awaitEachGesture
+                        if(appKey==null && widgetKey==null) return@awaitEachGesture
                         val longPress=awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                        draggingWidgetId=widgetKey
-                        widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
-                        widgetDragPosition=longPress.position
-                        pendingDragPage=page
+                        when {
+                            appKey!=null -> {
+                                val app=apps.firstOrNull { it.packageName==appKey }
+                                if(app!=null) {
+                                    draggingApp=app
+                                    draggingFromDock=false
+                                    draggingFromFolder=false
+                                    dragSourceFolderId=null
+                                    dragPosition=longPress.position
+                                    dragOriginBounds=appBounds[appKey] ?: Rect.Zero
+                                    dragOriginPage=page
+                                    dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
+                                    pendingDragPage=page
+                                }
+                            }
+                            widgetKey!=null -> {
+                                draggingWidgetId=widgetKey
+                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
+                                widgetDragPosition=longPress.position
+                                pendingDragPage=page
+                            }
+                        }
                         var endedNormally=false
                         while(true) {
                             // Pointer events keep the drag responsive; edge paging advances
@@ -1190,7 +1209,12 @@ fun LauncherRoot(db: LauncherDb) {
                                 break
                             }
                             val delta=change.position-change.previousPosition
-                            if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
+                            if(draggingApp!=null) {
+                                change.consume()
+                                dragPosition+=delta
+                                updateDragEdge(dragPosition)
+                                draggingApp?.let { updateGridDragPreview(dragPosition,"app:"+it.packageName) }
+                            } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
                                 change.consume()
                                 widgetDragPosition+=delta
                                 updateDragEdge(widgetDragPosition)
@@ -1200,9 +1224,14 @@ fun LauncherRoot(db: LauncherDb) {
                             }
                         }
                         if(endedNormally) {
-                            if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
+                            if(draggingApp!=null) finishIconDrag()
+                            else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
                         } else {
+                            draggingApp=null
                             draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                            draggingFromDock=false
+                            draggingFromFolder=false
+                            dragSourceFolderId=null
                             dragPreviewSlots=emptyMap()
                             dragEdgeDirection=0
                             pendingDragPage=page
@@ -1381,35 +1410,9 @@ fun LauncherRoot(db: LauncherDb) {
                                     app=app,labels=labels && hideText=="Off",fg=fg,index=0,animationSpeed=animationSpeed,
                                     dragTranslation=Offset.Zero,isDragging=false,
                                     size=62.dp,
-                                    draggableEnabled=true,
+                                    draggableEnabled=false,
                                     animateOnEntry=false,
                                     onBounds={ key,rect -> appBounds[key]=rect },
-                                    onDragStart={
-                                        draggingApp=app
-                                        draggingFromDock=false
-                                        draggingFromFolder=false
-                                        dragSourceFolderId=null
-                                        dragPosition=appBounds[app.packageName]?.center ?: Offset.Zero
-                                        dragOriginBounds=appBounds[app.packageName] ?: Rect.Zero
-                                        dragOriginPage=targetPage
-                                        dragOriginSlot=appSlotAssignments[app.packageName] ?: cell.row*columns+cell.column
-                                        pendingDragPage=targetPage
-                                    },
-                                    onDrag={ delta ->
-                                        dragPosition+=delta
-                                        updateDragEdge(dragPosition)
-                                        updateGridDragPreview(dragPosition,"app:"+app.packageName)
-                                    },
-                                    onDragEnd={ finishIconDrag() },
-                                    onDragCancel={
-                                        draggingApp=null
-                                        draggingFromDock=false
-                                        draggingFromFolder=false
-                                        dragSourceFolderId=null
-                                        dragPreviewSlots=emptyMap()
-                                        dragEdgeDirection=0
-                                        pendingDragPage=page
-                                    },
                                     onClick={ if(app.packageName=="internal:settings") settings=true else activity.launch(app) }
                                 )
                             }
