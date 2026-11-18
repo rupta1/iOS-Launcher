@@ -91,7 +91,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 
-private data class HomeFolder(val id:String, val title:String, val packages:List<String>, val page:Int, val slot:Int)
+internal data class HomeFolder(val id:String, val title:String, val packages:List<String>, val page:Int, val slot:Int)
 internal data class HomeGridTile(val key:String, val slot:Int, val spanX:Int=1, val spanY:Int=1)
 internal data class HomeGridCell(val column:Int, val row:Int)
 private data class DragGridPlacement(val key:String,val slot:Int,val spanX:Int=1,val spanY:Int=1)
