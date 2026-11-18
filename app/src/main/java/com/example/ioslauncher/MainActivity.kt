@@ -896,7 +896,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
     LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
-        kotlinx.coroutines.withFrameNanos { }
+        kotlinx.coroutines.delay(16L)
         val app=draggingApp
         if(app!=null) updateGridDragPreview(dragPosition,"app:"+app.packageName)
         else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
