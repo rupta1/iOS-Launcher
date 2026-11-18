@@ -244,10 +244,19 @@ class MainActivity : ComponentActivity() {
         // Pick up wallpaper changes made in Android's system wallpaper picker.
         wallpaperRevision++
         val keyguard = getSystemService(android.app.KeyguardManager::class.java)
-        if (wasDeviceLocked && keyguard?.isKeyguardLocked != true) {
-            homeUnlockRevision++
-        }
+        val completedUnlockPending = wasDeviceLocked
         wasDeviceLocked = false
+        // Keyguard can report unlocked while its exit animation is still running.
+        // Wait until that transition has settled before starting the home-entry motion.
+        if (completedUnlockPending) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!isFinishing && !isDestroyed && hasWindowFocus() &&
+                    getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != true
+                ) {
+                    homeUnlockRevision++
+                }
+            }, 650L)
+        }
     }
     private var pendingWidgetPage: Int = 0
     private var pendingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
@@ -562,7 +571,11 @@ fun LauncherRoot(db: LauncherDb) {
     var booting by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(2850); booting=false }
     var homeEntryRevision by remember { mutableIntStateOf(0) }
-    LaunchedEffect(activity.homeUnlockRevision) { homeEntryRevision++ }
+    LaunchedEffect(activity.homeUnlockRevision) {
+        // Do not animate on first composition, page swipes, or ordinary recompositions.
+        // A non-zero revision is emitted only after a completed keyguard unlock.
+        if (activity.homeUnlockRevision > 0) homeEntryRevision++
+    }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
@@ -1012,7 +1025,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
     ) {
         if (!drawer) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
+        Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 12.dp).graphicsLayer {
             renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
             Spacer(Modifier.height(24.dp))
