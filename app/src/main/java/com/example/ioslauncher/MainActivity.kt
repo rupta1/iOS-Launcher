@@ -784,14 +784,26 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if(dragPreviewSlots.isNotEmpty()) applyGridDragPreview(destinationPage)
         persistWidgetPositions()
-        extraHomePages=maxOf(extraHomePages,(destinationPage-(pageAppSlices.size-1).coerceAtLeast(0)).coerceAtLeast(0))
+        normalizeHomePages(
+            movingWidgetId=if(id >= 0 && homeWidgets.any { it.first == id }) id else AppWidgetManager.INVALID_APPWIDGET_ID,
+            destinationPage=destinationPage
+        )
+        persistWidgetPositions()
         draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
         dragPreviewSlots=emptyMap()
         dragEdgeDirection=0
         page=destinationPage
         pendingDragPage=page
     }
-    val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
+    val pageCount = maxOf(
+        pageAppSlices.size,
+        (homeWidgets.maxOfOrNull { it.second } ?: 0) + 1,
+        (folders.maxOfOrNull { it.page } ?: 0) + 1,
+        (if (showWeatherWidget) weatherWidgetPage else 0) + 1,
+        (if (showTodayWidget) todayWidgetPage else 0) + 1,
+        extraHomePages + 1,
+        1
+    )
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun lastHomePage():Int = maxOf(
         (pageAppSlices.size-1).coerceAtLeast(0),
@@ -802,6 +814,60 @@ fun LauncherRoot(db: LauncherDb) {
         folders.maxOfOrNull { it.page } ?: 0,
         0
     )
+    /**
+     * Remove vacant workspace pages and compact the remaining pages without
+     * changing the relative order of populated pages. Called only after a drag
+     * commits, so a temporarily empty page during a drag is never deleted.
+     */
+    fun normalizeHomePages(
+        movingPackage: String? = null,
+        movingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
+        destinationPage: Int = page
+    ) {
+        val appPages = linkedMapOf<String, Int>()
+        pageAppSlices.forEachIndexed { index, pageApps ->
+            pageApps.forEach { app ->
+                if (app.packageName != movingPackage) appPages[app.packageName] = index
+            }
+        }
+        if (movingPackage != null) appPages[movingPackage] = destinationPage.coerceAtLeast(0)
+
+        val widgetPages = homeWidgets.toMutableMap()
+        if (movingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID && movingWidgetId >= 0) {
+            widgetPages[movingWidgetId] = destinationPage.coerceAtLeast(0)
+        }
+        val occupied = mutableSetOf(0)
+        occupied.addAll(appPages.values)
+        occupied.addAll(widgetPages.values)
+        occupied.addAll(folders.map { it.page })
+        if (showWeatherWidget) occupied.add(weatherWidgetPage)
+        if (showTodayWidget) occupied.add(todayWidgetPage)
+        val orderedPages = occupied.filter { it >= 0 }.distinct().sorted()
+        val pageMap = orderedPages.mapIndexed { newIndex, oldIndex -> oldIndex to newIndex }.toMap()
+
+        appPageAssignments = appPages.mapNotNull { (pkg, oldPage) ->
+            pageMap[oldPage]?.let { pkg to it }
+        }.toMap()
+        homeWidgets = widgetPages.mapNotNull { (id, oldPage) ->
+            pageMap[oldPage]?.let { id to it }
+        }
+        folders = folders.mapNotNull { folder ->
+            pageMap[folder.page]?.let { folder.copy(page = it) }
+        }
+        weatherWidgetPage = pageMap[weatherWidgetPage] ?: 0
+        todayWidgetPage = pageMap[todayWidgetPage] ?: 0
+        extraHomePages = 0
+
+        val oldCurrent = page.coerceAtLeast(0)
+        page = pageMap[oldCurrent] ?: (pageMap.values.maxOrNull() ?: 0)
+        pendingDragPage = page
+        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
+        db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString() + ":" + it.second })
+        db.put("home_folders", encodeHomeFolders(folders))
+        db.put("weather_widget_page", weatherWidgetPage.toString())
+        db.put("today_widget_page", todayWidgetPage.toString())
+        db.put("extra_home_pages", "0")
+    }
     fun advanceDragPage(direction:Int) {
         if(direction==0) return
         val next=(pendingDragPage+direction).coerceAtLeast(0)
@@ -962,7 +1028,8 @@ fun LauncherRoot(db: LauncherDb) {
         saveAssignments()
         dragPreviewSlots=emptyMap()
         page=targetPage
-        extraHomePages=maxOf(extraHomePages,(targetPage-(pageAppSlices.size-1).coerceAtLeast(0)).coerceAtLeast(0))
+        normalizeHomePages(movingPackage=dragged.packageName, destinationPage=targetPage)
+        saveAssignments()
         draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
     }
 
