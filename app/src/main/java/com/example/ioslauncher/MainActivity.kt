@@ -1065,16 +1065,9 @@ fun LauncherRoot(db: LauncherDb) {
                         }
                         var endedNormally=false
                         while(true) {
-                            // Continue polling while the pointer is held at an edge; Android
-                            // does not emit move events for a stationary finger.
-                            val event=kotlinx.coroutines.withTimeoutOrNull(80L) {
-                                awaitPointerEvent(PointerEventPass.Initial)
-                            }
-                            if(event==null) {
-                                if(draggingApp!=null) updateDragEdge(dragPosition)
-                                else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) updateDragEdge(widgetDragPosition)
-                                continue
-                            }
+                            // Pointer events keep the drag responsive; edge paging advances
+                            // as the user continues moving along the screen edge.
+                            val event=awaitPointerEvent(PointerEventPass.Initial)
                             val change=event.changes.firstOrNull { it.id==down.id } ?: break
                             if(!change.pressed) {
                                 endedNormally=true
