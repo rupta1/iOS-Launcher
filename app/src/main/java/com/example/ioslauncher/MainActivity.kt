@@ -727,37 +727,11 @@ fun LauncherRoot(db: LauncherDb) {
             (hit+if(after) 1 else 0).coerceIn(0,ordered.size)
         } else ordered.indexOfFirst { it.slot>slot }.let { if(it<0) ordered.size else it }
         ordered.add(at,moving)
-        if(fillCells) {
-            // Compact mode: close gaps and keep the existing automatic packing behavior.
-            dragPreviewSlots=ordered.mapIndexed { i,item -> item.key to i }.toMap()
-        } else {
-            // Free-placement mode: pin the dragged item to the exact cell under the finger.
-            // Existing tiles retain their cells unless the new footprint collides with them;
-            // only colliding tiles are shifted to the next available cell.
-            val occupied=Array(effectiveRows.coerceAtLeast(1)) { BooleanArray(columns.coerceAtLeast(1)) }
-            val placed=linkedMapOf<String,Int>()
-            fun fitsAt(index:Int,w:Int,h:Int):Boolean {
-                val x=index%columns.coerceAtLeast(1); val y=index/columns.coerceAtLeast(1)
-                if(y+h>occupied.size || x+w>columns.coerceAtLeast(1)) return false
-                for(yy in y until y+h) for(xx in x until x+w) if(occupied[yy][xx]) return false
-                return true
-            }
-            fun place(item:DragGridPlacement,requested:Int) {
-                val w=item.spanX.coerceIn(1,columns.coerceAtLeast(1))
-                val h=item.spanY.coerceIn(1,effectiveRows.coerceAtLeast(1))
-                val start=requested.coerceIn(0,(columns.coerceAtLeast(1)*effectiveRows.coerceAtLeast(1)-1).coerceAtLeast(0))
-                val chosen=(start until columns.coerceAtLeast(1)*effectiveRows.coerceAtLeast(1)).firstOrNull { fitsAt(it,w,h) }
-                    ?: (0 until start).firstOrNull { fitsAt(it,w,h) }
-                if(chosen!=null) {
-                    val x=chosen%columns.coerceAtLeast(1); val y=chosen/columns.coerceAtLeast(1)
-                    for(yy in y until y+h) for(xx in x until x+w) occupied[yy][xx]=true
-                    placed[item.key]=chosen
-                }
-            }
-            place(moving,slot)
-            ordered.filter { it.key!=movingKey }.forEach { place(it,it.slot) }
-            dragPreviewSlots=placed
+        val placements = ordered.map { item ->
+            HomeGridTile(item.key, item.slot, item.spanX, item.spanY)
         }
+        dragPreviewSlots = HomeWorkspaceEngine.layout(placements, columns, effectiveRows, fillCells)
+            .mapValues { (_, cell) -> cell.row * columns.coerceAtLeast(1) + cell.column }
     }
     fun applyGridDragPreview(destinationPage:Int) {
         val preview=dragPreviewSlots
