@@ -667,14 +667,14 @@ fun LauncherRoot(db: LauncherDb) {
         return row*columns+col
     }
     fun widgetSlotAt(position:Offset,id:Int,pageIndex:Int=pendingDragPage):Int {
-        val bounds=gridBoundsFor(pageIndex)
-        val cellW=(bounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val cellH=(bounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-        val bounds=widgetCanvasBounds
-        val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/cellW).toInt().coerceIn(1,columns) else 1
-        val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/cellH) .toInt().coerceIn(1,effectiveRows) else 1
-        val col=(((position.x-homeGridBounds.left)/cellW).toInt()).coerceIn(0,(columns-spanX).coerceAtLeast(0))
-        val row=(((position.y-homeGridBounds.top)/cellH).toInt()).coerceIn(0,(effectiveRows-spanY).coerceAtLeast(0))
+        val grid=gridBoundsFor(pageIndex)
+        val cellW=(grid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val cellH=(grid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val widget=widgetCanvasBounds
+        val spanX=if(widget.width>0f) kotlin.math.ceil(widget.width/cellW).toInt().coerceIn(1,columns) else 1
+        val spanY=if(widget.height>0f) kotlin.math.ceil(widget.height/cellH).toInt().coerceIn(1,effectiveRows) else 1
+        val col=(((position.x-grid.left)/cellW).toInt()).coerceIn(0,(columns-spanX).coerceAtLeast(0))
+        val row=(((position.y-grid.top)/cellH).toInt()).coerceIn(0,(effectiveRows-spanY).coerceAtLeast(0))
         return row*columns+col
     }
     val showLabels = labels && hideText == "Off"
