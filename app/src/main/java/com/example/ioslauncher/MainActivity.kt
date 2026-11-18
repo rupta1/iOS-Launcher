@@ -413,6 +413,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LauncherRoot(db: LauncherDb) {
     val context = LocalContext.current
