@@ -607,7 +607,7 @@ fun LauncherRoot(db: LauncherDb) {
     val minHomeCellHeightDp = if(labels && hideText=="Off") 80f else 66f
     val screenHeightDp = context.resources.displayMetrics.heightPixels / density.density
     val availableGridHeightDp = (screenHeightDp - 270f).coerceAtLeast(minHomeCellHeightDp)
-    val effectiveRows = minOf(rows,(availableGridHeightDp/minHomeCellHeightDp).toInt().coerceAtLeast(1))
+    // The workspace grid itself is measured by BoxWithConstraints; use the configured row count\n    // directly rather than estimating it from physical display height.\n    val effectiveRows = rows.coerceAtLeast(1)
     var recentsArrangement by remember { mutableStateOf(db.get("recents_arrangement", "Vertically")) }
     var highRefreshRate by remember { mutableStateOf(db.get("high_refresh_rate", "true") == "true") }
     LaunchedEffect(drawer,highRefreshRate) {
