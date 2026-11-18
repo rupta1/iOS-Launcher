@@ -2010,7 +2010,15 @@ fun AppDrawer(apps: List<InstalledApp>, search: String, onSearch: (String)->Unit
                 }
             }
             Spacer(Modifier.height(14.dp))
-            LazyVerticalGrid(
+            if(visibleApps.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {
+                    Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                        Icon(Icons.Default.SearchOff,null,tint=Color.White.copy(alpha=.72f),modifier=Modifier.size(34.dp))
+                        Text("No apps found",color=Color.White,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                        Text("Try another search or category",color=Color.White.copy(alpha=.62f),fontSize=12.sp)
+                    }
+                }
+            } else LazyVerticalGrid(
                 columns=GridCells.Fixed(4),
                 state=rememberLazyGridState(),
                 modifier=Modifier.weight(1f).fillMaxWidth(),
