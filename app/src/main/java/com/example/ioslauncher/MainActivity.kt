@@ -38,6 +38,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -233,11 +235,19 @@ class MainActivity : ComponentActivity() {
     private val widgetManager by lazy { AppWidgetManager.getInstance(this) }
     var wallpaperRevision by mutableIntStateOf(0)
         private set
+    var homeUnlockRevision by mutableIntStateOf(0)
+        private set
+    private var wasDeviceLocked = false
 
     override fun onResume() {
         super.onResume()
         // Pick up wallpaper changes made in Android's system wallpaper picker.
         wallpaperRevision++
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        if (wasDeviceLocked && keyguard?.isKeyguardLocked != true) {
+            homeUnlockRevision++
+        }
+        wasDeviceLocked = false
     }
     private var pendingWidgetPage: Int = 0
     private var pendingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
@@ -333,7 +343,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStart() { super.onStart(); try { widgetHost.startListening() } catch (_: Exception) { } }
-    override fun onStop() { try { widgetHost.stopListening() } catch (_: Exception) { }; super.onStop() }
+    override fun onStop() {
+        wasDeviceLocked = getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
+        try { widgetHost.stopListening() } catch (_: Exception) { }
+        super.onStop()
+    }
 
     fun removeHomeWidget(id: Int) {
         val remaining = db.get("home_widgets").split(",").filter { it.isNotBlank() && it.substringBefore(":").toIntOrNull() != id }
@@ -547,6 +561,8 @@ fun LauncherRoot(db: LauncherDb) {
     }
     var booting by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(2850); booting=false }
+    var homeEntryRevision by remember { mutableIntStateOf(0) }
+    LaunchedEffect(activity.homeUnlockRevision) { homeEntryRevision++ }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
     val fg = if (dark) Color.White else Color(0xFF18191F)
@@ -1096,11 +1112,16 @@ fun LauncherRoot(db: LauncherDb) {
                                 }
                             }
                         }
-                        pageApps.forEach { app ->
-                            val cell=gridCells["app:"+app.packageName] ?: return@forEach
+                        pageApps.forEachIndexed { iconIndex, app ->
+                            val cell=gridCells["app:"+app.packageName] ?: return@forEachIndexed
                             val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-x")
                             val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-y")
-                            Box(Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH).graphicsLayer { alpha=if(draggingApp?.packageName==app.packageName) .10f else 1f },contentAlignment=Alignment.Center) {
+                            HomeEntryMotion(
+                                revision=homeEntryRevision,
+                                order=iconIndex,
+                                modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
+                                    .graphicsLayer { alpha=if(draggingApp?.packageName==app.packageName) .10f else 1f }
+                            ) {
                                 AppIcon(
                                     app=app,labels=labels && hideText=="Off",fg=fg,index=0,animationSpeed=animationSpeed,
                                     dragTranslation=Offset.Zero,isDragging=false,
@@ -1111,12 +1132,16 @@ fun LauncherRoot(db: LauncherDb) {
                                 )
                             }
                         }
-                        visibleFolders.forEach { folder ->
-                            val cell=gridCells["folder:"+folder.id] ?: return@forEach
+                        visibleFolders.forEachIndexed { folderIndex, folder ->
+                            val cell=gridCells["folder:"+folder.id] ?: return@forEachIndexed
                             val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-x")
                             val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-y")
-                            Box(Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
-                                .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() },contentAlignment=Alignment.Center) {
+                            HomeEntryMotion(
+                                revision=homeEntryRevision,
+                                order=pageApps.size+folderIndex,
+                                modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
+                                    .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() }
+                            ) {
                                 FolderTile(folder,apps,fg,onClick={openFolderId=folder.id})
                             }
                         }
@@ -1199,24 +1224,30 @@ fun LauncherRoot(db: LauncherDb) {
                     dockPackages.forEach { packageName ->
                         val dockApp=apps.firstOrNull { it.packageName==packageName }
                         if(dockApp!=null) {
-                            AppIcon(
-                                app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
-                                onBounds={ key,rect -> dockAppBounds[key]=rect },
-                                onDragStart={
-                                    draggingApp=dockApp
-                                    draggingFromDock=true
-                                    draggingFromFolder=false
-                                    dragSourceFolderId=null
-                                    dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center
-                                    dragOriginBounds=dockAppBounds[packageName] ?: Rect.Zero
-                                    dragOriginPage=page
-                                    dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
-                                    pendingDragPage=page
-                                },
-                                onDrag={ delta -> dragPosition+=delta; updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
-                                onDragEnd={ finishIconDrag() },
-                                onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
-                            )
+                            HomeEntryMotion(
+                                revision=homeEntryRevision,
+                                order=pageApps.size+folders.size+dockPackages.indexOf(packageName),
+                                modifier=Modifier
+                            ) {
+                                AppIcon(
+                                    app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
+                                    onBounds={ key,rect -> dockAppBounds[key]=rect },
+                                    onDragStart={
+                                        draggingApp=dockApp
+                                        draggingFromDock=true
+                                        draggingFromFolder=false
+                                        dragSourceFolderId=null
+                                        dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center
+                                        dragOriginBounds=dockAppBounds[packageName] ?: Rect.Zero
+                                        dragOriginPage=page
+                                        dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
+                                        pendingDragPage=page
+                                    },
+                                    onDrag={ delta -> dragPosition+=delta; updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
+                                    onDragEnd={ finishIconDrag() },
+                                    onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
+                                )
+                            }
                         }
                     }
                     if(dockPackages.isEmpty()) {
@@ -1263,7 +1294,18 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> Unit
             }
         }
-        if (drawer) {
+        AnimatedVisibility(
+            visible=drawer,
+            enter=slideInVertically(
+                animationSpec=spring(dampingRatio=.86f,stiffness=420f),
+                initialOffsetY={ fullHeight -> fullHeight }
+            ) + fadeIn(tween(220)) + scaleIn(spring(dampingRatio=.88f,stiffness=440f),initialScale=.965f),
+            exit=slideOutVertically(
+                animationSpec=tween(260),
+                targetOffsetY={ fullHeight -> fullHeight }
+            ) + fadeOut(tween(170)) + scaleOut(tween(220),targetScale=.985f),
+            modifier=Modifier.fillMaxSize()
+        ) {
             AppDrawer(filtered, search, {search=it}, fg, bg, labels && hideText == "Off",
                 drawerTransparency, {activity.launch(it)}, {drawer=false})
         }
@@ -1442,6 +1484,45 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             }
         }
     }
+}
+
+@Composable
+private fun HomeEntryMotion(
+    revision:Int,
+    order:Int,
+    modifier:Modifier=Modifier,
+    content:@Composable BoxScope.()->Unit
+) {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(revision) {
+        entered=false
+        delay((order.coerceAtLeast(0)*28L).coerceAtMost(420L))
+        entered=true
+    }
+    val scale by animateFloatAsState(
+        targetValue=if(entered) 1f else .76f,
+        animationSpec=spring(dampingRatio=.68f,stiffness=480f),
+        label="home-entry-scale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue=if(entered) 1f else 0f,
+        animationSpec=tween(durationMillis=220),
+        label="home-entry-alpha"
+    )
+    val offsetY by animateDpAsState(
+        targetValue=if(entered) 0.dp else 22.dp,
+        animationSpec=spring(dampingRatio=.72f,stiffness=430f),
+        label="home-entry-offset"
+    )
+    Box(
+        modifier=modifier.graphicsLayer {
+            scaleX=scale
+            scaleY=scale
+            this.alpha=alpha
+            translationY=offsetY.toPx()
+        },
+        content=content
+    )
 }
 
 private fun greeting():String = when(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
