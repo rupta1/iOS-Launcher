@@ -581,7 +581,7 @@ fun LauncherRoot(db: LauncherDb) {
     val systemDark = isSystemInDarkTheme()
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
-    var extraHomePages by remember { mutableIntStateOf(0) }
+    var extraHomePages by remember { mutableIntStateOf(db.get("extra_home_pages","0").toIntOrNull()?.coerceAtLeast(0) ?: 0) }
     var homeEditMode by remember { mutableStateOf(false) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "5").toIntOrNull() ?: 5) }
     var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "gestures")) }
@@ -807,6 +807,7 @@ fun LauncherRoot(db: LauncherDb) {
         val next=(pendingDragPage+direction).coerceAtLeast(0)
         if(direction>0 && next>lastHomePage()) {
             extraHomePages=maxOf(extraHomePages,next-(pageAppSlices.size-1).coerceAtLeast(0))
+            db.put("extra_home_pages",extraHomePages.toString())
         }
         pendingDragPage=next
         page=next
@@ -1380,9 +1381,18 @@ fun LauncherRoot(db: LauncherDb) {
                             val occupied=pageAppSlices.getOrNull(current).orEmpty().isNotEmpty() ||
                                 homeWidgets.any { it.second==current } || folders.any { it.page==current } ||
                                 (showWeatherWidget && weatherWidgetPage==current) || (showTodayWidget && todayWidgetPage==current)
-                            if(!occupied && pageCount>1) { extraHomePages=(extraHomePages-1).coerceAtLeast(0); page=(page-1).coerceAtLeast(0) }
+                            if(!occupied && pageCount>1 && current==pageCount-1) {
+                                extraHomePages=(extraHomePages-1).coerceAtLeast(0)
+                                db.put("extra_home_pages",extraHomePages.toString())
+                                page=(page-1).coerceAtLeast(0)
+                            }
                         },enabled=pageCount>1) { Icon(Icons.Default.RemoveCircleOutline,null); Text("Page") }
-                        TextButton(onClick={ val newPage=pageCount; extraHomePages+=1; page=newPage }) {
+                        TextButton(onClick={
+                            val newPage=pageCount
+                            extraHomePages+=1
+                            db.put("extra_home_pages",extraHomePages.toString())
+                            page=newPage
+                        }) {
                             Icon(Icons.Default.AddCircleOutline,null); Text("Add")
                         }
                         TextButton(onClick={homeEditMode=false}) { Icon(Icons.Default.Check,null); Text("Done") }
