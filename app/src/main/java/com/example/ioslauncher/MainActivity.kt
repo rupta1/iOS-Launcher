@@ -1214,14 +1214,14 @@ fun LauncherRoot(db: LauncherDb) {
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
                         add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)))
                     }
-                    draggingApp?.takeIf{moving->page==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:tiles.size))}
+                    draggingApp?.takeIf{moving->page==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
                 }
                 val cells=remember(tiles,columns,effectiveRows,fillCells){calculateHomeGridCells(tiles,columns,effectiveRows,fillCells)}
                 pageApps.forEachIndexed{index,app->
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
-                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName).12f else 1f}) {
+                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f}) {
                         AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
@@ -1239,7 +1239,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-y")
-                    Box(Modifier.offset(x,y).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id).12f else 1f}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
+                    Box(Modifier.offset(x,y).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id) .12f else 1f}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
                         AndroidView(factory={activity.widgetHost.createView(it,id,info)},modifier=Modifier.fillMaxSize())
                         Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
                     }
@@ -1257,7 +1257,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark).13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
+            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark) .13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
