@@ -704,7 +704,37 @@ fun LauncherRoot(db: LauncherDb) {
             (hit+if(after) 1 else 0).coerceIn(0,ordered.size)
         } else ordered.indexOfFirst { it.slot>slot }.let { if(it<0) ordered.size else it }
         ordered.add(at,moving)
-        dragPreviewSlots=ordered.mapIndexed { i,item -> item.key to i }.toMap()
+        if(fillCells) {
+            // Compact mode: close gaps and keep the existing automatic packing behavior.
+            dragPreviewSlots=ordered.mapIndexed { i,item -> item.key to i }.toMap()
+        } else {
+            // Free-placement mode: pin the dragged item to the exact cell under the finger.
+            // Existing tiles retain their cells unless the new footprint collides with them;
+            // only colliding tiles are shifted to the next available cell.
+            val occupied=Array(effectiveRows.coerceAtLeast(1)) { BooleanArray(columns.coerceAtLeast(1)) }
+            val placed=linkedMapOf<String,Int>()
+            fun fitsAt(index:Int,w:Int,h:Int):Boolean {
+                val x=index%columns.coerceAtLeast(1); val y=index/columns.coerceAtLeast(1)
+                if(y+h>occupied.size || x+w>columns.coerceAtLeast(1)) return false
+                for(yy in y until y+h) for(xx in x until x+w) if(occupied[yy][xx]) return false
+                return true
+            }
+            fun place(item:DragGridPlacement,requested:Int) {
+                val w=item.spanX.coerceIn(1,columns.coerceAtLeast(1))
+                val h=item.spanY.coerceIn(1,effectiveRows.coerceAtLeast(1))
+                val start=requested.coerceIn(0,(columns.coerceAtLeast(1)*effectiveRows.coerceAtLeast(1)-1).coerceAtLeast(0))
+                val chosen=(start until columns.coerceAtLeast(1)*effectiveRows.coerceAtLeast(1)).firstOrNull { fitsAt(it,w,h) }
+                    ?: (0 until start).firstOrNull { fitsAt(it,w,h) }
+                if(chosen!=null) {
+                    val x=chosen%columns.coerceAtLeast(1); val y=chosen/columns.coerceAtLeast(1)
+                    for(yy in y until y+h) for(xx in x until x+w) occupied[yy][xx]=true
+                    placed[item.key]=chosen
+                }
+            }
+            place(moving,slot)
+            ordered.filter { it.key!=movingKey }.forEach { place(it,it.slot) }
+            dragPreviewSlots=placed
+        }
     }
     fun applyGridDragPreview(destinationPage:Int) {
         val preview=dragPreviewSlots
@@ -795,35 +825,46 @@ fun LauncherRoot(db: LauncherDb) {
     }
     val pageCount = (pageAppSlices.size + extraHomePages).coerceAtLeast(1)
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
+    fun advanceDragPage(direction:Int) {
+        val currentPage=pendingDragPage.coerceAtLeast(0)
+        val lastPage=(pageCount-1).coerceAtLeast(0)
+        if(direction>0 && currentPage>=lastPage) {
+            extraHomePages+=1
+            pendingDragPage=currentPage+1
+        } else {
+            pendingDragPage=(currentPage+direction).coerceAtLeast(0)
+        }
+        page=pendingDragPage
+        dragPreviewSlots=emptyMap()
+    }
     fun updateDragEdge(position: Offset) {
-        val widthPx = activity.window.decorView.width.toFloat()
-        val edgePx = with(density) { 56.dp.toPx() }
-        val direction = when {
-            position.x <= edgePx -> -1
-            position.x >= widthPx - edgePx -> 1
+        val widthPx=activity.window.decorView.width.toFloat()
+        val edgePx=with(density){64.dp.toPx()}
+        val direction=when {
+            position.x<=edgePx -> -1
+            position.x>=widthPx-edgePx -> 1
             else -> 0
         }
-        if (direction == 0) {
-            dragEdgeDirection = 0
-            lastEdgePageAdvanceAt = 0L
+        if(direction==0) {
+            dragEdgeDirection=0
+            lastEdgePageAdvanceAt=0L
             return
         }
-        val now = android.os.SystemClock.uptimeMillis()
-        val shouldAdvance = direction != dragEdgeDirection ||
-            (now - lastEdgePageAdvanceAt) >= 520L
-        if (shouldAdvance) {
-            val currentPage = pendingDragPage.coerceAtLeast(0)
-            val lastPage = (pageCount - 1).coerceAtLeast(0)
-            if (direction > 0 && currentPage >= lastPage) {
-                extraHomePages += 1
-                pendingDragPage = currentPage + 1
-            } else {
-                pendingDragPage = (currentPage + direction).coerceAtLeast(0)
+        if(direction!=dragEdgeDirection) {
+            dragEdgeDirection=direction
+            lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
+            advanceDragPage(direction)
+        }
+    }
+    LaunchedEffect(draggingApp?.packageName,draggingWidgetId,dragEdgeDirection) {
+        if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+            while(true) {
+                kotlinx.coroutines.delay(650L)
+                if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+                    advanceDragPage(dragEdgeDirection)
+                    lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
+                } else break
             }
-            dragEdgeDirection = direction
-            lastEdgePageAdvanceAt = now
-            page = pendingDragPage
-            dragPreviewSlots = emptyMap()
         }
     }
     fun finishIconDrag() {
@@ -1128,7 +1169,11 @@ fun LauncherRoot(db: LauncherDb) {
                 val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
                 SideEffect {
                     val visibleKeys=pageApps.map { it.packageName }.toSet()
-                    if(currentPageAppKeys!=visibleKeys) currentPageAppKeys=visibleKeys
+                    if(currentPageAppKeys!=visibleKeys) {
+                        currentPageAppKeys=visibleKeys
+                        // Drop stale hitboxes from pages that are no longer visible.
+                        appBounds.keys.filterNot { it in visibleKeys }.forEach { appBounds.remove(it) }
+                    }
                 }
                 if (targetPage < 0 && minusScreen == "Google Discover") {
                     val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
@@ -1335,7 +1380,7 @@ fun LauncherRoot(db: LauncherDb) {
                                         dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
                                         pendingDragPage=page
                                     },
-                                    onDrag={ delta -> dragPosition+=delta; updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
+                                    onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition); updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
                                     onDragEnd={ finishIconDrag() },
                                     onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
                                 )
