@@ -37,4 +37,5 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics:1.7.6")
     implementation("androidx.webkit:webkit:1.12.1")
     debugImplementation("androidx.compose.ui:ui-tooling:1.7.6")
+    testImplementation("junit:junit:4.13.2")
 }
