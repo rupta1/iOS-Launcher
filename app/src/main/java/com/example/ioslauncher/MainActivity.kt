@@ -1167,6 +1167,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }?.key else null
                 if(appKey==null&&widgetKey==null)return@awaitEachGesture
                 val long=awaitLongPressOrCancellation(down.id,pass=PointerEventPass.Initial)?:return@awaitEachGesture
+                long.consume()
                 if(appKey!=null) {
                     val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
                     draggingApp=app
@@ -1188,8 +1189,9 @@ fun LauncherRoot(db: LauncherDb) {
                 var cancelled=false
                 while(true) {
                     val event=awaitPointerEvent(PointerEventPass.Initial)
-                    val change=event.changes.firstOrNull{it.id==down.id}?:run{cancelled=true;break}
-                    if(!change.pressed){released=true;break}
+                    val change=event.changes.firstOrNull{it.id==down.id}
+                    if(change==null){cancelled=true;break}
+                    if(!change.pressed){change.consume();released=true;break}
                     val delta=change.position-change.previousPosition
                     if(draggingApp!=null) {
                         change.consume()
@@ -1463,19 +1465,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                     AppIcon(
                                         app=app,labels=true,fg=Color(0xFF242A33),size=54.dp,
                                         onBounds={ key,rect -> folderMemberBounds[key]=rect },
-                                        onDragStart={
-                                            draggingApp=app
-                                            draggingFromDock=false
-                                            draggingFromFolder=true
-                                            dragSourceFolderId=folder.id
-                                            dragPosition=folderMemberBounds[app.packageName]?.center ?: folderOverlayBounds.center
-                                            dragOriginBounds=folderMemberBounds[app.packageName] ?: Rect.Zero
-                                            dragOriginPage=folder.page
-                                            dragOriginSlot=folder.slot
-                                            pendingDragPage=folder.page
-                                        },
-                                        onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition); updateGridDragPreview(dragPosition,"app:"+app.packageName) },
-                                        onDragEnd={ finishIconDrag() },
+                                        draggableEnabled=false,
                                         onClick={
                                             openFolderId=null
                                             if(app.packageName=="internal:settings") settings=true else activity.launch(app)
