@@ -758,7 +758,7 @@ fun LauncherRoot(db: LauncherDb) {
         excludedPackage: String? = null,
         movingWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
         destinationPage: Int = page
-    ) {
+    ): Int {
         val appPages = linkedMapOf<String, Int>()
         pageAppSlices.forEachIndexed { index, pageApps ->
             pageApps.forEach { app ->
@@ -793,15 +793,19 @@ fun LauncherRoot(db: LauncherDb) {
         todayWidgetPage = pageMap[todayWidgetPage] ?: 0
         extraHomePages = 0
 
-        val oldCurrent = page.coerceAtLeast(0)
-        page = pageMap[oldCurrent] ?: (pageMap.values.maxOrNull() ?: 0)
-        pendingDragPage = page
+        // The destination can shift left when empty pages are compacted. Return
+        // its new index so drag completion never selects the pre-compaction page.
+        val normalizedDestination = pageMap[destinationPage.coerceAtLeast(0)]
+            ?: (pageMap.values.maxOrNull() ?: 0)
+        page = normalizedDestination
+        pendingDragPage = normalizedDestination
         db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
         db.put("home_widgets", homeWidgets.joinToString(",") { it.first.toString() + ":" + it.second })
         db.put("home_folders", encodeHomeFolders(folders))
         db.put("weather_widget_page", weatherWidgetPage.toString())
         db.put("today_widget_page", todayWidgetPage.toString())
         db.put("extra_home_pages", "0")
+        return normalizedDestination
     }
     fun finishWidgetDrag() {
         val id=draggingWidgetId
@@ -839,7 +843,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
         if(dragPreviewSlots.isNotEmpty()) applyGridDragPreview(destinationPage)
         persistWidgetPositions()
-        normalizeHomePages(
+        val normalizedPage = normalizeHomePages(
             movingWidgetId=if(id >= 0 && homeWidgets.any { it.first == id }) id else AppWidgetManager.INVALID_APPWIDGET_ID,
             destinationPage=destinationPage
         )
@@ -847,8 +851,8 @@ fun LauncherRoot(db: LauncherDb) {
         draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
         dragPreviewSlots=emptyMap()
         dragEdgeDirection=0
-        page=destinationPage
-        pendingDragPage=page
+        page=normalizedPage
+        pendingDragPage=normalizedPage
     }
     val pageCount = maxOf(
         pageAppSlices.size,
@@ -963,7 +967,9 @@ fun LauncherRoot(db: LauncherDb) {
             appPageAssignments=appPageAssignments-dragged.packageName
             appSlotAssignments=appSlotAssignments-dragged.packageName
             saveAssignments()
-            normalizeHomePages(excludedPackage=dragged.packageName, destinationPage=page)
+            val normalizedPage = normalizeHomePages(excludedPackage=dragged.packageName, destinationPage=page)
+            page=normalizedPage
+            pendingDragPage=normalizedPage
             saveAssignments()
             draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
             return
@@ -1032,11 +1038,13 @@ fun LauncherRoot(db: LauncherDb) {
         dragPreviewSlots=emptyMap()
         page=targetPage
         val isNowInFolder = folders.any { dragged.packageName in it.packages }
-        normalizeHomePages(
+        val normalizedPage = normalizeHomePages(
             movingPackage=if (isNowInFolder || dragged.packageName in dockPackages) null else dragged.packageName,
             excludedPackage=if (isNowInFolder || dragged.packageName in dockPackages) dragged.packageName else null,
             destinationPage=targetPage
         )
+        page=normalizedPage
+        pendingDragPage=normalizedPage
         saveAssignments()
         draggingApp=null; draggingFromDock=false; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
     }
