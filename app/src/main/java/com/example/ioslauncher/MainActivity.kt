@@ -1116,498 +1116,164 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
 
-    // Keep the launcher surface transparent so only the Android system wallpaper is visible.
-    Box(
-        Modifier.fillMaxSize().background(Color.Transparent)
-        .pointerInput(drawer, controlCenter, settings, navigationMode, homeStyle, swipeDownAction, minusScreen, resizingWidgetId) {
-            if (!drawer && !controlCenter && !settings && openFolderId==null && draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID && resizingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+    // New home surface: measured grid geometry and a single parent drag owner.
+    Box(Modifier.fillMaxSize().background(Color.Transparent)
+        .pointerInput(drawer,controlCenter,settings,openFolderId,page,pageCount,minusScreen,homeStyle,swipeDownAction,draggingApp,draggingWidgetId) {
+            if(!drawer&&!controlCenter&&!settings&&openFolderId==null&&draggingApp==null&&draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    // Leave Android's back and home gesture edge regions untouched.
-                    val systemEdge = with(density) { 32.dp.toPx() }
-                    if (down.position.x <= systemEdge ||
-                        down.position.x >= size.width - systemEdge ||
-                        down.position.y >= size.height - systemEdge
-                    ) return@awaitEachGesture
-                    var dx = 0f
-                    var dy = 0f
-                    var finished = false
-                    while (!finished) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID || resizingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) { finished=true; break }
-                        if (!change.pressed) break
-                        val delta = change.position - change.previousPosition
-                        dx += delta.x
-                        dy += delta.y
-                        val threshold = viewConfiguration.touchSlop * 1.4f
-                        if (kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f) {
-                            if (dx > 0 && page == 0 && minusScreen == "Google Discover") page = -1
-                            else page = (page + if (dx < 0) 1 else -1).coerceIn(0, pageCount - 1)
-                            change.consume()
-                            finished = true
-                        } else if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
-                            val topRightEdge = down.position.y < size.height * .16f && down.position.x > size.width * .62f
-                            if (dy > 0 && topRightEdge && swipeDownAction == "Control Center") {
-                                controlCenter = true
-                                change.consume()
-                                finished = true
-                            } else if (dy < 0 && down.position.y > size.height * .86f && homeStyle == "With App drawer") {
-                                drawer = true
-                                change.consume()
-                                finished = true
-                            } else {
-                                finished = true
-                            }
+                    val down=awaitFirstDown(requireUnconsumed=false)
+                    val edge=with(density){28.dp.toPx()}
+                    if(down.position.x<edge||down.position.x>size.width-edge||down.position.y>size.height-edge)return@awaitEachGesture
+                    var dx=0f;var dy=0f
+                    while(true) {
+                        val event=awaitPointerEvent(PointerEventPass.Initial)
+                        val c=event.changes.firstOrNull{it.id==down.id}?:break
+                        if(!c.pressed)break
+                        val d=c.position-c.previousPosition;dx+=d.x;dy+=d.y
+                        val slop=viewConfiguration.touchSlop*1.35f
+                        if(kotlin.math.abs(dx)>slop&&kotlin.math.abs(dx)>kotlin.math.abs(dy)*1.25f) {
+                            page=if(dx>0&&page==0&&minusScreen=="Google Discover")-1 else (page+if(dx<0)1 else -1).coerceIn(0,pageCount-1)
+                            c.consume();break
+                        }
+                        if(kotlin.math.abs(dy)>slop&&kotlin.math.abs(dy)>kotlin.math.abs(dx)*1.25f) {
+                            val topRight=down.position.y<size.height*.16f&&down.position.x>size.width*.62f
+                            if(dy>0&&topRight&&swipeDownAction=="Control Center")controlCenter=true
+                            else if(dy<0&&down.position.y>size.height*.84f&&homeStyle=="With App drawer")drawer=true
+                            c.consume();break
                         }
                     }
                 }
             }
         }
-             .pointerInput(apps, pageAppSlices, appPageAssignments, appSlotAssignments, folders, dockPackages, homeWidgets, widgetSlotAssignments, weatherWidgetPage, todayWidgetPage, showWeatherWidget, showTodayWidget, columns, rows, drawer, controlCenter, settings) {
-                if (!drawer && !controlCenter && !settings && openFolderId==null ) {
-                    awaitEachGesture {
-                        val down=awaitFirstDown(requireUnconsumed=false)
-                        val globalDown=down.position
-                        val appKey=appBounds.entries.firstOrNull { it.value.contains(globalDown) }?.key
-                        val widgetKey=widgetBounds.entries.firstOrNull { entry ->
-                            entry.value.contains(globalDown) && widgetResizeHandleBounds[entry.key]?.contains(globalDown)!=true &&
-                                (entry.key<0 || widgetHandleBounds[entry.key]?.contains(globalDown)==true)
-                        }?.key
-                        if(appKey==null && widgetKey==null) return@awaitEachGesture
-                        val longPress=awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                        when {
-                            appKey!=null -> {
-                                val app=apps.firstOrNull { it.packageName==appKey }
-                                if(app!=null) {
-                                    draggingApp=app
-                                    draggingFromDock=false
-                                    draggingFromFolder=false
-                                    dragSourceFolderId=null
-                                    dragPosition=longPress.position
-                                    dragOriginBounds=appBounds[appKey] ?: Rect.Zero
-                                    dragOriginPage=page
-                                    dragOriginSlot=appSlotAssignments[appKey] ?: slotAt(dragOriginBounds.center)
-                                    pendingDragPage=page
-                                }
-                            }
-                            widgetKey!=null -> {
-                                draggingWidgetId=widgetKey
-                                widgetCanvasBounds=widgetBounds[widgetKey] ?: Rect.Zero
-                                widgetDragPosition=longPress.position
-                                pendingDragPage=page
-                            }
-                        }
-                        var endedNormally=false
-                        while(true) {
-                            // Pointer events keep the drag responsive; edge paging advances
-                            // as the user continues moving along the screen edge.
-                            val event=awaitPointerEvent(PointerEventPass.Initial)
-                            val change=event.changes.firstOrNull { it.id==down.id } ?: break
-                            if(!change.pressed) {
-                                endedNormally=true
-                                break
-                            }
-                            val delta=change.position-change.previousPosition
-                            if(draggingApp!=null) {
-                                change.consume()
-                                dragPosition+=delta
-                                updateDragEdge(dragPosition)
-                                draggingApp?.let { updateGridDragPreview(dragPosition,"app:"+it.packageName) }
-                            } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
-                                change.consume()
-                                widgetDragPosition+=delta
-                                updateDragEdge(widgetDragPosition)
-                                val sx=kotlin.math.ceil(widgetCanvasBounds.width/(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-                                val sy=kotlin.math.ceil(widgetCanvasBounds.height/(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
-                                updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,sx,sy)
-                            }
-                        }
-                        if(endedNormally) {
-                            if(draggingApp!=null) finishIconDrag()
-                            else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
-                        } else {
-                            draggingApp=null
-                            draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
-                            draggingFromDock=false
-                            draggingFromFolder=false
-                            dragSourceFolderId=null
-                            dragPreviewSlots=emptyMap()
-                            dragEdgeDirection=0
-                            pendingDragPage=page
-                        }
+        .pointerInput(apps,drawer,controlCenter,settings,openFolderId,columns,effectiveRows) {
+            if(!drawer&&!controlCenter&&!settings&&openFolderId==null) awaitEachGesture {
+                val down=awaitFirstDown(requireUnconsumed=false)
+                val appKey=appBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
+                val widgetKey=widgetBounds.entries.firstOrNull{e->e.value.contains(down.position)&&widgetResizeHandleBounds[e.key]?.contains(down.position)!=true}?.key
+                if(appKey==null&&widgetKey==null)return@awaitEachGesture
+                val long=awaitLongPressOrCancellation(down.id)?:return@awaitEachGesture
+                if(appKey!=null) {
+                    val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
+                    draggingApp=app;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null
+                    dragPosition=long.position;dragOriginBounds=appBounds[appKey]?:Rect.Zero
+                    dragOriginPage=page;dragOriginSlot=appSlotAssignments[appKey]?:slotAt(dragOriginBounds.center);pendingDragPage=page
+                } else if(widgetKey!=null) {
+                    draggingWidgetId=widgetKey;widgetCanvasBounds=widgetBounds[widgetKey]?:Rect.Zero
+                    widgetDragPosition=long.position;pendingDragPage=page
+                }
+                var ended=false
+                while(true) {
+                    val event=awaitPointerEvent(PointerEventPass.Initial)
+                    val c=event.changes.firstOrNull{it.id==down.id}?:break
+                    if(!c.pressed){ended=true;break}
+                    val delta=c.position-c.previousPosition
+                    if(draggingApp!=null){c.consume();dragPosition+=delta;updateDragEdge(dragPosition);draggingApp?.let{updateGridDragPreview(dragPosition,"app:"+it.packageName)}}
+                    else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
+                        c.consume();widgetDragPosition+=delta;updateDragEdge(widgetDragPosition)
+                        val g=gridBoundsFor(pendingDragPage);val cw=(g.width/columns.coerceAtLeast(1)).coerceAtLeast(1f);val ch=(g.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,kotlin.math.ceil(widgetCanvasBounds.width/cw).toInt().coerceIn(1,columns),kotlin.math.ceil(widgetCanvasBounds.height/ch).toInt().coerceIn(1,effectiveRows))
                     }
                 }
+                if(ended){if(draggingApp!=null)finishIconDrag() else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)finishWidgetDrag()}
+                else{draggingApp=null;draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page}
             }
-    ) {
-        if (!drawer) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).graphicsLayer {
-            renderEffect = if ((controlCenter || openFolderId!=null) && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(18f, 18f) else null
         }) {
-            Spacer(Modifier.height(24.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.combinedClickable(onClick={}, onLongClick={ if(!lockLayout) homeEditMode=true })) {
-                    Text(greeting(), color = fg.copy(alpha=.72f), fontSize=14.sp)
-                    Text(SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date()), color = fg, fontSize=24.sp, fontWeight=FontWeight.SemiBold)
+        if(!drawer) Column(Modifier.fillMaxSize().padding(horizontal=18.dp).graphicsLayer {
+            renderEffect=if((controlCenter||openFolderId!=null)&&Build.VERSION.SDK_INT>=31)BlurEffect(16f,16f)else null
+        }) {
+            Spacer(Modifier.height(30.dp))
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.combinedClickable(onClick={},onLongClick={if(!lockLayout)homeEditMode=true})) {
+                    Text(greeting(),color=fg.copy(alpha=.72f),fontSize=14.sp)
+                    Text(SimpleDateFormat("EEEE, MMM d",Locale.getDefault()).format(Date()),color=fg,fontSize=25.sp,fontWeight=FontWeight.SemiBold)
                 }
-                Surface(shape=CircleShape, color=Color.White.copy(alpha=.5f), modifier=Modifier.size(42.dp).clickable { controlCenter=true }) {
-                    Box(contentAlignment=Alignment.Center) { Icon(Icons.Default.Tune, null, tint=fg) }
+                Surface(shape=CircleShape,color=Color.White.copy(alpha=.52f),modifier=Modifier.size(44.dp).clickable{controlCenter=true}) {
+                    Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Tune,null,tint=fg)}
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            AnimatedContent(
-                targetState = page,
-                modifier = Modifier.weight(1f),
-                transitionSpec = {
-                    (androidx.compose.animation.slideInHorizontally(spring(dampingRatio=.86f,stiffness=when(animationSpeed) { "Slow" -> 260f; "Normal" -> 430f; else -> 720f })) { if (targetState > initialState) it else -it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(110))) togetherWith
-                        (androidx.compose.animation.slideOutHorizontally(spring(dampingRatio=.9f,stiffness=when(animationSpeed) { "Slow" -> 300f; "Normal" -> 500f; else -> 800f })) { if (targetState > initialState) -it else it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)))
-                },
-                label = "home-pages"
-            ) { targetPage ->
-                val pageApps = if (targetPage < 0) emptyList() else pageAppSlices.getOrNull(targetPage).orEmpty()
-                SideEffect {
-                    // AnimatedContent composes the outgoing and incoming pages at
-                    // the same time. Only the active target page may own/clean the
-                    // shared app hitbox map; otherwise the outgoing page can run its
-                    // SideEffect after the incoming page and erase its drop targets.
-                    if (targetPage == page) {
-                        val visibleKeys=pageApps.map { it.packageName }.toSet()
-                        if(currentPageAppKeys!=visibleKeys) {
-                            currentPageAppKeys=visibleKeys
-                            appBounds.keys.filterNot { it in visibleKeys }.forEach { appBounds.remove(it) }
-                        }
+            Spacer(Modifier.height(18.dp))
+            if(page<0&&minusScreen=="Google Discover") {
+                Column(Modifier.weight(1f).fillMaxWidth(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
+                    Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
+                    Spacer(Modifier.height(14.dp))
+                    Button(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
+                }
+            } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned{
+                val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[page]=bounds
+                draggingApp?.let{app->updateGridDragPreview(dragPosition,"app:"+app.packageName)}
+            }) {
+                val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/effectiveRows.coerceAtLeast(1)
+                val pageApps=pageAppSlices.getOrNull(page.coerceAtLeast(0)).orEmpty()
+                val pageFolders=folders.filter{it.page==page}
+                val pageWidgets=homeWidgets.filter{it.second==page}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val tiles=buildList {
+                    pageApps.forEachIndexed{i,app->add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName]?:appSlotAssignments[app.packageName]?:i))}
+                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot))}
+                    pageWidgets.forEach{(id,info)->
+                        val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)))
+                    }
+                    draggingApp?.takeIf{moving->page==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:tiles.size))}
+                }
+                val cells=remember(tiles,columns,effectiveRows,fillCells){calculateHomeGridCells(tiles,columns,effectiveRows,fillCells)}
+                pageApps.forEachIndexed{index,app->
+                    val cell=cells["app:"+app.packageName]?:return@forEachIndexed
+                    val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
+                    val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
+                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName).12f else 1f}) {
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
+                            onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
                 }
-                if (targetPage < 0 && minusScreen == "Google Discover") {
-                    val googleApp = apps.firstOrNull { it.packageName == "com.google.android.googlequicksearchbox" }
-                    Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
-                        Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
-                        Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick={googleApp?.let { activity.launch(it) }}) { Text("Open Google") }
-                    }
-                } else Column(Modifier.fillMaxSize()) {
-                                        BoxWithConstraints(
-                        Modifier.weight(1f).fillMaxWidth()
-                            .onGloballyPositioned {
-                                val measured=it.boundsInRoot()
-                                homeGridBoundsByPage[targetPage]=measured
-                                if(targetPage==page || homeGridBounds.width<=0f) homeGridBounds=measured
-
-                                // The first preview attempt can happen before AnimatedContent
-                                // has measured the incoming page. Rebuild it as soon as that
-                                // destination grid reports its real root bounds.
-                                if(targetPage==pendingDragPage && measured.width>0f && measured.height>0f) {
-                                    val movingApp=draggingApp
-                                    if(movingApp!=null) {
-                                        updateGridDragPreview(dragPosition,"app:"+movingApp.packageName)
-                                    } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
-                                        val cellW=(measured.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-                                        val cellH=(measured.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-                                        val spanX=kotlin.math.ceil(widgetCanvasBounds.width/cellW).toInt().coerceIn(1,columns)
-                                        val spanY=kotlin.math.ceil(widgetCanvasBounds.height/cellH).toInt().coerceIn(1,effectiveRows)
-                                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,spanX,spanY)
-                                    }
-                                }
-                            }
-
-                    ) {
-                        val cellW=maxWidth/columns.coerceAtLeast(1)
-                        val cellH=maxHeight/effectiveRows.coerceAtLeast(1)
-                        val visibleFolders=folders.filter { it.page==targetPage }
-                        val widgetInfoMap=homeWidgets.filter { it.second==targetPage }.mapNotNull { (id,_) ->
-                            AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let { id to it }
-                        }.toMap()
-                        val gridTiles=buildList {
-                            pageApps.forEachIndexed { index, app ->
-                                add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName] ?: appSlotAssignments[app.packageName] ?: index))
-                            }
-                            // Include a moving app as a real destination-page tile even though
-                            // its persisted page assignment is not committed until drop.
-                            draggingApp?.takeIf { targetPage==pendingDragPage && pageApps.none { app -> app.packageName==it.packageName } }?.let { moving ->
-                                add(HomeGridTile("app:"+moving.packageName,dragPreviewSlots["app:"+moving.packageName] ?: dragPreviewSlots.size))
-                            }
-                            visibleFolders.forEach { folder -> add(HomeGridTile("folder:"+folder.id,dragPreviewSlots["folder:"+folder.id] ?: folder.slot)) }
-                            if(showWeatherWidget && targetPage==weatherWidgetPage) add(HomeGridTile("widget:-1001",dragPreviewSlots["widget:-1001"] ?: widgetSlotAssignments[-1001] ?: pageApps.size+visibleFolders.size, minOf(2,columns),minOf(2,effectiveRows)))
-                            if(showTodayWidget && targetPage==todayWidgetPage) add(HomeGridTile("widget:-1002",dragPreviewSlots["widget:-1002"] ?: widgetSlotAssignments[-1002] ?: pageApps.size+visibleFolders.size+1, minOf(2,columns),minOf(2,effectiveRows)))
-                            widgetInfoMap.forEach { (id,info) ->
-                                val custom=widgetSizes[id] ?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                                val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-                                val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)) .toInt().coerceIn(1,effectiveRows)
-                                add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id] ?: widgetSlotAssignments[id] ?: pageApps.size+visibleFolders.size+2+homeWidgets.indexOfFirst { it.first==id },spanX,spanY))
-                            }
-                            // A widget crossing pages must reserve its full footprint on
-                            // the destination page while it is still being dragged.
-                            if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && targetPage==pendingDragPage &&
-                                none { it.key=="widget:"+draggingWidgetId }) {
-                                val bounds=widgetBounds[draggingWidgetId] ?: widgetCanvasBounds
-                                val destinationGrid=gridBoundsFor(targetPage)
-                                val destinationCellW=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-                                val destinationCellH=(destinationGrid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-                                val spanX=if(bounds.width>0f) kotlin.math.ceil(bounds.width/destinationCellW).toInt().coerceIn(1,columns) else 2.coerceAtMost(columns)
-                                val spanY=if(bounds.height>0f) kotlin.math.ceil(bounds.height/destinationCellH).toInt().coerceIn(1,effectiveRows) else 2.coerceAtMost(effectiveRows)
-                                add(HomeGridTile("widget:"+draggingWidgetId,dragPreviewSlots["widget:"+draggingWidgetId] ?: dragPreviewSlots.size,spanX,spanY))
-                            }
-                        }
-                        val gridCells=remember(gridTiles,columns,effectiveRows,fillCells) { calculateHomeGridCells(gridTiles,columns,effectiveRows,fillCells) }
-                        LaunchedEffect(targetPage,gridCells,fillCells,draggingApp,draggingWidgetId) {
-                            if(fillCells && draggingApp==null && draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
-                                val appUpdates=mutableMapOf<String,Int>()
-                                pageApps.forEach { app ->
-                                    val cell=gridCells["app:"+app.packageName]
-                                    if(cell!=null) appUpdates[app.packageName]=cell.row*columns+cell.column
-                                }
-                                val widgetUpdates=mutableMapOf<Int,Int>()
-                                gridTiles.filter { it.key.startsWith("widget:") }.forEach { tile ->
-                                    val id=tile.key.removePrefix("widget:").toIntOrNull()
-                                    val cell=gridCells[tile.key]
-                                    if(id!=null && cell!=null) widgetUpdates[id]=cell.row*columns+cell.column
-                                }
-                                if(appUpdates.isNotEmpty()) {
-                                    appSlotAssignments=appSlotAssignments+appUpdates
-                                    db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
-                                }
-                                if(widgetUpdates.isNotEmpty()) {
-                                    widgetSlotAssignments=widgetSlotAssignments+widgetUpdates
-                                    db.put("widget_slots",widgetSlotAssignments.entries.joinToString(";"){it.key.toString()+":"+it.value})
-                                }
-                            }
-                        }
-                        // Use the exact same app tile and entry positioning as ordinary
-                        // home icons for the moving app's destination slot. This keeps the
-                        // native grid reflow/placeholder treatment consistent across pages.
-                        draggingApp?.takeIf { targetPage==pendingDragPage && pageApps.none { app -> app.packageName==it.packageName } }?.let { moving ->
-                            val cell=gridCells["app:"+moving.packageName]
-                            if(cell!=null) {
-                                val x by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="moving-app-preview-x")
-                                val y by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="moving-app-preview-y")
-                                HomeEntryMotion(
-                                    revision=0,
-                                    order=pageApps.size,
-                                    modifier=Modifier.offset(x=x,y=y).size(cellW,cellH)
-                                        .graphicsLayer { alpha=.10f }
-                                ) {
-                                    AppIcon(
-                                        app=moving,labels=labels && hideText=="Off",fg=fg,index=0,
-                                        animationSpeed=animationSpeed,dragTranslation=Offset.Zero,isDragging=false,
-                                        size=62.dp,draggableEnabled=false,animateOnEntry=false,
-                                        onClick={}
-                                    )
-                                }
-                            }
-                        }
-                        pageApps.forEachIndexed { iconIndex, app ->
-                            val cell=gridCells["app:"+app.packageName] ?: return@forEachIndexed
-                            val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-x")
-                            val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="app-y")
-                            HomeEntryMotion(
-                                revision=if (targetPage == homeEntryPage) homeEntryRevision else 0,
-                                order=iconIndex,
-                                modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
-                                    .graphicsLayer { alpha=if(draggingApp?.packageName==app.packageName) .10f else 1f }
-                            ) {
-                                AppIcon(
-                                    app=app,labels=labels && hideText=="Off",fg=fg,index=0,animationSpeed=animationSpeed,
-                                    dragTranslation=Offset.Zero,isDragging=false,
-                                    size=62.dp,
-                                    draggableEnabled=false,
-                                    animateOnEntry=false,
-                                    onBounds={ key,rect -> appBounds[key]=rect },
-                                    onClick={ if(app.packageName=="internal:settings") settings=true else activity.launch(app) }
-                                )
-                            }
-                        }
-                        visibleFolders.forEachIndexed { folderIndex, folder ->
-                            val cell=gridCells["folder:"+folder.id] ?: return@forEachIndexed
-                            val animatedX by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-x")
-                            val animatedY by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=430f),label="folder-y")
-                            HomeEntryMotion(
-                                revision=if (targetPage == homeEntryPage) homeEntryRevision else 0,
-                                order=pageApps.size+folderIndex,
-                                modifier=Modifier.offset(x=animatedX,y=animatedY).size(cellW,cellH)
-                                    .onGloballyPositioned { folderBounds[folder.id]=it.boundsInRoot() }
-                            ) {
-                                FolderTile(folder,apps,fg,onClick={openFolderId=folder.id})
-                            }
-                        }
-                        if(showWeatherWidget && targetPage==weatherWidgetPage) {
-                            val cell=gridCells["widget:-1001"]
-                            if(cell!=null) {
-                                val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-x")
-                                val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="weather-widget-y")
-                                Box(Modifier.offset(x=wx,y=wy) .size(cellW*minOf(2,columns),cellH*minOf(2,effectiveRows)).graphicsLayer { alpha=if(draggingWidgetId==-1001) .12f else 1f }
-                                .onGloballyPositioned { widgetBounds[-1001]=it.boundsInRoot(); if(draggingWidgetId==-1001) widgetCanvasBounds=it.boundsInRoot() }) {
-                                HomeWidget("WEATHER","24°","Mostly Sunny",Icons.Default.WbSunny,Modifier.fillMaxWidth().padding(end=8.dp),Color(0xFFFFB648))
-                                }
-                            }
-                        }
-                        if(showTodayWidget && targetPage==todayWidgetPage) {
-                            val cell=gridCells["widget:-1002"]
-                            if(cell!=null) {
-                                val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-x")
-                                val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="today-widget-y")
-                                Box(Modifier.offset(x=wx,y=wy) .size(cellW*minOf(2,columns),cellH*minOf(2,effectiveRows)).graphicsLayer { alpha=if(draggingWidgetId==-1002) .12f else 1f }
-                                .onGloballyPositioned { widgetBounds[-1002]=it.boundsInRoot(); if(draggingWidgetId==-1002) widgetCanvasBounds=it.boundsInRoot() }) {
-                                HomeWidget("TODAY",SimpleDateFormat("d",Locale.getDefault()).format(Date()),
-                                    SimpleDateFormat("EEEE",Locale.getDefault()).format(Date()).uppercase(Locale.getDefault()),
-                                    Icons.Default.CalendarMonth,Modifier.fillMaxWidth().padding(start=8.dp),Color(0xFFEF6375))
-                                }
-                            }
-                        }
-                        widgetInfoMap.forEach { (widgetId,info) ->
-                            val cell=gridCells["widget:"+widgetId] ?: return@forEach
-                            val custom=widgetSizes[widgetId] ?: ((cellW*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
-                            val spanX=kotlin.math.ceil(custom.first.value/cellW.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
-                            val spanY=kotlin.math.ceil(custom.second.value/cellH.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
-                            val wx by animateDpAsState(cellW*cell.column,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-x-$widgetId")
-                            val wy by animateDpAsState(cellH*cell.row,animationSpec=spring(dampingRatio=.78f,stiffness=380f),label="widget-y-$widgetId")
-                            Box(Modifier.offset(x=wx,y=wy).size(cellW*spanX,cellH*spanY).graphicsLayer { alpha=if(draggingWidgetId==widgetId) .12f else 1f }
-                                .onGloballyPositioned { widgetBounds[widgetId]=it.boundsInRoot(); if(draggingWidgetId==widgetId) widgetCanvasBounds=it.boundsInRoot() }) {
-                                AndroidView(factory={ activity.widgetHost.createView(it,widgetId,info) },modifier=Modifier.fillMaxSize())
-                                Box(
-                                    Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp)
-                                        .onGloballyPositioned { widgetHandleBounds[widgetId]=it.boundsInRoot() }
-                                        .clip(CircleShape).background(Color(0x88333333)),
-                                    contentAlignment=Alignment.Center
-                                ) { Text("⠿",color=Color.White,fontSize=19.sp) }
-                                Box(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(28.dp)
-                                    .onGloballyPositioned { widgetResizeHandleBounds[widgetId]=it.boundsInRoot() }
-                                    .clip(CircleShape).background(Color(0x88333333)).pointerInput(widgetId,cell) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart={ resizingWidgetId=widgetId },
-                                            onDrag={ change,amount ->
-                                                change.consume()
-                                                val current=widgetSizes[widgetId] ?: (custom.first to custom.second)
-                                                val maxWidth=cellW*(columns-cell.column).coerceAtLeast(1)
-                                                val maxHeight=cellH*(effectiveRows-cell.row).coerceAtLeast(1)
-                                                val w=(current.first+with(density){amount.x.toDp()}).coerceIn(110.dp,maxWidth.coerceAtLeast(110.dp))
-                                                val h=(current.second+with(density){amount.y.toDp()}).coerceIn(90.dp,maxHeight.coerceAtLeast(90.dp))
-                                                widgetSizes=widgetSizes+(widgetId to (w to h))
-                                                db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})
-                                            },
-                                            onDragEnd={ resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID },
-                                            onDragCancel={ resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID }
-                                        )
-                                    }) {
-                                    Icon(Icons.Default.OpenInFull,null,tint=Color.White,modifier=Modifier.padding(5.dp))
-                                }
-                            }
-                        }
+                pageFolders.forEach{folder->
+                    val cell=cells["folder:"+folder.id]?:return@forEach
+                    val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-x")
+                    val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-y")
+                    Box(Modifier.offset(x,y).size(cw,ch).onGloballyPositioned{folderBounds[folder.id]=it.boundsInRoot()}){FolderTile(folder,apps,fg){openFolderId=folder.id}}
+                }
+                pageWidgets.forEach{(id,info)->
+                    val cell=cells["widget:"+id]?:return@forEach
+                    val size=widgetSizes[id]?:((cw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
+                    val sx=kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
+                    val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
+                    val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
+                    val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-y")
+                    Box(Modifier.offset(x,y).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id).12f else 1f}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
+                        AndroidView(factory={activity.widgetHost.createView(it,id,info)},modifier=Modifier.fillMaxSize())
+                        Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(bottom=8.dp), horizontalArrangement=Arrangement.Center) {
-                repeat(pageCount) { index ->
-                    Box(Modifier.padding(horizontal=4.dp).size(if(page==index) 9.dp else 7.dp)
-                        .clip(CircleShape).background(if(page==index) Color(0xFF1685F8) else fg.copy(alpha=.24f))
-                        .clickable { page=index })
-                }
+            Row(Modifier.fillMaxWidth().padding(vertical=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+                repeat(pageCount){i->Box(Modifier.padding(horizontal=4.dp).size(if(page==i)8.dp else 6.dp).clip(CircleShape).background(if(page==i)Color(0xFF1685F8)else fg.copy(alpha=.28f)).clickable{page=i})}
             }
-            AnimatedVisibility(visible=homeEditMode, enter=fadeIn(tween(140))+scaleIn(spring(dampingRatio=.86f,stiffness=520f)), exit=fadeOut(tween(100))) {
-                Surface(
-                    modifier=Modifier.fillMaxWidth().padding(bottom=10.dp),
-                    shape=RoundedCornerShape(22.dp),
-                    color=if(dark) Color(0xDD252936) else Color(0xEFFFFFFF),
-                    border=androidx.compose.foundation.BorderStroke(1.dp,fg.copy(alpha=.10f)),
-                    shadowElevation=8.dp
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),
-                        horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                        TextButton(onClick={ widgetProviders=activity.availableHomeWidgets(); widgetPickerOpen=true }) {
-                            Icon(Icons.Default.Widgets,null); Spacer(Modifier.width(3.dp)); Text("Widgets")
-                        }
-                        TextButton(onClick={ settings=true }) {
-                            Icon(Icons.Default.Settings,null); Spacer(Modifier.width(3.dp)); Text("Settings")
-                        }
-                        TextButton(onClick={
-                            val current=page
-                            val occupied=pageAppSlices.getOrNull(current).orEmpty().isNotEmpty() ||
-                                homeWidgets.any { it.second==current } || folders.any { it.page==current } ||
-                                (showWeatherWidget && weatherWidgetPage==current) || (showTodayWidget && todayWidgetPage==current)
-                            if(!occupied && pageCount>1 && current==pageCount-1) {
-                                extraHomePages=(extraHomePages-1).coerceAtLeast(0)
-                                db.put("extra_home_pages",extraHomePages.toString())
-                                page=(page-1).coerceAtLeast(0)
-                            }
-                        },enabled=pageCount>1) { Icon(Icons.Default.RemoveCircleOutline,null); Text("Page") }
-                        TextButton(onClick={
-                            val newPage=pageCount
-                            extraHomePages+=1
-                            db.put("extra_home_pages",extraHomePages.toString())
-                            page=newPage
-                        }) {
-                            Icon(Icons.Default.AddCircleOutline,null); Text("Add")
-                        }
-                        TextButton(onClick={homeEditMode=false}) { Icon(Icons.Default.Check,null); Text("Done") }
+            AnimatedVisibility(homeEditMode,enter=fadeIn(tween(130))+scaleIn(spring(dampingRatio=.86f)),exit=fadeOut(tween(100))){
+                Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
+                    Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
+                        TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
+                        TextButton(onClick={settings=true}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                        TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
                     }
                 }
             }
-            Surface(shape=RoundedCornerShape(30.dp), color=Color.White.copy(alpha=if (dark) .16f else .52f),
-                modifier=Modifier.fillMaxWidth().padding(bottom=16.dp).border(1.dp,Color.White.copy(alpha=.45f),RoundedCornerShape(30.dp))
-                    .onGloballyPositioned { dockBounds=it.boundsInRoot() }) {
-                Row(Modifier.padding(horizontal=8.dp, vertical=10.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                    dockPackages.forEach { packageName ->
-                        val dockApp=apps.firstOrNull { it.packageName==packageName }
-                        if(dockApp!=null) {
-                            HomeEntryMotion(
-                                revision=homeEntryRevision,
-                                order=apps.size+folders.size+dockPackages.indexOf(packageName),
-                                modifier=Modifier
-                            ) {
-                                AppIcon(
-                                    app=dockApp,labels=false,fg=fg,index=0,animationSpeed="Fast",size=50.dp,
-                                    animateOnEntry=false,
-                                    onBounds={ key,rect -> dockAppBounds[key]=rect },
-                                    onDragStart={
-                                        draggingApp=dockApp
-                                        draggingFromDock=true
-                                        draggingFromFolder=false
-                                        dragSourceFolderId=null
-                                        dragPosition=dockAppBounds[packageName]?.center ?: dockBounds.center
-                                        dragOriginBounds=dockAppBounds[packageName] ?: Rect.Zero
-                                        dragOriginPage=page
-                                        dragOriginSlot=appSlotAssignments[packageName] ?: slotAt(dragOriginBounds.center)
-                                        pendingDragPage=page
-                                    },
-                                    onDrag={ delta -> dragPosition+=delta; updateDragEdge(dragPosition); updateGridDragPreview(dragPosition,"app:"+dockApp.packageName) },
-                                    onDragEnd={ finishIconDrag() },
-                                    onClick={ if(dockApp.packageName=="internal:settings") settings=true else activity.launch(dockApp) }
-                                )
-                            }
-                        }
+            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark).13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
+                Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
+                    dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
+                        AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
-                    if(dockPackages.isEmpty()) {
-                        Text("Hold an app and drag it here",color=fg.copy(alpha=.6f),fontSize=10.sp)
-                    }
+                    if(dockPackages.isEmpty())Text("Hold an app to edit your Home Screen",color=fg.copy(alpha=.6f),fontSize=11.sp)
                 }
             }
-            Box(Modifier.fillMaxWidth().padding(bottom=4.dp), contentAlignment=Alignment.Center) {
-                Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.5f)).clickable { if(homeStyle=="With App drawer") drawer=true })
-            }
+            Box(Modifier.fillMaxWidth().padding(bottom=4.dp),contentAlignment=Alignment.Center){Box(Modifier.width(108.dp).height(5.dp).clip(CircleShape).background(fg.copy(alpha=.48f)).clickable{if(homeStyle=="With App drawer")drawer=true})}
         }
+        if(draggingApp!=null){
+            val app=draggingApp!!;val bitmap=remember(app.packageName){app.icon.toBitmap(144,144).asImageBitmap()};val half=with(density){34.dp.toPx()}
+            Image(bitmap,contentDescription="Moving app",modifier=Modifier.offset{IntOffset((dragPosition.x-half).toInt(),(dragPosition.y-half).toInt())}.size(68.dp).clip(RoundedCornerShape(18.dp)).shadow(12.dp,RoundedCornerShape(18.dp)))
         }
-
-        if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
-            val ghostWidth=with(density){widgetCanvasBounds.width.toDp()}.coerceIn(112.dp,340.dp)
-            val ghostHeight=with(density){widgetCanvasBounds.height.toDp()}.coerceIn(88.dp,360.dp)
-            val halfWidth=with(density){ghostWidth.toPx()/2f}
-            val halfHeight=with(density){ghostHeight.toPx()/2f}
-            val label=when(draggingWidgetId) {
-                -1001 -> "WEATHER"
-                -1002 -> "TODAY"
-                else -> try { AppWidgetManager.getInstance(context).getAppWidgetInfo(draggingWidgetId)?.loadLabel(context.packageManager)?.toString() ?: "Widget" } catch (_:Exception) { "Widget" }
-            }
-            Surface(
-                shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.86f),
-                border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.85f)),shadowElevation=24.dp,
-                modifier=Modifier.offset { IntOffset((widgetDragPosition.x-halfWidth).toInt(),(widgetDragPosition.y-halfHeight).toInt()) }
-                    .width(ghostWidth).height(ghostHeight).graphicsLayer { scaleX=.97f; scaleY=.97f; alpha=.94f }
-            ) {
-                Column(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
-                    Text(label,color=Color(0xFF5C6470),fontSize=11.sp,fontWeight=FontWeight.Bold)
-                    Text(if(draggingWidgetId==-1001) "24°  Mostly Sunny" else if(draggingWidgetId==-1002) SimpleDateFormat("d MMM",Locale.getDefault()).format(Date()) else "Move widget",
-                        color=Color(0xFF252B34),fontSize=20.sp,fontWeight=FontWeight.SemiBold)
-                }
+        AnimatedVisibility(visible=draggingApp!=null||draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID,enter=fadeIn(),exit=fadeOut(),modifier=Modifier.align(Alignment.TopCenter)){
+            Surface(shape=RoundedCornerShape(20.dp),color=Color(0xFFE5484D),shadowElevation=12.dp,modifier=Modifier.padding(top=16.dp).size(width=118.dp,height=68.dp)){
+                Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){Icon(Icons.Default.Delete,null,tint=Color.White,modifier=Modifier.size(24.dp));Text(if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)"Remove widget" else "Uninstall",color=Color.White,fontSize=11.sp,fontWeight=FontWeight.SemiBold)}
             }
         }
         BackHandler(enabled=true) {
