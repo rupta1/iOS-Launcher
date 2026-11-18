@@ -86,10 +86,10 @@ class HomeWorkspaceEngineTest {
     fun canonicalPlanKeepsEveryItemAndReportsOverflowExplicitly() {
         val items = listOf(
             WorkspaceItem("wide", 0, 0, spanX = 2, spanY = 2, kind = WorkspaceItemKind.WIDGET),
-            WorkspaceItem("app-a", 0, 0),
-            WorkspaceItem("app-b", 0, 1),
-            WorkspaceItem("app-c", 0, 2),
-            WorkspaceItem("app-d", 0, 3)
+            WorkspaceItem("app-a", 0, 4),
+            WorkspaceItem("app-b", 0, 5),
+            WorkspaceItem("app-c", 0, 6),
+            WorkspaceItem("app-d", 0, 7)
         )
         val plan = HomeWorkspaceEngine.plan(items, columns = 2, rows = 2)
         assertEquals(1, plan.placements.size)
