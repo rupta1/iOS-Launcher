@@ -717,9 +717,10 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
     fun updateGridDragPreview(position:Offset,movingKey:String,movingSpanX:Int=1,movingSpanY:Int=1) {
-        if(homeGridBounds.width<=0f || homeGridBounds.height<=0f) return
-        val cw=(homeGridBounds.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-        val ch=(homeGridBounds.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
+        val destinationGrid=gridBoundsFor(pendingDragPage)
+        if(destinationGrid.width<=0f || destinationGrid.height<=0f) return
+        val cw=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
+        val ch=(destinationGrid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
         val items=mutableListOf<DragGridPlacement>()
         // Build occupied app cells from the destination page's model, not from
         // currentPageAppKeys/appBounds (those can still describe the page we dragged from
@@ -845,11 +846,22 @@ fun LauncherRoot(db: LauncherDb) {
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun advanceDragPage(direction:Int) {
         val currentPage=pendingDragPage.coerceAtLeast(0)
-        // Read the live extra-page state; pageCount is a composition snapshot and
-        // becomes stale while the pointerInput drag coroutine remains active.
-        val lastPage=(pageAppSlices.size+extraHomePages-1).coerceAtLeast(0)
+        // Derive the rightmost page from persisted destinations as well as the
+        // current rendered slices. This avoids a stale pageAppSlices snapshot in
+        // the long-lived pointerInput coroutine limiting a second/third drag.
+        val assignedLast=appPageAssignments.values.maxOrNull() ?: 0
+        val widgetLast=maxOf(
+            homeWidgets.maxOfOrNull { it.second } ?: 0,
+            if(showWeatherWidget) weatherWidgetPage else 0,
+            if(showTodayWidget) todayWidgetPage else 0
+        )
+        val folderLast=folders.maxOfOrNull { it.page } ?: 0
+        val renderedLast=(pageAppSlices.size-1).coerceAtLeast(0)
+        val lastPage=maxOf(renderedLast,assignedLast,widgetLast,folderLast,currentPage)
         if(direction>0 && currentPage>=lastPage) {
-            extraHomePages+=1
+            // Always create the next page when the pointer continues past the
+            // right edge; there is no source-page or original-page ceiling.
+            extraHomePages=maxOf(extraHomePages,currentPage+1-renderedLast)
             pendingDragPage=currentPage+1
         } else {
             pendingDragPage=(currentPage+direction).coerceAtLeast(0)
