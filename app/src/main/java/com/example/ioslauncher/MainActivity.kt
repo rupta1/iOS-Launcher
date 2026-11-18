@@ -477,8 +477,13 @@ fun LauncherRoot(db: LauncherDb) {
     // measured grid bounds separately so backward drags never calculate a drop
     // against the outgoing page's stale bounds.
     val homeGridBoundsByPage = remember { mutableStateMapOf<Int, Rect>() }
-    fun gridBoundsFor(pageIndex:Int):Rect =
-        homeGridBoundsByPage[pageIndex]?.takeIf { it.width>0f && it.height>0f } ?: homeGridBounds
+    fun gridBoundsFor(pageIndex:Int):Rect {
+        // Never use another page's root bounds during AnimatedContent. Its outgoing
+        // page can be translated while the incoming page is still being measured.
+        return homeGridBoundsByPage[pageIndex]?.takeIf { it.width>0f && it.height>0f }
+            ?: if (pageIndex == page) homeGridBounds.takeIf { it.width>0f && it.height>0f } ?: Rect.Zero
+            else Rect.Zero
+    }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
     var widgetPickerOpen by remember { mutableStateOf(false) }
     var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
@@ -882,6 +887,10 @@ fun LauncherRoot(db: LauncherDb) {
         }
         pendingDragPage=next
         page=next
+        // Force the incoming page to publish fresh bounds; cached bounds may
+        // describe its previous animated/off-screen position.
+        homeGridBoundsByPage.remove(next)
+        homeGridBounds=Rect.Zero
         dragPreviewSlots=emptyMap()
         appBounds.clear()
         widgetBounds.clear()
