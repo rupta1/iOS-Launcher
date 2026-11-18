@@ -864,8 +864,11 @@ fun LauncherRoot(db: LauncherDb) {
         page=normalizedPage
         pendingDragPage=normalizedPage
     }
+    // Keep one additional, empty workspace page after the populated pages.
+    // It uses the same real InstalledApp models and the existing drag/drop renderer,
+    // so apps can be moved onto it and tested without introducing mock launcher icons.
     val pageCount = maxOf(
-        pageAppSlices.size,
+        pageAppSlices.size + 1,
         (homeWidgets.maxOfOrNull { it.second } ?: 0) + 1,
         (folders.maxOfOrNull { it.page } ?: 0) + 1,
         (if (showWeatherWidget) weatherWidgetPage else 0) + 1,
@@ -875,7 +878,7 @@ fun LauncherRoot(db: LauncherDb) {
     )
     var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun lastHomePage():Int = maxOf(
-        (pageAppSlices.size-1).coerceAtLeast(0),
+        pageAppSlices.size,
         appPageAssignments.values.maxOrNull() ?: 0,
         homeWidgets.maxOfOrNull { it.second } ?: 0,
         if(showWeatherWidget) weatherWidgetPage else 0,
