@@ -1132,8 +1132,14 @@ fun LauncherRoot(db: LauncherDb) {
                             if(draggingApp!=null) finishIconDrag()
                             else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
                         } else {
+                            // A cancelled pointer sequence must leave no transient drag state
+                            // behind; otherwise the next gesture can inherit a stale preview.
                             draggingApp=null
                             draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+                            draggingFromDock=false
+                            draggingFromFolder=false
+                            dragSourceFolderId=null
+                            dragPreviewSlots=emptyMap()
                             dragEdgeDirection=0
                             pendingDragPage=page
                         }
