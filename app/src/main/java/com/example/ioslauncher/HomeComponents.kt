@@ -215,14 +215,7 @@ fun AppIcon(
             this.alpha=if(isDragging) .88f else alpha
         }
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
-            .then(if(draggableEnabled) Modifier.pointerInput(app.packageName) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart={ currentOnDragStart() },
-                    onDrag={ change, amount -> change.consume(); currentOnDrag(amount) },
-                    onDragEnd={ currentOnDragEnd() },
-                    onDragCancel={ currentOnDragCancel() }
-                )
-            } else Modifier)
+            .then(Modifier) else Modifier)
             .combinedClickable(
                 interactionSource=remember { MutableInteractionSource() },
                 indication=null,
