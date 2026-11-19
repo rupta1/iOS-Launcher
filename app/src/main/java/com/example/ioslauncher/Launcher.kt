@@ -943,7 +943,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true}},.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
