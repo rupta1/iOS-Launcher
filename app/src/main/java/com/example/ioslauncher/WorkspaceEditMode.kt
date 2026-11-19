@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -67,7 +68,7 @@ internal fun WorkspaceEditToolbar(
 
 /** Preview transform for edit-mode workspace thumbnails with spring settling. */
 @Composable
-internal fun WorkspaceEditScale(enabled:Boolean, modifier:Modifier=Modifier, content:@Composable ()->Unit) {
+internal fun WorkspaceEditScale(enabled:Boolean, modifier:Modifier=Modifier, content:@Composable BoxScope.()->Unit) {
     val scale by animateFloatAsState(if(enabled) .88f else 1f,
         animationSpec=spring(dampingRatio=.78f,stiffness=420f),label="workspace-edit-scale")
     Box(modifier.graphicsLayer { scaleX=scale;scaleY=scale }, content=content)
