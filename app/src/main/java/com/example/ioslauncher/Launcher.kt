@@ -770,7 +770,7 @@ fun LauncherRoot(db: LauncherDb) {
             val destinationAppKeys=pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
             val targetApp=appBounds.entries.firstOrNull {
                 it.key!=dragged.packageName && it.key in destinationAppKeys && it.value.contains(dragPosition)
-            }?.key else null
+            }?.key
             if(targetApp!=null) {
                 val targetBounds=appBounds[targetApp] ?: Rect.Zero
                 val sourceBounds=dragOriginBounds.takeIf { it.width>0f && it.height>0f } ?: Rect(dragPosition.x-36f,dragPosition.y-36f,dragPosition.x+36f,dragPosition.y+36f)
