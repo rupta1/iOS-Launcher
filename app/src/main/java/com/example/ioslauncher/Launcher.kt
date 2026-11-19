@@ -83,7 +83,10 @@ fun LauncherRoot(db:LauncherDb) {
                 (slideOutHorizontally { if(it>0) -it else it }+fadeOut())
             },label="page") { p ->
                 val items=if(p==0) sorted.take(cols*rows) else sorted.drop(p*cols*rows).take(cols*rows)
-                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=12.dp).pointerInput(page,pages) {\n                    var total=0f\n                    detectHorizontalDragGestures(onDragStart={total=0f},onDragEnd={ if(total < -70f) { if(page<pages-1) { page++;db.put("home_page",page.toString()) } } else if(total>70f) { if(page>0) { page--;db.put("home_page",page.toString()) } } },onHorizontalDrag={ change,amount -> total+=amount })\n                }) {
+                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal=12.dp).pointerInput(page,pages) {
+                    var total=0f
+                    detectHorizontalDragGestures(onDragStart={total=0f},onDragEnd={ if(total < -70f) { if(page<pages-1) { page++;db.put("home_page",page.toString()) } } else if(total>70f) { if(page>0) { page--;db.put("home_page",page.toString()) } } },onHorizontalDrag={ change,amount -> total+=amount })
+                }) {
                     if(p==0) {
                         Row(Modifier.fillMaxWidth().padding(5.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             HomeWidget("TODAY",android.text.format.DateFormat.format("EEE, MMM d",java.util.Date()).toString(),"Your day at a glance",Icons.Default.CalendarMonth,Modifier.weight(1f),Color(0xFF5178D8))
