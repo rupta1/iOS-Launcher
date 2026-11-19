@@ -958,7 +958,10 @@ fun LauncherRoot(db: LauncherDb) {
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
                         AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=true,animateOnEntry=false,
-                            onBounds={key,rect->appBounds[key]=rect},onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
+                            onBounds={key,rect->appBounds[key]=rect},
+                            onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
+                            onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
+                            onDragEnd={finishIconDrag()},onDragCancel={clearActiveDragSession()},onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
                     }
                 }
                 pageFolders.forEach{folder->
