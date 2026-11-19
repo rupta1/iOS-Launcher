@@ -67,7 +67,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -920,7 +919,7 @@ fun LauncherRoot(db: LauncherDb) {
                     Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
                     Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
                     Spacer(Modifier.height(14.dp))
-                    TextButton(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
+                    Button(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
                 }
             } else AnimatedContent(
                 targetState=page,
@@ -988,9 +987,9 @@ fun LauncherRoot(db: LauncherDb) {
             AnimatedVisibility(homeEditMode,enter=fadeIn(tween(130))+scaleIn(spring(dampingRatio=.86f)),exit=fadeOut(tween(100))){
                 Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
                     Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
-                        TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                        TextButton(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
-                        TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
+                        Button(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
+                        Button(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                        Button(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
                     }
                 }
             }
@@ -1022,19 +1021,19 @@ fun LauncherRoot(db: LauncherDb) {
                     Text("Choose a destination. Dragging is disabled.")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
                         Text("Page")
-                        TextButton(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
+                        Button(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
                         Text((placementPage+1).toString())
-                        TextButton(onClick={placementPage=placementPage+1}){Text("+")}
+                        Button(onClick={placementPage=placementPage+1}){Text("+")}
                     }
                 }},
-                confirmButton={TextButton(onClick={
+                confirmButton={Button(onClick={
                     appPageAssignments=appPageAssignments+(movingApp.packageName to placementPage);db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});
                     appSlotAssignments=appSlotAssignments-movingApp.packageName;db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});
                     page=placementPage;selectedPlacementApp=null
                 }){Text("Move to page")}},
-                dismissButton={Row{TextButton(onClick={
+                dismissButton={Row{Button(onClick={
                     dockPackages=(dockPackages.filterNot{it==movingApp.packageName}+movingApp.packageName).take(5);persistDock();appPageAssignments=appPageAssignments-movingApp.packageName;selectedPlacementApp=null
-                }){Text("Dock")} TextButton(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
+                }){Text("Dock")} Button(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
         }
 
         BackHandler(enabled=true) {
@@ -1224,8 +1223,8 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         Text("Uninstall ${target.label} from this device?",color=Color.White.copy(alpha=.76f),fontSize=14.sp,textAlign=TextAlign.Center)
                         Spacer(Modifier.height(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color.White.copy(alpha=.82f)) }
-                            TextButton(onClick={
+                            Button(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color.White.copy(alpha=.82f)) }
+                            Button(onClick={
                                 pendingUninstallApp=null
                                 uninstallRequestResumeRevision=activity.appRefreshRevision
                                 awaitingUninstallPackage=target.packageName
@@ -1267,7 +1266,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         }
                     }
                 },
-                confirmButton={ TextButton(onClick={widgetPickerOpen=false}) { Text("Close") } }
+                confirmButton={ Button(onClick={widgetPickerOpen=false}) { Text("Close") } }
             )
         }
         AnimatedVisibility(visible=draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
