@@ -876,9 +876,8 @@ fun LauncherRoot(db: LauncherDb) {
         extraHomePages + 1,
         1
     )
-    var lastEdgePageAdvanceAt by remember { mutableLongStateOf(0L) }
     fun lastHomePage():Int = maxOf(
-        pageAppSlices.size,
+        (pageAppSlices.size-1).coerceAtLeast(0),
         appPageAssignments.values.maxOrNull() ?: 0,
         homeWidgets.maxOfOrNull { it.second } ?: 0,
         if(showWeatherWidget) weatherWidgetPage else 0,
@@ -888,19 +887,18 @@ fun LauncherRoot(db: LauncherDb) {
     )
     fun advanceDragPage(direction:Int) {
         if(direction==0) return
-        // A drag may advance only to an existing page or one trailing blank page.
-        // Never create pages indefinitely while the pointer remains parked at the edge.
-        val maxPage=lastHomePage()+1
+        // Allow one trailing blank page, but do not treat that blank page as
+        // occupied when calculating the limit, preventing endless page creation.
+        val occupiedLast=lastHomePage()
+        val maxPage=occupiedLast+1
         val next=(pendingDragPage+direction).coerceIn(0,maxPage)
         if(next==pendingDragPage)return
-        if(direction>0 && next>lastHomePage()) {
-            extraHomePages=maxOf(extraHomePages,next-(pageAppSlices.size-1).coerceAtLeast(0))
+        if(direction>0 && next>occupiedLast) {
+            extraHomePages=maxOf(extraHomePages,1)
             db.put("extra_home_pages",extraHomePages.toString())
         }
         pendingDragPage=next
         page=next
-        // Force the incoming page to publish fresh bounds; cached bounds may
-        // describe its previous animated/off-screen position.
         homeGridBoundsByPage.remove(next)
         homeGridBounds=Rect.Zero
         dragPreviewSlots=emptyMap()
@@ -912,15 +910,13 @@ fun LauncherRoot(db: LauncherDb) {
         val width=activity.window.decorView.width.toFloat()
         val edge=with(density){56.dp.toPx()}
         val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
-        if(direction==0) {
-            dragEdgeDirection=0
-            lastEdgePageAdvanceAt=0L
-            return
-        }
-        if(direction!=dragEdgeDirection) {
-            dragEdgeDirection=direction
-            lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
-            advanceDragPage(direction)
+        dragEdgeDirection=direction
+    }
+    LaunchedEffect(dragEdgeDirection,draggingApp?.packageName,draggingWidgetId) {
+        val direction=dragEdgeDirection
+        if(direction!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+            delay(650L)
+            if(dragEdgeDirection==direction) advanceDragPage(direction)
         }
     }
     LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
