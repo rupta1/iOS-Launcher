@@ -299,7 +299,7 @@ fun LauncherRoot(db: LauncherDb) {
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
     var extraHomePages by remember { mutableIntStateOf(db.get("extra_home_pages","0").toIntOrNull()?.coerceAtLeast(0) ?: 0) }
-    var homeEditMode by remember { mutableStateOf(false) }
+    var homeEditMode by remember { mutableStateOf(false) }\n    var gridDialog by remember { mutableStateOf(false) }\n    var batchMoveDialog by remember { mutableStateOf(false) }\n    var batchFolderDialog by remember { mutableStateOf(false) }\n    var selectedEditApps by remember { mutableStateOf(setOf<String>()) }
     var selectedPlacementApp by remember { mutableStateOf<InstalledApp?>(null) }
     var placementPage by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "5").toIntOrNull() ?: 5) }
@@ -998,10 +998,23 @@ fun LauncherRoot(db: LauncherDb) {
             }
             AnimatedVisibility(homeEditMode,enter=fadeIn(tween(130))+scaleIn(spring(dampingRatio=.86f)),exit=fadeOut(tween(100))){
                 Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
-                    Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
-                        Button(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                        Button(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
-                        Button(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
+                    Column(Modifier.fillMaxWidth().padding(8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+                            Button(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
+                            Button(onClick={gridDialog=true}){Icon(Icons.Default.GridView,null);Text("Grid")}
+                            Button(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                            Button(onClick={homeEditMode=false;selectedEditApps.clear()}){Icon(Icons.Default.Check,null);Text("Done")}
+                        }
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
+                            pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=if(page==i)Color(0xFF7655B8)else fg)} }
+                            TextButton(onClick={page=pageCount-1;pendingDragPage=pageCount-1}){Text("+")}
+                        }
+                        if(selectedEditApps.isNotEmpty())Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+                            Text("${selectedEditApps.size} selected",modifier=Modifier.align(Alignment.CenterVertically))
+                            TextButton(onClick={batchMoveDialog=true}){Text("Move")}
+                            TextButton(onClick={batchFolderDialog=true}){Text("Folder")}
+                            TextButton(onClick={selectedEditApps.clear()}){Text("Clear")}
+                        }
                     }
                 }
             }
