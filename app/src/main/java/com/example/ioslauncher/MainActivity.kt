@@ -520,6 +520,7 @@ fun LauncherRoot(db: LauncherDb) {
     }.toMap()) }
     var dragPosition by remember { mutableStateOf(Offset.Zero) }
     var dragEdgeDirection by remember { mutableIntStateOf(0) }
+    var edgePagingArmed by remember { mutableStateOf(true) }
     var dragPreviewSlots by remember { mutableStateOf<Map<String,Int>>(emptyMap()) }
 
     val appBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -910,13 +911,19 @@ fun LauncherRoot(db: LauncherDb) {
         val width=activity.window.decorView.width.toFloat()
         val edge=with(density){56.dp.toPx()}
         val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
+        // Re-arm edge paging only after the finger leaves the edge zone.
+        // This prevents a stationary pointer from repeatedly switching pages.
+        if(direction==0) edgePagingArmed=true
         dragEdgeDirection=direction
     }
-    LaunchedEffect(dragEdgeDirection,pendingDragPage,draggingApp?.packageName,draggingWidgetId) {
+    LaunchedEffect(dragEdgeDirection,pendingDragPage,draggingApp?.packageName,draggingWidgetId,edgePagingArmed) {
         val direction=dragEdgeDirection
-        if(direction!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+        if(edgePagingArmed && direction!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
             delay(650L)
-            if(dragEdgeDirection==direction) advanceDragPage(direction)
+            if(dragEdgeDirection==direction && edgePagingArmed) {
+                advanceDragPage(direction)
+                edgePagingArmed=false
+            }
         }
     }
     LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
