@@ -976,6 +976,7 @@ fun LauncherRoot(db: LauncherDb) {
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
                             onDragEnd={finishIconDrag()},onDragCancel={clearActiveDragSession()},onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(homeEditMode){selectedEditApps=if(app.packageName in selectedEditApps)selectedEditApps-app.packageName else selectedEditApps+app.packageName}else if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
+                        if(homeEditMode){Box(Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).clip(CircleShape).background(if(app.packageName in selectedEditApps)Color(0xFF1685F8)else Color.White.copy(alpha=.7f)),contentAlignment=Alignment.Center){Icon(if(app.packageName in selectedEditApps)Icons.Default.Check else Icons.Default.Add,null,tint=if(app.packageName in selectedEditApps)Color.White else Color.Gray,modifier=Modifier.size(15.dp))}}
                     }
                 }
                 pageFolders.forEach{folder->
