@@ -193,6 +193,7 @@ fun LauncherRoot(db: LauncherDb) {
             ?: Rect.Zero
     }
     var draggingApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var widgetSearch by remember { mutableStateOf("") }
     var widgetPickerOpen by remember { mutableStateOf(false) }
     var widgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
     var homeWidgets by remember { mutableStateOf(db.get("home_widgets").split(",").mapNotNull { token ->
@@ -1279,37 +1280,29 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 confirmButton={Button(onClick={if(selectedEditApps.size>=2){val chosen=selectedEditApps.toList();val slot=chosen.firstOrNull()?.let{appSlotAssignments[it]}?:0;folders=folders+HomeFolder("folder:"+System.currentTimeMillis(),"Folder",chosen,page,slot);persistFolders();appPageAssignments=appPageAssignments-chosen;appSlotAssignments=appSlotAssignments-chosen;db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});selectedEditApps=setOf()};batchFolderDialog=false}){Text("Create")}},
                 dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel")}})
         }
-        if (widgetPickerOpen) {
-            AlertDialog(
-                onDismissRequest={ widgetPickerOpen=false },
-                title={ Text("Add widgets") },
-                text={
-                    if (widgetProviders.isEmpty()) Text("No compatible widgets are currently installed.")
-                    else Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState())) {
-                        widgetProviders.forEach { provider ->
-                            Row(
-                                Modifier.fillMaxWidth().clickable {
-                                    widgetPickerOpen=false
-                                    activity.addHomeWidget(page, provider)
-                                }.padding(vertical=12.dp),
-                                verticalAlignment=Alignment.CenterVertically
-                            ) {
-                                val icon = try { context.packageManager.getApplicationIcon(provider.provider.packageName) } catch (_: Exception) { null }
-                                if (icon != null) Image(icon.toBitmap().asImageBitmap(), null, modifier=Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(provider.loadLabel(context.packageManager).toString(), fontWeight=FontWeight.SemiBold)
-                                    Text(provider.provider.packageName, fontSize=10.sp, color=Color.Gray, maxLines=1)
-                                    Text(provider.minWidth.toString() + " × " + provider.minHeight + " dp", fontSize=11.sp, color=Color.Gray)
+        if(widgetPickerOpen){
+            ModalBottomSheet(onDismissRequest={widgetPickerOpen=false},containerColor=if(dark)Color(0xFF171717)else Color(0xFFF5F5F8),shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp)){
+                Column(Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=24.dp)){
+                    Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Icon(Icons.Default.Search,null,tint=fg)}
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedTextField(value=widgetSearch,onValueChange={widgetSearch=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Search widgets")},singleLine=true,leadingIcon={Icon(Icons.Default.Search,null)})
+                    Spacer(Modifier.height(12.dp))
+                    if(widgetProviders.isEmpty())Text("No compatible widgets are currently installed.",modifier=Modifier.padding(16.dp))
+                    else Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                        widgetProviders.filter{provider->provider.loadLabel(context.packageManager).toString().contains(widgetSearch,true)||provider.provider.packageName.contains(widgetSearch,true)}.forEach{provider->
+                            Surface(shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xFF292929)else Color.White,shadowElevation=2.dp){
+                                Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
+                                    val icon=try{context.packageManager.getApplicationIcon(provider.provider.packageName)}catch(_:Exception){null}
+                                    if(icon!=null)Image(icon.toBitmap().asImageBitmap(),null,Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)){Text(provider.loadLabel(context.packageManager).toString(),fontWeight=FontWeight.SemiBold);Text(provider.provider.packageName,fontSize=11.sp,color=Color.Gray,maxLines=1);Text("${provider.minWidth} × ${provider.minHeight} dp",fontSize=12.sp,color=Color.Gray)}
+                                    Button(onClick={widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,provider)},shape=RoundedCornerShape(16.dp)){Text("Add")}
                                 }
-                                Icon(Icons.Default.Add, null)
                             }
-                            HorizontalDivider()
                         }
                     }
-                },
-                confirmButton={ Button(onClick={widgetPickerOpen=false}) { Text("Close") } }
-            )
+                }
+            }
         }
         if(draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
             Box(Modifier.fillMaxSize().zIndex(20f)){
