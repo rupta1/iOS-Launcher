@@ -618,6 +618,21 @@ fun LauncherRoot(db: LauncherDb) {
         widgetBounds.clear()
         folderBounds.clear()
     }
+    fun clearActiveDragSession() {
+        draggingApp=null
+        draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
+        draggingFromDock=false
+        draggingFromFolder=false
+        dragSourceFolderId=null
+        dragPreviewSlots=emptyMap()
+        dragEdgeDirection=0
+        edgePagingArmed=true
+        pendingDragPage=page
+    }
+    fun openLauncherSettings() {
+        clearActiveDragSession()
+        settings=true
+    }
     fun updateDragEdge(position:Offset) {
         val width=activity.window.decorView.width.toFloat()
         val edge=with(density){56.dp.toPx()}
@@ -1031,7 +1046,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
                         AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
-                            onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
+                            onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
                     }
                 }
                 pageFolders.forEach{folder->
@@ -1061,7 +1076,7 @@ fun LauncherRoot(db: LauncherDb) {
                 Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
                     Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
                         TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                        TextButton(onClick={settings=true}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                        TextButton(onClick={openLauncherSettings}){Icon(Icons.Default.Settings,null);Text("Settings")}
                         TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
                     }
                 }
@@ -1145,7 +1160,7 @@ fun LauncherRoot(db: LauncherDb) {
                 onNavigationMode={navigationMode=it;db.put("navigation_mode",it)},
                 onRecentsArrangement={recentsArrangement=it;db.put("recents_arrangement",it)},
                 onHighRefreshRate={highRefreshRate=it;db.put("high_refresh_rate",it.toString()); if(it) activity.requestHighestRefreshRate() else activity.clearPreferredRefreshRate()},
-                onClose={settings=false},
+                onClose={settings=false;clearActiveDragSession()},
                 onUninstallLauncher={ pendingUninstallApp=InstalledApp("iOS Style Launcher",context.packageName,context.packageManager.getApplicationIcon(context.packageName)) },
                 onDeviceSettings={
                     // Android requires users to approve restricted settings themselves
@@ -1216,7 +1231,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                         draggableEnabled=false,
                                         onClick={
                                             openFolderId=null
-                                            if(app.packageName=="internal:settings") settings=true else activity.launch(app)
+                                            if(app.packageName=="internal:settings") openLauncherSettings() else activity.launch(app)
                                         }
                                     )
                                 }
