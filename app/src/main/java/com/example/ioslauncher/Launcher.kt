@@ -957,8 +957,8 @@ fun LauncherRoot(db: LauncherDb) {
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
-                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
-                            onBounds={key,rect->appBounds[key]=rect},onLongClick={if(!lockLayout) { homeEditMode=true; selectedPlacementApp=app; placementPage=page } },onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=true,animateOnEntry=false,
+                            onBounds={key,rect->appBounds[key]=rect},onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
                     }
                 }
                 pageFolders.forEach{folder->
@@ -996,8 +996,8 @@ fun LauncherRoot(db: LauncherDb) {
             Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark) .13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
-                        AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,
-                            onLongClick={if(!lockLayout){homeEditMode=true;selectedPlacementApp=app}}, onBounds={key,rect->dockAppBounds[key]=rect},
+                        AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
+                            onLongClick={if(!lockLayout)homeEditMode=true}, onBounds={key,rect->dockAppBounds[key]=rect},
                             onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
                     if(dockPackages.isEmpty())Text("Hold an app to edit your Home Screen",color=fg.copy(alpha=.6f),fontSize=11.sp)
@@ -1015,44 +1015,7 @@ fun LauncherRoot(db: LauncherDb) {
             }
         }
 
-        selectedPlacementApp?.let { movingApp ->
-            AlertDialog(
-                onDismissRequest = { selectedPlacementApp = null },
-                title = { Text("Organize app") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Choose a destination. Dragging is disabled.")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Page")
-                            androidx.compose.material3.Button(onClick = { placementPage = (placementPage - 1).coerceAtLeast(0) }) { Text("−") }
-                            Text((placementPage + 1).toString())
-                            androidx.compose.material3.Button(onClick = { placementPage += 1 }) { Text("+") }
-                        }
-                    }
-                },
-                confirmButton = {
-                    androidx.compose.material3.Button(onClick = {
-                        appPageAssignments = appPageAssignments + (movingApp.packageName to placementPage)
-                        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
-                        appSlotAssignments = appSlotAssignments - movingApp.packageName
-                        db.put("app_slots", appSlotAssignments.entries.joinToString(";") { it.key + ":" + it.value })
-                        page = placementPage
-                        selectedPlacementApp = null
-                    }) { Text("Move to page") }
-                },
-                dismissButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.Button(onClick = {
-                            dockPackages = (dockPackages.filterNot { it == movingApp.packageName } + movingApp.packageName).take(5)
-                            persistDock()
-                            appPageAssignments = appPageAssignments - movingApp.packageName
-                            selectedPlacementApp = null
-                        }) { Text("Dock") }
-                        androidx.compose.material3.Button(onClick = { selectedPlacementApp = null }) { Text("Cancel") }
-                    }
-                }
-            )
-        }
+
 
         BackHandler(enabled=true) {
             when {
