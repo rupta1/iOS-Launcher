@@ -2,6 +2,7 @@ package com.example.ioslauncher
 
 import android.graphics.drawable.Drawable
 import android.appwidget.AppWidgetManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
