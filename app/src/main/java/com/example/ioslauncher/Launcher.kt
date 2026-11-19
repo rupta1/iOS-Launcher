@@ -124,6 +124,7 @@ data class InstalledApp(val label: String, val packageName: String, val icon: Dr
 
 
 @OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LauncherRoot(db: LauncherDb) {
     val context = LocalContext.current
