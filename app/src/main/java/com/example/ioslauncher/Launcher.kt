@@ -882,6 +882,28 @@ fun LauncherRoot(db: LauncherDb) {
 
     // New home surface: measured grid geometry and a single parent drag owner.
     Box(Modifier.fillMaxSize().background(Color.Transparent)
+        .pointerInput(Unit) {
+            var trackedPointer: androidx.compose.ui.input.pointer.PointerId? = null
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val down = event.changes.firstOrNull { it.pressed && !it.previousPressed }
+                    if (trackedPointer == null && down != null) trackedPointer = down.id
+                    val tracked = trackedPointer?.let { id -> event.changes.firstOrNull { it.id == id } }
+                    val appDragActive = draggingApp != null
+                    val widgetDragActive = draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
+                    if ((appDragActive || widgetDragActive) && tracked != null) {
+                        if (appDragActive) { dragPosition = tracked.position; updateDragEdge(dragPosition) }
+                        else widgetDragPosition = tracked.position
+                    }
+                    if (tracked != null && !tracked.pressed && (appDragActive || widgetDragActive)) {
+                        if (appDragActive) finishIconDrag() else finishWidgetDrag()
+                        trackedPointer = null
+                    } else if (tracked != null && !tracked.pressed) trackedPointer = null
+                    if (event.changes.any { it.isConsumed } && trackedPointer == null) continue
+                }
+            }
+        }
         .pointerInput(drawer,controlCenter,settings,openFolderId,page,pageCount,minusScreen,homeStyle,swipeDownAction,draggingApp,draggingWidgetId) {
             if(!drawer&&!controlCenter&&!settings&&openFolderId==null&&draggingApp==null&&draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
@@ -977,7 +999,7 @@ fun LauncherRoot(db: LauncherDb) {
                             onBounds={key,rect->appBounds[key]=rect},
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
-                            onDragEnd={finishIconDrag()},onDragCancel={clearActiveDragSession()},onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(homeEditMode){selectedEditApps=if(app.packageName in selectedEditApps)selectedEditApps-app.packageName else selectedEditApps+app.packageName}else if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
+                            onDragEnd={finishIconDrag()},onDragCancel={ /* Parent drag layer retains pointer ownership across page disposal. */ },onLongClick={if(!lockLayout) homeEditMode=true },onClick={if(homeEditMode){selectedEditApps=if(app.packageName in selectedEditApps)selectedEditApps-app.packageName else selectedEditApps+app.packageName}else if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
                         if(homeEditMode){Box(Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).clip(CircleShape).background(if(app.packageName in selectedEditApps)Color(0xFF1685F8)else Color.White.copy(alpha=.7f)),contentAlignment=Alignment.Center){Icon(if(app.packageName in selectedEditApps)Icons.Default.Check else Icons.Default.Add,null,tint=if(app.packageName in selectedEditApps)Color.White else Color.Gray,modifier=Modifier.size(15.dp))}}
                     }
                 }
