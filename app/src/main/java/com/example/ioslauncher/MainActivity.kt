@@ -922,7 +922,10 @@ fun LauncherRoot(db: LauncherDb) {
             delay(650L)
             if(dragEdgeDirection==direction && edgePagingArmed) {
                 advanceDragPage(direction)
-                edgePagingArmed=false
+                // Re-arm after a page transition so holding at the edge can
+                // continue paging. advanceDragPage is bounded to the last occupied
+                // page plus one trailing empty page, preventing runaway creation.
+                edgePagingArmed=true
             }
         }
     }
@@ -1598,6 +1601,3 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
             }
-        }
-    }
-}
