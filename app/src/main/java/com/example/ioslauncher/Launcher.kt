@@ -300,6 +300,8 @@ fun LauncherRoot(db: LauncherDb) {
     var page by remember { mutableIntStateOf(0) }
     var extraHomePages by remember { mutableIntStateOf(db.get("extra_home_pages","0").toIntOrNull()?.coerceAtLeast(0) ?: 0) }
     var homeEditMode by remember { mutableStateOf(false) }
+    var selectedPlacementApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var placementPage by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "5").toIntOrNull() ?: 5) }
     var navigationMode by remember { mutableStateOf(db.get("navigation_mode", "gestures")) }
     var animationSpeed by remember { mutableStateOf(db.get("animation_speed", "Slow")) }
@@ -898,96 +900,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
         }
-        .pointerInput(apps,drawer,controlCenter,settings,openFolderId,page,columns,effectiveRows) {
-            if(!drawer&&!controlCenter&&!settings) awaitEachGesture {
-                // All workspace drags are owned here. Observe the Initial pass so
-                // child clickables/widgets cannot steal the long-press or drag stream.
-                val down=awaitFirstDown(requireUnconsumed=false,pass=PointerEventPass.Initial)
-                val homeAppKey=appBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
-                val dockAppKey=dockAppBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
-                val folderAppKey=folderMemberBounds.entries.firstOrNull{it.value.contains(down.position)}?.key
-                val appKey=homeAppKey ?: dockAppKey ?: folderAppKey
-                val folderSource=if(folderAppKey!=null) folders.firstOrNull{folderAppKey in it.packages} else null
-                // Widgets retain Android's own touch handling; only their dedicated grip starts a move.
-                val widgetKey=if(appKey==null) widgetBounds.entries.firstOrNull{e->
-                    widgetHandleBounds[e.key]?.contains(down.position)==true &&
-                    widgetResizeHandleBounds[e.key]?.contains(down.position)!=true
-                }?.key else null
-                if(appKey==null&&widgetKey==null)return@awaitEachGesture
-                // Detect the hold ourselves on the Initial pass. The child icon's
-                // combinedClickable can consume the Main-pass long-press, which would
-                // otherwise cancel the parent's drag recognizer before it starts.
-                val holdStart=down.uptimeMillis
-                val longPressTimeout=viewConfiguration.longPressTimeoutMillis
-                var long: androidx.compose.ui.input.pointer.PointerInputChange?=null
-                while(long==null) {
-                    val event=awaitPointerEvent(PointerEventPass.Initial)
-                    val change=event.changes.firstOrNull{it.id==down.id}?:return@awaitEachGesture
-                    if(!change.pressed)return@awaitEachGesture
-                    val moved=change.position-down.position
-                    if(moved.getDistance()>viewConfiguration.touchSlop)return@awaitEachGesture
-                    if(change.uptimeMillis-holdStart>=longPressTimeout) {
-                        change.consume()
-                        long=change
-                    }
-                }
-                if(appKey!=null) {
-                    val app=apps.firstOrNull{it.packageName==appKey}?:return@awaitEachGesture
-                    draggingApp=app
-                    draggingFromDock=homeAppKey==null&&folderAppKey==null
-                    draggingFromFolder=folderSource!=null
-                    dragSourceFolderId=folderSource?.id
-                    dragPosition=long.position
-                    dragOriginBounds=appBounds[appKey]?:dockAppBounds[appKey]?:folderMemberBounds[appKey]?:Rect.Zero
-                    dragOriginPage=folderSource?.page?:page
-                    dragOriginSlot=folderSource?.slot?:appSlotAssignments[appKey]?:slotAt(dragOriginBounds.center)
-                    pendingDragPage=dragOriginPage
-                } else if(widgetKey!=null) {
-                    draggingWidgetId=widgetKey
-                    widgetCanvasBounds=widgetBounds[widgetKey]?:Rect.Zero
-                    widgetDragPosition=long.position
-                    pendingDragPage=page
-                }
-                var released=false
-                var cancelled=false
-                while(true) {
-                    val event=awaitPointerEvent(PointerEventPass.Initial)
-                    val change=event.changes.firstOrNull{it.id==down.id}
-                    if(change==null){cancelled=true;break}
-                    if(!change.pressed){change.consume();released=true;break}
-                    val delta=change.position-change.previousPosition
-                    if(draggingApp!=null) {
-                        change.consume()
-                        dragPosition=change.position
-                        updateDragEdge(dragPosition)
-                        draggingApp?.let{updateGridDragPreview(dragPosition,"app:"+it.packageName)}
-                    } else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) {
-                        change.consume()
-                        widgetDragPosition=change.position
-                        updateDragEdge(widgetDragPosition)
-                        val grid=gridBoundsFor(pendingDragPage)
-                        val cellW=(grid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
-                        val cellH=(grid.height/effectiveRows.coerceAtLeast(1)).coerceAtLeast(1f)
-                        updateGridDragPreview(widgetDragPosition,"widget:"+draggingWidgetId,
-                            kotlin.math.ceil(widgetCanvasBounds.width/cellW).toInt().coerceIn(1,columns),
-                            kotlin.math.ceil(widgetCanvasBounds.height/cellH).toInt().coerceIn(1,effectiveRows))
-                    }
-                }
-                if(released) {
-                    if(draggingApp!=null) finishIconDrag()
-                    else if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID) finishWidgetDrag()
-                } else if(cancelled) {
-                    draggingApp=null
-                    draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID
-                    draggingFromDock=false
-                    draggingFromFolder=false
-                    dragSourceFolderId=null
-                    dragPreviewSlots=emptyMap()
-                    dragEdgeDirection=0
-                    pendingDragPage=page
-                }
-            }
-        }) {
+        ) {
         if(!drawer) Column(Modifier.fillMaxSize().padding(horizontal=18.dp).graphicsLayer {
             renderEffect=if((controlCenter||openFolderId!=null)&&Build.VERSION.SDK_INT>=31)BlurEffect(16f,16f)else null
         }) {
@@ -1045,7 +958,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
                         AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=false,animateOnEntry=false,
-                            onBounds={key,rect->appBounds[key]=rect},onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
+                            onBounds={key,rect->appBounds[key]=rect},onLongClick={if(!lockLayout) { homeEditMode=true; selectedPlacementApp=app; placementPage=page } },onClick={if(app.packageName=="internal:settings")openLauncherSettings() else activity.launch(app)})
                     }
                 }
                 pageFolders.forEach{folder->
@@ -1084,7 +997,7 @@ fun LauncherRoot(db: LauncherDb) {
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=false,animateOnEntry=false,
-                            onBounds={key,rect->dockAppBounds[key]=rect},
+                            onLongClick={if(!lockLayout){homeEditMode=true;selectedPlacementApp=app}}, onBounds={key,rect->dockAppBounds[key]=rect},
                             onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
                     if(dockPackages.isEmpty())Text("Hold an app to edit your Home Screen",color=fg.copy(alpha=.6f),fontSize=11.sp)
@@ -1101,6 +1014,28 @@ fun LauncherRoot(db: LauncherDb) {
                 Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){Icon(Icons.Default.Delete,null,tint=Color.White,modifier=Modifier.size(24.dp));Text(if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)"Remove widget" else "Uninstall",color=Color.White,fontSize=11.sp,fontWeight=FontWeight.SemiBold)}
             }
         }
+
+        selectedPlacementApp?.let { movingApp ->
+            AlertDialog(onDismissRequest={selectedPlacementApp=null}, title={Text("Organize app")},
+                text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+                    Text("Choose a destination. Dragging is disabled.")
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
+                        Text("Page")
+                        TextButton(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
+                        Text((placementPage+1).toString())
+                        TextButton(onClick={placementPage=placementPage+1}){Text("+")}
+                    }
+                }},
+                confirmButton={TextButton(onClick={
+                    appPageAssignments=appPageAssignments+(movingApp.packageName to placementPage);db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});
+                    appSlotAssignments=appSlotAssignments-movingApp.packageName;db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});
+                    page=placementPage;selectedPlacementApp=null
+                }){Text("Move to page")}},
+                dismissButton={Row{TextButton(onClick={
+                    dockPackages=(dockPackages.filterNot{it==movingApp.packageName}+movingApp.packageName).take(5);persistDock();appPageAssignments=appPageAssignments-movingApp.packageName;selectedPlacementApp=null
+                }){Text("Dock")} TextButton(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
+        }
+
         BackHandler(enabled=true) {
             when {
                 controlCenter -> Unit
@@ -1236,7 +1171,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
-                            Text("Drag an app outside to remove it from this folder",color=Color(0xFF66707C),fontSize=11.sp,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth())
+                            Text("Use the organize menu to move apps",color=Color(0xFF66707C),fontSize=11.sp,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth())
                         }
                     }
                 }
