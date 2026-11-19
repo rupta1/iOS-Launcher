@@ -1002,20 +1002,26 @@ fun LauncherRoot(db: LauncherDb) {
             Row(Modifier.fillMaxWidth().padding(vertical=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
                 repeat(pageCount){i->Box(Modifier.padding(horizontal=4.dp).size(if(page==i)8.dp else 6.dp).clip(CircleShape).background(if(page==i)Color(0xFF1685F8)else fg.copy(alpha=.28f)).clickable{page=i})}
             }
-            AnimatedVisibility(homeEditMode,enter=fadeIn(tween(130))+scaleIn(spring(dampingRatio=.86f)),exit=fadeOut(tween(100))){
-                Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
-                    Column(Modifier.fillMaxWidth().padding(8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
-                            Button(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                            Button(onClick={gridDialog=true}){Icon(Icons.Default.GridView,null);Text("Grid")}
-                            Button(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
-                            Button(onClick={homeEditMode=false;selectedEditApps=setOf()}){Icon(Icons.Default.Check,null);Text("Done")}
+            AnimatedVisibility(homeEditMode,enter=fadeIn(tween(160))+scaleIn(spring(dampingRatio=.82f)),exit=fadeOut(tween(120))){
+                Column(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){
+                        Button(onClick={homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false},shape=RoundedCornerShape(28.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF1685F8))){Text("Done",fontWeight=FontWeight.SemiBold)}
+                    }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
+                        pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=if(page==i)Color(0xFF1685F8)else fg)} }
+                        TextButton(onClick={page=pageCount-1;pendingDragPage=pageCount-1;extraHomePages=maxOf(extraHomePages,1);db.put("extra_home_pages",extraHomePages.toString())}){Text("+")}
+                    }
+                    Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(30.dp),color=Color.Black.copy(alpha=.28f),border=BorderStroke(1.dp,Color.White.copy(alpha=.16f))){
+                        Row(Modifier.fillMaxWidth().padding(vertical=14.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
+                            @Composable fun EditAction(icon:ImageVector,label:String,onClick:()->Unit){Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.clickable(onClick=onClick)){Surface(shape=CircleShape,color=Color.Black.copy(alpha=.28f),modifier=Modifier.size(58.dp)){Box(contentAlignment=Alignment.Center){Icon(icon,null,tint=Color.White,modifier=Modifier.size(25.dp))}};Spacer(Modifier.height(5.dp));Text(label,color=Color.White,fontSize=12.sp)}}
+                            EditAction(Icons.Default.Wallpaper,"Wallpaper"){try{activity.startActivity(Intent(Intent.ACTION_SET_WALLPAPER))}catch(_:Exception){}}
+                            EditAction(Icons.Default.AutoAwesome,"Effects"){gridDialog=true}
+                            EditAction(Icons.Default.Widgets,"Widgets"){widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}
+                            EditAction(Icons.Default.Settings,"Settings"){openLauncherSettings()}
                         }
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
-                            pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=if(page==i)Color(0xFF7655B8)else fg)} }
-                            TextButton(onClick={page=pageCount-1;pendingDragPage=pageCount-1}){Text("+")}
-                        }
-                        if(selectedEditApps.isNotEmpty())Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+                    }
+                    if(selectedEditApps.isNotEmpty())Surface(shape=RoundedCornerShape(20.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=6.dp){
+                        Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                             Text("${selectedEditApps.size} selected",modifier=Modifier.align(Alignment.CenterVertically))
                             TextButton(onClick={batchMoveDialog=true}){Text("Move")}
                             TextButton(onClick={batchFolderDialog=true}){Text("Folder")}
