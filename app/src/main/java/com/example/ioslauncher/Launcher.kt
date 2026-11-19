@@ -1016,24 +1016,42 @@ fun LauncherRoot(db: LauncherDb) {
         }
 
         selectedPlacementApp?.let { movingApp ->
-            AlertDialog(onDismissRequest={selectedPlacementApp=null}, title={Text("Organize app")},
-                text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
-                    Text("Choose a destination. Dragging is disabled.")
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
-                        Text("Page")
-                        Button(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
-                        Text((placementPage+1).toString())
-                        Button(onClick={placementPage=placementPage+1}){Text("+")}
+            AlertDialog(
+                onDismissRequest = { selectedPlacementApp = null },
+                title = { Text("Organize app") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Choose a destination. Dragging is disabled.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Page")
+                            androidx.compose.material3.Button(onClick = { placementPage = (placementPage - 1).coerceAtLeast(0) }) { Text("−") }
+                            Text((placementPage + 1).toString())
+                            androidx.compose.material3.Button(onClick = { placementPage += 1 }) { Text("+") }
+                        }
                     }
-                }},
-                confirmButton={Button(onClick={
-                    appPageAssignments=appPageAssignments+(movingApp.packageName to placementPage);db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});
-                    appSlotAssignments=appSlotAssignments-movingApp.packageName;db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});
-                    page=placementPage;selectedPlacementApp=null
-                }){Text("Move to page")}},
-                dismissButton={Row{Button(onClick={
-                    dockPackages=(dockPackages.filterNot{it==movingApp.packageName}+movingApp.packageName).take(5);persistDock();appPageAssignments=appPageAssignments-movingApp.packageName;selectedPlacementApp=null
-                }){Text("Dock")} Button(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
+                },
+                confirmButton = {
+                    androidx.compose.material3.Button(onClick = {
+                        appPageAssignments = appPageAssignments + (movingApp.packageName to placementPage)
+                        db.put("app_pages", appPageAssignments.entries.joinToString(";") { it.key + ":" + it.value })
+                        appSlotAssignments = appSlotAssignments - movingApp.packageName
+                        db.put("app_slots", appSlotAssignments.entries.joinToString(";") { it.key + ":" + it.value })
+                        page = placementPage
+                        selectedPlacementApp = null
+                    }) { Text("Move to page") }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.Button(onClick = {
+                            dockPackages = (dockPackages.filterNot { it == movingApp.packageName } + movingApp.packageName).take(5)
+                            persistDock()
+                            appPageAssignments = appPageAssignments - movingApp.packageName
+                            selectedPlacementApp = null
+                        }) { Text("Dock") }
+                        androidx.compose.material3.Button(onClick = { selectedPlacementApp = null }) { Text("Cancel") }
+                    }
+                }
+            )
         }
 
         BackHandler(enabled=true) {
