@@ -608,6 +608,9 @@ fun LauncherRoot(db: LauncherDb) {
         }
         pendingDragPage=next
         page=next
+        // Require the pointer to leave the edge zone before another page turn.
+        edgePagingArmed=false
+        dragEdgeDirection=0
         homeGridBoundsByPage.remove(next)
         homeGridBounds=Rect.Zero
         dragPreviewSlots=emptyMap()
@@ -634,7 +637,7 @@ fun LauncherRoot(db: LauncherDb) {
     LaunchedEffect(draggingApp?.packageName, draggingWidgetId, dragEdgeDirection) {
         val direction = dragEdgeDirection
         val dragActive = draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
-        if (direction == 0 || !dragActive) return@LaunchedEffect
+        if (direction == 0 || !dragActive || !edgePagingArmed) return@LaunchedEffect
         while (dragEdgeDirection == direction &&
             (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID)
         ) {
