@@ -1000,6 +1000,8 @@ fun LauncherRoot(db: LauncherDb) {
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
+                            onDragStart={if(!lockLayout){val origin=dockAppBounds[app.packageName]?:Rect.Zero;draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=true;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true}},
+                            onDrag={delta->if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)}},onDragEnd={finishIconDrag()},onDragCancel={clearActiveDragSession()},
                             onLongClick={if(!lockLayout)homeEditMode=true}, onBounds={key,rect->dockAppBounds[key]=rect},
                             onClick={if(app.packageName=="internal:settings")settings=true else activity.launch(app)})
                     }
