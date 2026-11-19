@@ -1601,3 +1601,6 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     Text(if (draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) "Remove" else "Uninstall", color=Color.White, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
                 }
             }
+ }
+    }
+}
