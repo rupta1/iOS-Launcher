@@ -713,7 +713,7 @@ fun LauncherRoot(db: LauncherDb) {
         }
         val targetPage=pendingDragPage.coerceAtLeast(0)
         val targetGrid=gridBoundsFor(targetPage)
-        if(targetGrid.width<=0f||targetGrid.height<=0f||!targetGrid.contains(dragPosition)){android.widget.Toast.makeText(context,"Drop inside the home screen area",android.widget.Toast.LENGTH_SHORT).show();draggingApp=null;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
+        if((targetGrid.width<=0f||targetGrid.height<=0f||!targetGrid.contains(dragPosition))&&!dockBounds.contains(dragPosition)&&dragPosition.y>=uninstallDropZoneHeight){android.widget.Toast.makeText(context,"Drop inside the home screen area",android.widget.Toast.LENGTH_SHORT).show();draggingApp=null;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
         fun saveAssignments() {
             db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
             db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
