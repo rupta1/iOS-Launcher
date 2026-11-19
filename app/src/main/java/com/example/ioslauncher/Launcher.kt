@@ -555,6 +555,8 @@ fun LauncherRoot(db: LauncherDb) {
             widgetSlotAssignments=widgetSlotAssignments-id
             widgetPositions=widgetPositions-id
         } else {
+            val safeGrid=gridBoundsFor(destinationPage)
+            if(safeGrid.width<=0f||safeGrid.height<=0f||!safeGrid.contains(widgetDragPosition)){android.widget.Toast.makeText(context,"Drop inside the home screen area",android.widget.Toast.LENGTH_SHORT).show();draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
             // Recalculate using the destination page's current grid bounds and tile model;
             // the preview may have been cleared during the last edge-page transition.
             val destinationGrid=gridBoundsFor(destinationPage)
@@ -710,6 +712,8 @@ fun LauncherRoot(db: LauncherDb) {
             return
         }
         val targetPage=pendingDragPage.coerceAtLeast(0)
+        val targetGrid=gridBoundsFor(targetPage)
+        if(targetGrid.width<=0f||targetGrid.height<=0f||!targetGrid.contains(dragPosition)){android.widget.Toast.makeText(context,"Drop inside the home screen area",android.widget.Toast.LENGTH_SHORT).show();draggingApp=null;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
         fun saveAssignments() {
             db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
             db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
@@ -764,7 +768,7 @@ fun LauncherRoot(db: LauncherDb) {
             appSlotAssignments=appSlotAssignments-dragged.packageName
         } else {
             val destinationAppKeys=pageAppSlices.getOrNull(targetPage).orEmpty().map { it.packageName }.toSet()
-            val targetApp=if(targetPage==page) appBounds.entries.firstOrNull {
+            val targetApp=appBounds.entries.firstOrNull {
                 it.key!=dragged.packageName && it.key in destinationAppKeys && it.value.contains(dragPosition)
             }?.key else null
             if(targetApp!=null) {
