@@ -912,13 +912,10 @@ fun LauncherRoot(db: LauncherDb) {
             if(!drawer&&!controlCenter&&!settings&&openFolderId==null&&draggingApp==null&&draggingWidgetId==AppWidgetManager.INVALID_APPWIDGET_ID) {
                 awaitEachGesture {
                     val down=awaitFirstDown(requireUnconsumed=false,pass=PointerEventPass.Initial)
-                    // Let app/widget drags own their gesture; don't let the page-swipe
-                    // recognizer consume the same pointer stream.
-                    val startsOnDraggable=appBounds.values.any{it.contains(down.position)} ||
-                        dockAppBounds.values.any{it.contains(down.position)} ||
-                        folderMemberBounds.values.any{it.contains(down.position)} ||
-                        widgetHandleBounds.values.any{it.contains(down.position)}
-                    if(startsOnDraggable)return@awaitEachGesture
+                    // Horizontal page swipes must work when starting over icons,
+                    // folders and widgets. Long-press drag recognizers take ownership
+                    // only after touch-slop/long-press; this recognizer handles ordinary
+                    // horizontal swipes and deliberately does not consume vertical taps.
                     val edge=with(density){28.dp.toPx()}
                     if(down.position.x<edge||down.position.x>size.width-edge||down.position.y>size.height-edge)return@awaitEachGesture
                     var dx=0f;var dy=0f
