@@ -979,7 +979,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-y")
                     Box(Modifier.offset(x,y).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id) .12f else 1f}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
                         AndroidView(factory={activity.widgetHost.createView(it,id,info)},modifier=Modifier.fillMaxSize())
-                        Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
+                        Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()}.pointerInput(id,lockLayout){if(!lockLayout) detectDragGesturesAfterLongPress(onDragStart={val origin=widgetBounds[id]?:Rect.Zero;draggingWidgetId=id;pendingDragPage=renderedPage;page=renderedPage;widgetDragPosition=origin.center;widgetCanvasBounds=origin;draggingApp=null;dragEdgeDirection=0;edgePagingArmed=true;homeEditMode=true},onDragEnd={finishWidgetDrag()},onDragCancel={draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;dragPreviewSlots=emptyMap();dragEdgeDirection=0},onDrag={change,delta->change.consume();widgetDragPosition+=delta;updateDragEdge(widgetDragPosition)})},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
                     }
                 }
             }
