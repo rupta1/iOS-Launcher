@@ -67,6 +67,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -919,7 +920,7 @@ fun LauncherRoot(db: LauncherDb) {
                     Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
                     Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
                     Spacer(Modifier.height(14.dp))
-                    androidx.compose.material3.TextButton(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
+                    TextButton(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
                 }
             } else AnimatedContent(
                 targetState=page,
@@ -987,9 +988,9 @@ fun LauncherRoot(db: LauncherDb) {
             AnimatedVisibility(homeEditMode,enter=fadeIn(tween(130))+scaleIn(spring(dampingRatio=.86f)),exit=fadeOut(tween(100))){
                 Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
                     Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
-                        androidx.compose.material3.TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                        androidx.compose.material3.TextButton(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
-                        androidx.compose.material3.TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
+                        TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
+                        TextButton(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                        TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
                     }
                 }
             }
@@ -1021,19 +1022,19 @@ fun LauncherRoot(db: LauncherDb) {
                     Text("Choose a destination. Dragging is disabled.")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
                         Text("Page")
-                        androidx.compose.material3.TextButton(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
+                        TextButton(onClick={placementPage=(placementPage-1).coerceAtLeast(0)}){Text("−")}
                         Text((placementPage+1).toString())
-                        androidx.compose.material3.TextButton(onClick={placementPage=placementPage+1}){Text("+")}
+                        TextButton(onClick={placementPage=placementPage+1}){Text("+")}
                     }
                 }},
-                confirmButton={androidx.compose.material3.TextButton(onClick={
+                confirmButton={TextButton(onClick={
                     appPageAssignments=appPageAssignments+(movingApp.packageName to placementPage);db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});
                     appSlotAssignments=appSlotAssignments-movingApp.packageName;db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});
                     page=placementPage;selectedPlacementApp=null
                 }){Text("Move to page")}},
-                dismissButton={Row{androidx.compose.material3.TextButton(onClick={
+                dismissButton={Row{TextButton(onClick={
                     dockPackages=(dockPackages.filterNot{it==movingApp.packageName}+movingApp.packageName).take(5);persistDock();appPageAssignments=appPageAssignments-movingApp.packageName;selectedPlacementApp=null
-                }){Text("Dock")} androidx.compose.material3.TextButton(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
+                }){Text("Dock")} TextButton(onClick={selectedPlacementApp=null}){Text("Cancel")}}})
         }
 
         BackHandler(enabled=true) {
@@ -1133,7 +1134,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                         textStyle=androidx.compose.ui.text.TextStyle(fontSize=19.sp,fontWeight=FontWeight.SemiBold),
                                         placeholder={ Text("Group name") }
                                     )
-                                    Iconandroidx.compose.material3.TextButton(onClick={
+                                    IconButton(onClick={
                                         val newTitle=renameFolderText.trim()
                                         if(newTitle.isNotEmpty()) {
                                             folders=folders.map { item -> if(item.id==folder.id) item.copy(title=newTitle) else item }
@@ -1143,11 +1144,11 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                     }) { Icon(Icons.Default.Check,null,tint=Color(0xFF30B968)) }
                                 } else {
                                     Text(folder.title,color=Color(0xFF20242C),fontSize=21.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
-                                    Iconandroidx.compose.material3.TextButton(onClick={ renameFolderText=folder.title; renamingFolderId=folder.id }) {
+                                    IconButton(onClick={ renameFolderText=folder.title; renamingFolderId=folder.id }) {
                                         Icon(Icons.Default.Edit,null,tint=Color(0xFF59616D))
                                     }
                                 }
-                                Iconandroidx.compose.material3.TextButton(onClick={openFolderId=null; renamingFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
+                                IconButton(onClick={openFolderId=null; renamingFolderId=null}) { Icon(Icons.Default.Close,null,tint=Color(0xFF59616D)) }
                             }
                             Spacer(Modifier.height(12.dp))
                             val folderApps=folder.packages.distinct().mapNotNull { pkg -> apps.firstOrNull { it.packageName==pkg } }
@@ -1223,8 +1224,8 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         Text("Uninstall ${target.label} from this device?",color=Color.White.copy(alpha=.76f),fontSize=14.sp,textAlign=TextAlign.Center)
                         Spacer(Modifier.height(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            androidx.compose.material3.TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color.White.copy(alpha=.82f)) }
-                            androidx.compose.material3.TextButton(onClick={
+                            TextButton(onClick={pendingUninstallApp=null},modifier=Modifier.weight(1f)) { Text("No",color=Color.White.copy(alpha=.82f)) }
+                            TextButton(onClick={
                                 pendingUninstallApp=null
                                 uninstallRequestResumeRevision=activity.appRefreshRevision
                                 awaitingUninstallPackage=target.packageName
@@ -1266,7 +1267,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         }
                     }
                 },
-                confirmButton={ androidx.compose.material3.TextButton(onClick={widgetPickerOpen=false}) { Text("Close") } }
+                confirmButton={ TextButton(onClick={widgetPickerOpen=false}) { Text("Close") } }
             )
         }
         AnimatedVisibility(visible=draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
