@@ -215,7 +215,6 @@ fun AppIcon(
             this.alpha=if(isDragging) .88f else alpha
         }
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
-            .then(Modifier) else Modifier)
             .combinedClickable(
                 interactionSource=remember { MutableInteractionSource() },
                 indication=null,
