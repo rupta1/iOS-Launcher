@@ -916,17 +916,24 @@ fun LauncherRoot(db: LauncherDb) {
         if(direction==0) edgePagingArmed=true
         dragEdgeDirection=direction
     }
-    LaunchedEffect(dragEdgeDirection,pendingDragPage,draggingApp?.packageName,draggingWidgetId,edgePagingArmed) {
-        val direction=dragEdgeDirection
-        if(edgePagingArmed && direction!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
+    // Edge paging is a drag-session loop, not a one-shot timer. The loop is
+    // cancelled immediately when the pointer leaves the edge or the drag ends.
+    // advanceDragPage bounds the workspace to occupied pages plus one trailing page.
+    LaunchedEffect(draggingApp?.packageName, draggingWidgetId, dragEdgeDirection) {
+        val direction = dragEdgeDirection
+        val dragActive = draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
+        if (direction == 0 || !dragActive) return@LaunchedEffect
+        while (dragEdgeDirection == direction &&
+            (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID)
+        ) {
             delay(650L)
-            if(dragEdgeDirection==direction && edgePagingArmed) {
-                advanceDragPage(direction)
-                // Re-arm after a page transition so holding at the edge can
-                // continue paging. advanceDragPage is bounded to the last occupied
-                // page plus one trailing empty page, preventing runaway creation.
-                edgePagingArmed=true
-            }
+            if (dragEdgeDirection != direction ||
+                (draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID)
+            ) break
+            val before = pendingDragPage
+            advanceDragPage(direction)
+            if (pendingDragPage == before) break
+            delay(320L)
         }
     }
     LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
