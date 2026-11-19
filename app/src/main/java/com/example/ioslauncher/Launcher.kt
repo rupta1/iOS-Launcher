@@ -20,7 +20,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntOffset\nimport androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.layout.onSizeChanged
@@ -948,7 +948,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true else if(zoom>1.08f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
@@ -1303,6 +1303,17 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 },
                 confirmButton={ Button(onClick={widgetPickerOpen=false}) { Text("Close") } }
             )
+        }
+        if(draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
+            Box(Modifier.fillMaxSize().zIndex(20f)){
+                val dragged=draggingApp
+                if(dragged!=null){
+                    Image(dragged.icon.toBitmap().asImageBitmap(),contentDescription=dragged.label,
+                        modifier=Modifier.offset{IntOffset((dragPosition.x-36.dp.toPx()).toInt(),(dragPosition.y-36.dp.toPx()).toInt())}.size(72.dp).shadow(18.dp,CircleShape).clip(CircleShape).alpha(.94f))
+                }else{
+                    Surface(modifier=Modifier.offset{IntOffset((widgetDragPosition.x-60.dp.toPx()).toInt(),(widgetDragPosition.y-60.dp.toPx()).toInt())}.size(120.dp,96.dp),shape=RoundedCornerShape(22.dp),color=Color.White.copy(alpha=.28f),border=BorderStroke(2.dp,Color.White.copy(alpha=.85f)),shadowElevation=18.dp){Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Widgets,null,tint=fg,modifier=Modifier.size(42.dp))}}
+                }
+            }
         }
         AnimatedVisibility(visible=draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID, enter=fadeIn(), exit=fadeOut(), modifier=Modifier.align(Alignment.TopCenter)) {
             Surface(shape=RoundedCornerShape(22.dp), color=Color(0xFFE5484D), shadowElevation=12.dp,
