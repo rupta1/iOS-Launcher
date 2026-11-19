@@ -912,7 +912,7 @@ fun LauncherRoot(db: LauncherDb) {
         val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
         dragEdgeDirection=direction
     }
-    LaunchedEffect(dragEdgeDirection,draggingApp?.packageName,draggingWidgetId) {
+    LaunchedEffect(dragEdgeDirection,pendingDragPage,draggingApp?.packageName,draggingWidgetId) {
         val direction=dragEdgeDirection
         if(direction!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
             delay(650L)
