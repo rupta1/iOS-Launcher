@@ -121,6 +121,7 @@ private fun encodeHomeFolders(folders:List<HomeFolder>):String = org.json.JSONAr
 data class InstalledApp(val label: String, val packageName: String, val icon: Drawable)
 
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LauncherRoot(db: LauncherDb) {
     val context = LocalContext.current
