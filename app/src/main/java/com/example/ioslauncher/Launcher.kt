@@ -973,7 +973,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true else if(zoom>1.08f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false}}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.82f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom<0.92f)homeEditMode=true else if(zoom>1.08f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
