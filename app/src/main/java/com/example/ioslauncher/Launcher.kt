@@ -1008,7 +1008,7 @@ fun LauncherRoot(db: LauncherDb) {
                             Button(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
                             Button(onClick={gridDialog=true}){Icon(Icons.Default.GridView,null);Text("Grid")}
                             Button(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
-                            Button(onClick={homeEditMode=false;selectedEditApps.clear()}){Icon(Icons.Default.Check,null);Text("Done")}
+                            Button(onClick={homeEditMode=false;selectedEditApps=setOf()}){Icon(Icons.Default.Check,null);Text("Done")}
                         }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
                             pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=if(page==i)Color(0xFF7655B8)else fg)} }
@@ -1018,7 +1018,7 @@ fun LauncherRoot(db: LauncherDb) {
                             Text("${selectedEditApps.size} selected",modifier=Modifier.align(Alignment.CenterVertically))
                             TextButton(onClick={batchMoveDialog=true}){Text("Move")}
                             TextButton(onClick={batchFolderDialog=true}){Text("Folder")}
-                            TextButton(onClick={selectedEditApps.clear()}){Text("Clear")}
+                            TextButton(onClick={selectedEditApps=setOf()}){Text("Clear")}
                         }
                     }
                 }
@@ -1263,13 +1263,13 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
         }
         if(batchMoveDialog){
             AlertDialog(onDismissRequest={batchMoveDialog=false},title={Text("Move selected apps")},
-                text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text("Destination page");(0 until pageCount).forEach{dest->TextButton(onClick={selectedEditApps.forEach{pkg->appPageAssignments=appPageAssignments+(pkg to dest);appSlotAssignments=appSlotAssignments+(pkg to (appSlotAssignments[pkg]?:0))};db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});page=dest;pendingDragPage=dest;batchMoveDialog=false;selectedEditApps.clear()}){Text("Page ${dest+1}")}}}},
+                text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text("Destination page");(0 until pageCount).forEach{dest->TextButton(onClick={selectedEditApps.forEach{pkg->appPageAssignments=appPageAssignments+(pkg to dest);appSlotAssignments=appSlotAssignments+(pkg to (appSlotAssignments[pkg]?:0))};db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});page=dest;pendingDragPage=dest;batchMoveDialog=false;selectedEditApps=setOf()}){Text("Page ${dest+1}")}}}},
                 confirmButton={Button(onClick={batchMoveDialog=false}){Text("Cancel")}})
         }
         if(batchFolderDialog){
             AlertDialog(onDismissRequest={batchFolderDialog=false},title={Text("Create folder")},
                 text={Text("Create a folder with ${selectedEditApps.size} selected apps on page ${page+1}?")},
-                confirmButton={Button(onClick={if(selectedEditApps.size>=2){val chosen=selectedEditApps.toList();val slot=chosen.firstOrNull()?.let{appSlotAssignments[it]}?:0;folders=folders+HomeFolder("folder:"+System.currentTimeMillis(),"Folder",chosen,page,slot);persistFolders();appPageAssignments=appPageAssignments-chosen;appSlotAssignments=appSlotAssignments-chosen;db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});selectedEditApps.clear()};batchFolderDialog=false}){Text("Create")}},
+                confirmButton={Button(onClick={if(selectedEditApps.size>=2){val chosen=selectedEditApps.toList();val slot=chosen.firstOrNull()?.let{appSlotAssignments[it]}?:0;folders=folders+HomeFolder("folder:"+System.currentTimeMillis(),"Folder",chosen,page,slot);persistFolders();appPageAssignments=appPageAssignments-chosen;appSlotAssignments=appSlotAssignments-chosen;db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});selectedEditApps=setOf()};batchFolderDialog=false}){Text("Create")}},
                 dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel")}})
         }
         if (widgetPickerOpen) {
