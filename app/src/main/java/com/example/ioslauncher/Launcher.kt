@@ -1319,7 +1319,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         items(widgetProviders.filter{provider->provider.loadLabel(context.packageManager).toString().contains(widgetSearch,true)||provider.provider.packageName.contains(widgetSearch,true)},key={it.provider.flattenToString()}){
                             provider->
                             val label=provider.loadLabel(context.packageManager).toString()
-                            val preview=remember(provider){try{provider.loadPreviewImage(context)}catch(_:Exception){null}}
+                            val preview=remember(provider){try{provider.loadPreviewImage(context,context.resources.displayMetrics.densityDpi)}catch(_:Exception){null}}
                             val appIcon=remember(provider){try{context.packageManager.getApplicationIcon(provider.provider.packageName)}catch(_:Exception){null}}
                             Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.fillMaxWidth().pointerInput(provider){detectDragGesturesAfterLongPress(onDragStart={_->widgetPickerDrag=provider},onDragEnd={val picked=widgetPickerDrag;widgetPickerDrag=null;if(picked!=null){widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,picked)}},onDragCancel={widgetPickerDrag=null},onDrag={change,_->change.consume()})}){
                                 Surface(Modifier.fillMaxWidth().height(168.dp).clip(RoundedCornerShape(24.dp)),shape=RoundedCornerShape(24.dp),color=Color(0xFF24242A)){
