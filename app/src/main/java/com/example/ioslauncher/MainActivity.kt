@@ -888,7 +888,11 @@ fun LauncherRoot(db: LauncherDb) {
     )
     fun advanceDragPage(direction:Int) {
         if(direction==0) return
-        val next=(pendingDragPage+direction).coerceAtLeast(0)
+        // A drag may advance only to an existing page or one trailing blank page.
+        // Never create pages indefinitely while the pointer remains parked at the edge.
+        val maxPage=lastHomePage()+1
+        val next=(pendingDragPage+direction).coerceIn(0,maxPage)
+        if(next==pendingDragPage)return
         if(direction>0 && next>lastHomePage()) {
             extraHomePages=maxOf(extraHomePages,next-(pageAppSlices.size-1).coerceAtLeast(0))
             db.put("extra_home_pages",extraHomePages.toString())
@@ -917,17 +921,6 @@ fun LauncherRoot(db: LauncherDb) {
             dragEdgeDirection=direction
             lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
             advanceDragPage(direction)
-        }
-    }
-    LaunchedEffect(draggingApp?.packageName,draggingWidgetId,dragEdgeDirection) {
-        if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
-            while(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
-                kotlinx.coroutines.delay(520L)
-                if(dragEdgeDirection!=0 && (draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID)) {
-                    advanceDragPage(dragEdgeDirection)
-                    lastEdgePageAdvanceAt=android.os.SystemClock.uptimeMillis()
-                }
-            }
         }
     }
     LaunchedEffect(pendingDragPage,dragPosition,widgetDragPosition,draggingApp?.packageName,draggingWidgetId) {
