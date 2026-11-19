@@ -1076,7 +1076,7 @@ fun LauncherRoot(db: LauncherDb) {
                 Surface(Modifier.fillMaxWidth().padding(bottom=8.dp),shape=RoundedCornerShape(22.dp),color=if(dark)Color(0xDD252936)else Color(0xEFFFFFFF),shadowElevation=8.dp){
                     Row(Modifier.fillMaxWidth().padding(6.dp),horizontalArrangement=Arrangement.SpaceEvenly){
                         TextButton(onClick={widgetProviders=activity.availableHomeWidgets();widgetPickerOpen=true}){Icon(Icons.Default.Widgets,null);Text("Widgets")}
-                        TextButton(onClick={openLauncherSettings}){Icon(Icons.Default.Settings,null);Text("Settings")}
+                        TextButton(onClick={openLauncherSettings()}){Icon(Icons.Default.Settings,null);Text("Settings")}
                         TextButton(onClick={homeEditMode=false}){Icon(Icons.Default.Check,null);Text("Done")}
                     }
                 }
