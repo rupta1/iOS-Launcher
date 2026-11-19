@@ -884,23 +884,26 @@ fun LauncherRoot(db: LauncherDb) {
     Box(Modifier.fillMaxSize().background(Color.Transparent)
         .pointerInput(Unit) {
             var trackedPointer: androidx.compose.ui.input.pointer.PointerId? = null
+            var pointerDownPosition = Offset.Zero
+            var dragPointerOffset: Offset? = null
             awaitPointerEventScope {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     val down = event.changes.firstOrNull { it.pressed && !it.previousPressed }
-                    if (trackedPointer == null && down != null) trackedPointer = down.id
+                    if (trackedPointer == null && down != null) { trackedPointer = down.id; pointerDownPosition = down.position; dragPointerOffset = null }
                     val tracked = trackedPointer?.let { id -> event.changes.firstOrNull { it.id == id } }
                     val appDragActive = draggingApp != null
                     val widgetDragActive = draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
-                    if ((appDragActive || widgetDragActive) && tracked != null) {
-                        if (appDragActive) { dragPosition = tracked.position; updateDragEdge(dragPosition) }
-                        else widgetDragPosition = tracked.position
+                    if ((appDragActive || widgetDragActive) && tracked != null && tracked.pressed) {
+                        if (dragPointerOffset == null) dragPointerOffset = if (appDragActive) dragPosition-pointerDownPosition else widgetDragPosition-pointerDownPosition
+                        val adjusted = tracked.position + (dragPointerOffset ?: Offset.Zero)
+                        if (appDragActive) { dragPosition = adjusted; updateDragEdge(dragPosition) }
+                        else widgetDragPosition = adjusted
                     }
                     if (tracked != null && !tracked.pressed && (appDragActive || widgetDragActive)) {
                         if (appDragActive) finishIconDrag() else finishWidgetDrag()
-                        trackedPointer = null
-                    } else if (tracked != null && !tracked.pressed) trackedPointer = null
-                    if (event.changes.any { it.isConsumed } && trackedPointer == null) continue
+                        trackedPointer = null; dragPointerOffset = null
+                    } else if (tracked != null && !tracked.pressed) { trackedPointer = null; dragPointerOffset = null }
                 }
             }
         }
