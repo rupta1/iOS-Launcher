@@ -689,7 +689,16 @@ fun LauncherRoot(db: LauncherDb) {
     fun finishIconDrag() {
         val dragged=draggingApp ?: return
         if(draggingFromFolder && folderOverlayBounds.contains(dragPosition)) {
-            draggingApp=null; draggingFromFolder=false; dragSourceFolderId=null; dragEdgeDirection=0; pendingDragPage=page
+            val sourceId=dragSourceFolderId
+            val source=folders.firstOrNull{it.id==sourceId}
+            if(source!=null){
+                val targetPkg=folderMemberBounds.entries.firstOrNull{it.key!=dragged.packageName&&it.value.contains(dragPosition)}?.key
+                val ordered=source.packages.filterNot{it==dragged.packageName}.toMutableList()
+                val insertAt=targetPkg?.let{ordered.indexOf(it).takeIf{idx->idx>=0}}?:ordered.size
+                ordered.add(insertAt.coerceIn(0,ordered.size),dragged.packageName)
+                folders=folders.map{if(it.id==source.id)it.copy(packages=ordered)else it};persistFolders()
+            }
+            draggingApp=null;draggingFromFolder=false;dragSourceFolderId=null;dragEdgeDirection=0;pendingDragPage=page;dragPreviewSlots=emptyMap()
             return
         }
         val targetPage=pendingDragPage.coerceAtLeast(0)
@@ -1148,7 +1157,9 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                     AppIcon(
                                         app=app,labels=true,fg=Color(0xFF242A33),size=54.dp,
                                         onBounds={ key,rect -> folderMemberBounds[key]=rect },
-                                        draggableEnabled=false,
+                                        draggableEnabled=true,
+                                        onDragStart={if(!lockLayout){val origin=folderMemberBounds[app.packageName]?:Rect.Zero;draggingApp=app;dragOriginBounds=origin;dragOriginPage=folder.page;pendingDragPage=folder.page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=true;dragSourceFolderId=folder.id;edgePagingArmed=true;homeEditMode=true}},
+                                        onDrag={delta->if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)}},onDragEnd={finishIconDrag()},onDragCancel={clearActiveDragSession()},
                                         onClick={
                                             openFolderId=null
                                             if(app.packageName=="internal:settings") openLauncherSettings() else activity.launch(app)
