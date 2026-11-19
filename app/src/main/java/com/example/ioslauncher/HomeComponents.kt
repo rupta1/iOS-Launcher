@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -215,12 +216,15 @@ fun AppIcon(
             this.alpha=if(isDragging) .88f else alpha
         }
             .onGloballyPositioned { onBounds(app.packageName,it.boundsInRoot()) }
-            .combinedClickable(
-                interactionSource=remember { MutableInteractionSource() },
-                indication=null,
-                onClick=onClick,
-                onLongClick=onLongClick
-            )
+            .clickable(interactionSource=remember { MutableInteractionSource() }, indication=null, onClick=onClick)
+            .pointerInput(app.packageName,draggableEnabled) {
+                if (draggableEnabled) detectDragGesturesAfterLongPress(
+                    onDragStart={ currentOnDragStart() },
+                    onDragEnd={ currentOnDragEnd() },
+                    onDragCancel={ currentOnDragCancel() },
+                    onDrag={ change, delta -> change.consume(); currentOnDrag(delta) }
+                ) else detectTapGestures(onLongPress={ onLongClick?.invoke() })
+            }
     ) {
         Surface(modifier=Modifier.size(size).shadow(5.dp,RoundedCornerShape(21.dp)),
             shape=RoundedCornerShape(21.dp), color=Color.White) {
