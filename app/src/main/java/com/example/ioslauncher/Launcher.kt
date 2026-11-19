@@ -642,7 +642,7 @@ fun LauncherRoot(db: LauncherDb) {
     }
     fun updateDragEdge(position:Offset) {
         val width=activity.window.decorView.width.toFloat()
-        val edge=with(density){56.dp.toPx()}
+        val edge=width*0.10f
         val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
         // Re-arm edge paging only after the finger leaves the edge zone.
         // This prevents a stationary pointer from repeatedly switching pages.
@@ -663,7 +663,7 @@ fun LauncherRoot(db: LauncherDb) {
         while (dragEdgeDirection == direction &&
             (draggingApp != null || draggingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID)
         ) {
-            delay(650L)
+            delay(450L)
             if (dragEdgeDirection != direction ||
                 (draggingApp == null && draggingWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID)
             ) break
