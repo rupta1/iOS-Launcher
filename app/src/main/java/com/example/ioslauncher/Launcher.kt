@@ -28,7 +28,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress\nimport androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -299,7 +300,11 @@ fun LauncherRoot(db: LauncherDb) {
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> systemDark }
     var page by remember { mutableIntStateOf(0) }
     var extraHomePages by remember { mutableIntStateOf(db.get("extra_home_pages","0").toIntOrNull()?.coerceAtLeast(0) ?: 0) }
-    var homeEditMode by remember { mutableStateOf(false) }\n    var gridDialog by remember { mutableStateOf(false) }\n    var batchMoveDialog by remember { mutableStateOf(false) }\n    var batchFolderDialog by remember { mutableStateOf(false) }\n    var selectedEditApps by remember { mutableStateOf(setOf<String>()) }
+    var homeEditMode by remember { mutableStateOf(false) }
+    var gridDialog by remember { mutableStateOf(false) }
+    var batchMoveDialog by remember { mutableStateOf(false) }
+    var batchFolderDialog by remember { mutableStateOf(false) }
+    var selectedEditApps by remember { mutableStateOf(setOf<String>()) }
     var selectedPlacementApp by remember { mutableStateOf<InstalledApp?>(null) }
     var placementPage by remember { mutableIntStateOf(0) }
     var rows by remember { mutableIntStateOf(db.get("grid_rows", "5").toIntOrNull() ?: 5) }
