@@ -1321,7 +1321,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                             val label=provider.loadLabel(context.packageManager).toString()
                             val preview=remember(provider){try{provider.loadPreviewImage(context)}catch(_:Exception){null}}
                             val appIcon=remember(provider){try{context.packageManager.getApplicationIcon(provider.provider.packageName)}catch(_:Exception){null}}
-                            Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.fillMaxWidth()){
+                            Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.fillMaxWidth().pointerInput(provider){detectDragGesturesAfterLongPress(onDragStart={widgetPickerDrag=provider},onDragEnd={val picked=widgetPickerDrag;widgetPickerDrag=null;if(picked!=null){widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,picked)}},onDragCancel={widgetPickerDrag=null},onDrag={change,_->change.consume()})}){
                                 Surface(Modifier.fillMaxWidth().height(168.dp).clip(RoundedCornerShape(24.dp)),shape=RoundedCornerShape(24.dp),color=Color(0xFF24242A)){
                                     Box(contentAlignment=Alignment.Center){
                                         if(preview!=null)Image(preview.toBitmap().asImageBitmap(),null,Modifier.fillMaxSize().padding(6.dp),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
@@ -1332,7 +1332,6 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                                 Spacer(Modifier.height(8.dp));Text(label,fontWeight=FontWeight.SemiBold,maxLines=1,color=Color.White,textAlign=TextAlign.Center);Text("Widget · ${provider.provider.packageName}",fontSize=11.sp,color=Color.Gray,maxLines=1,textAlign=TextAlign.Center)
                                 Spacer(Modifier.height(8.dp))
                                 Button(onClick={widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,provider)},shape=RoundedCornerShape(24.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF173B59),contentColor=Color(0xFF4F9CF8)),modifier=Modifier.widthIn(min=90.dp)){Text("Add")}
-                                Box(Modifier.fillMaxWidth().height(1.dp).pointerInput(provider){detectDragGesturesAfterLongPress(onDragStart={widgetPickerDrag=provider},onDragEnd={val picked=widgetPickerDrag;widgetPickerDrag=null;if(picked!=null){widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,picked)}},onDragCancel={widgetPickerDrag=null},onDrag={change,_->change.consume()})})
                             }
                         }
                     }
