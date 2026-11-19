@@ -621,8 +621,12 @@ fun LauncherRoot(db: LauncherDb) {
         val direction=when { position.x<=edge -> -1; position.x>=width-edge -> 1; else -> 0 }
         // Re-arm edge paging only after the finger leaves the edge zone.
         // This prevents a stationary pointer from repeatedly switching pages.
-        if(direction==0) edgePagingArmed=true
-        dragEdgeDirection=direction
+        if(direction==0) {
+            edgePagingArmed=true
+            dragEdgeDirection=0
+        } else {
+            dragEdgeDirection=if(edgePagingArmed) direction else 0
+        }
     }
     // Edge paging is a drag-session loop, not a one-shot timer. The loop is
     // cancelled immediately when the pointer leaves the edge or the drag ends.
@@ -641,6 +645,11 @@ fun LauncherRoot(db: LauncherDb) {
             val before = pendingDragPage
             advanceDragPage(direction)
             if (pendingDragPage == before) break
+            // Require the pointer to leave the edge zone before another page
+            // transition can be triggered. This avoids chained page changes while
+            // the finger remains pinned against the screen border.
+            edgePagingArmed=false
+            dragEdgeDirection=0
             delay(320L)
         }
     }
