@@ -443,10 +443,9 @@ fun LauncherRoot(db: LauncherDb) {
     fun updateGridDragPreview(position:Offset,movingKey:String,movingSpanX:Int=1,movingSpanY:Int=1) {
         val destinationGrid=gridBoundsFor(pendingDragPage)
         if(destinationGrid.width<=0f || destinationGrid.height<=0f) return
-        val previewRows=effectiveRows+(if(pendingDragPage==0)2 else 0)
+        val previewRows=effectiveRows
         val cw=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
         val ch=(destinationGrid.height/previewRows.coerceAtLeast(1)).coerceAtLeast(1f)
-        val headerOffset=if(pendingDragPage==0)2*columns else 0
         val items=mutableListOf<DragGridPlacement>()
         // Build occupied app cells from the destination page's model, not from
         // currentPageAppKeys/appBounds (those can still describe the page we dragged from
@@ -455,12 +454,12 @@ fun LauncherRoot(db: LauncherDb) {
         destinationApps.forEachIndexed { index, app ->
             val key="app:"+app.packageName
             if(key!=movingKey) {
-                val requested=(appSlotAssignments[app.packageName] ?: index)+headerOffset
+                val requested=(appSlotAssignments[app.packageName] ?: index)
                 items.add(DragGridPlacement(key,requested))
             }
         }
         folders.filter { it.page==pendingDragPage }.forEach { folder ->
-            if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot+headerOffset))
+            if("folder:"+folder.id!=movingKey) items.add(DragGridPlacement("folder:"+folder.id,folder.slot))
         }
         widgetBounds.forEach { (id,b) ->
             val widgetPage=when(id) {
@@ -469,11 +468,11 @@ fun LauncherRoot(db: LauncherDb) {
                 else -> homeWidgets.firstOrNull { it.first==id }?.second
             }
             if(widgetPage==pendingDragPage && "widget:"+id!=movingKey && b.width>0f && b.height>0f)
-                items.add(DragGridPlacement("widget:"+id,(widgetSlotAssignments[id] ?: slotAt(b.center))+headerOffset,
+                items.add(DragGridPlacement("widget:"+id,(widgetSlotAssignments[id] ?: slotAt(b.center)),
                     kotlin.math.ceil(b.width/cw).toInt().coerceIn(1,columns),
                     kotlin.math.ceil(b.height/ch).toInt().coerceIn(1,previewRows)))
         }
-        val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1,pendingDragPage)+headerOffset else slotAt(position,pendingDragPage)+headerOffset
+        val slot=if(movingKey.startsWith("widget:")) widgetSlotAt(position,movingKey.substringAfter(":").toIntOrNull() ?: -1,pendingDragPage) else slotAt(position,pendingDragPage)
         val moving=DragGridPlacement(movingKey,slot,movingSpanX.coerceIn(1,columns),movingSpanY.coerceIn(1,previewRows))
         val ordered=items.sortedWith(compareBy<DragGridPlacement>{it.slot}.thenBy{it.key}).toMutableList()
         val col=slot%columns.coerceAtLeast(1); val row=slot/columns.coerceAtLeast(1)
@@ -1027,13 +1026,12 @@ fun LauncherRoot(db: LauncherDb) {
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
-                val systemHeaderRows=if(renderedPage==0)2 else 0
-                val gridRows=effectiveRows+systemHeaderRows
+                val gridRows=effectiveRows
                 val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
-                val pageWidgets=homeWidgets.filter{it.second==renderedPage || (draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && it.first==draggingWidgetId && renderedPage==pendingDragPage)}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
-                val headerOffset=systemHeaderRows*columns
+                val pageWidgets=homeWidgets.filter{if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && it.first==draggingWidgetId) renderedPage==pendingDragPage else it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val headerOffset=0
                 val tiles=buildList {
                     pageApps.forEachIndexed { i, app ->
                         val appSlot=dragPreviewSlots["app:"+app.packageName] ?: ((appSlotAssignments[app.packageName] ?: i)+headerOffset)
