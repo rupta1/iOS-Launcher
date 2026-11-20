@@ -1386,6 +1386,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 }
             }
         }
+        }
         if(draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
             Box(Modifier.fillMaxSize().zIndex(20f)){
                 val dragged=draggingApp
