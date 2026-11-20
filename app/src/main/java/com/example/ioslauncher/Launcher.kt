@@ -1020,11 +1020,13 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().then(if(homeEditMode) Modifier.border(2.dp,Color.White.copy(alpha=.9f),RoundedCornerShape(18.dp)) else Modifier).graphicsLayer{val workspaceScale=if(homeEditMode)0.68f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxWidth().then(if(homeEditMode) Modifier.aspectRatio(9f/20f).border(2.dp,Color.White.copy(alpha=.95f),RoundedCornerShape(18.dp)) else Modifier.fillMaxHeight()).graphicsLayer{val workspaceScale=if(homeEditMode)1f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
-                val gridRows=effectiveRows
+                val gridRows=(effectiveRows-(if(homeEditMode)1 else 0)).coerceAtLeast(1)
+                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal=10.dp,vertical=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.24f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(54.dp).padding(horizontal=5.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)32.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
+
                 val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
