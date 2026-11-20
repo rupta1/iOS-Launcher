@@ -1019,7 +1019,10 @@ fun LauncherRoot(db: LauncherDb) {
                         add(HomeGridTile("system:search",0,columns,1))
                         add(HomeGridTile("system:clock",columns,columns,1))
                     }
-                    pageApps.forEachIndexed{i,app->add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName]?:((appSlotAssignments[app.packageName]?:i)+headerOffset))}
+                    pageApps.forEachIndexed { i, app ->
+                        val appSlot=dragPreviewSlots["app:"+app.packageName] ?: ((appSlotAssignments[app.packageName] ?: i) + headerOffset)
+                        add(HomeGridTile("app:"+app.packageName,appSlot))
+                    }
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
