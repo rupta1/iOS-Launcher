@@ -1026,9 +1026,6 @@ fun LauncherRoot(db: LauncherDb) {
                 val pageWidgets=homeWidgets.filter{it.second==renderedPage || (draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && it.first==draggingWidgetId && renderedPage==pendingDragPage)}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
                 val headerOffset=systemHeaderRows*columns
                 val tiles=buildList {
-                    if(renderedPage==0 && homeWidgets.any { AppWidgetManager.getInstance(context).getAppWidgetInfo(it.first)?.provider?.packageName=="com.google.android.googlequicksearchbox" && it.second==0 }){
-                        add(HomeGridTile("system:google-search",0,columns,2))
-                    }
                     pageApps.forEachIndexed { i, app ->
                         val appSlot=dragPreviewSlots["app:"+app.packageName] ?: ((appSlotAssignments[app.packageName] ?: i)+headerOffset)
                         add(HomeGridTile("app:"+app.packageName,appSlot))
