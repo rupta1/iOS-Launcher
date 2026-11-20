@@ -1010,7 +1010,8 @@ fun LauncherRoot(db: LauncherDb) {
             } else AnimatedContent(
                 targetState=page,
                 transitionSpec={
-                    if(targetState>initialState)
+                    if(homeEditMode) fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    else if(targetState>initialState)
                         (slideInHorizontally(tween(260)){it}+fadeIn(tween(170))) togetherWith
                             (slideOutHorizontally(tween(260)){-it}+fadeOut(tween(130)))
                     else
