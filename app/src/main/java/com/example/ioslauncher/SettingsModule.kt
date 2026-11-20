@@ -210,7 +210,7 @@ fun SettingsScreen(
 private fun SettingsGroup(title:String,card:Color,muted:Color,content:@Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,color=Color(0xFF85859A),fontSize=13.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(start=16.dp,bottom=2.dp))
-        Surface(shape=RoundedCornerShape(20.dp),color=card,modifier=Modifier.fillMaxWidth()) {
+        Surface(shape=RoundedCornerShape(24.dp),color=card,modifier=Modifier.fillMaxWidth()) {
             Column(content=content)
         }
     }
@@ -218,7 +218,7 @@ private fun SettingsGroup(title:String,card:Color,muted:Color,content:@Composabl
 
 @Composable
 private fun SettingChoice(title:String,value:String,fg:Color,muted:Color,onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(horizontal=18.dp,vertical=17.dp),verticalAlignment=Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().drawBehind { drawLine(color=muted.copy(alpha=0.22f),start=Offset(18.dp.toPx(),size.height-1.dp.toPx()),end=Offset(size.width-18.dp.toPx(),size.height-1.dp.toPx()),strokeWidth=1.dp.toPx()) }.clickable(onClick=onClick).padding(horizontal=18.dp,vertical=17.dp),verticalAlignment=Alignment.CenterVertically) {
         Text(title,color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
         Text(value,color=muted,fontSize=13.sp,maxLines=1)
         Spacer(Modifier.width(8.dp))
@@ -228,7 +228,7 @@ private fun SettingChoice(title:String,value:String,fg:Color,muted:Color,onClick
 
 @Composable
 private fun SettingSwitch(title:String,checked:Boolean,fg:Color,onChange:(Boolean)->Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal=18.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().drawBehind { drawLine(color=fg.copy(alpha=0.12f),start=Offset(18.dp.toPx(),size.height-1.dp.toPx()),end=Offset(size.width-18.dp.toPx(),size.height-1.dp.toPx()),strokeWidth=1.dp.toPx()) }.clickable { onChange(!checked) }.padding(horizontal=18.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
         Text(title,color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
         Switch(checked=checked,onCheckedChange=onChange,colors=SwitchDefaults.colors(checkedThumbColor=Color.White,checkedTrackColor=Color(0xFF0A84FF),uncheckedThumbColor=Color.White,uncheckedTrackColor=Color(0xFFD1D1D6),uncheckedBorderColor=Color.Transparent))
     }
