@@ -1384,7 +1384,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                     }
                     Text("Tip: long-press a widget card and release to add it to the current home screen.",fontSize=12.sp,color=if(dark) Color.Gray else Color(0xFF77777D),modifier=Modifier.padding(top=8.dp))
                 }
-        }
+        })
         }
         if(draggingApp!=null || draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID){
             Box(Modifier.fillMaxSize().zIndex(20f)){
