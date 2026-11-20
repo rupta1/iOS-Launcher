@@ -219,9 +219,6 @@ fun LauncherRoot(db: LauncherDb) {
                 ?: providers.firstOrNull { provider -> provider.provider.className.contains("Search",true) }
                 ?: providers.firstOrNull { provider -> provider.loadLabel(context.packageManager).toString().equals("Google",true) }
             if(googleProvider!=null) activity.addHomeWidget(0,googleProvider)
-        } else {
-            val (pair,info)=googleWidgets.first()
-            if(pair.second!=0) homeWidgets=homeWidgets.map { if(it.first==pair.first) pair.first to 0 else it }
         }
     }
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
@@ -1040,8 +1037,7 @@ fun LauncherRoot(db: LauncherDb) {
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                        val defaultSearch=id==homeWidgets.firstOrNull{it.second==0 && AppWidgetManager.getInstance(context).getAppWidgetInfo(it.first)?.provider?.packageName=="com.google.android.googlequicksearchbox"}?.first
-                        val slot=if(defaultSearch)0 else (dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset)
+                        val slot=dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset
                         add(HomeGridTile("widget:"+id,slot,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
                     draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
