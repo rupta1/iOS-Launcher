@@ -1024,12 +1024,12 @@ fun LauncherRoot(db: LauncherDb) {
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
-                val gridRows=(effectiveRows-(if(homeEditMode)1 else 0)).coerceAtLeast(1)
+                val gridRows=effectiveRows.coerceAtLeast(1)
                 val previewScale=if(homeEditMode)0.70f else 1f
-                val gridAreaHeight=if(homeEditMode)maxHeight-92.dp else maxHeight
+                val gridAreaHeight=if(homeEditMode)maxHeight-64.dp else maxHeight
                 val cw=(maxWidth*previewScale)/columns.coerceAtLeast(1);val ch=(gridAreaHeight*previewScale)/gridRows.coerceAtLeast(1)
-                val gridOffsetX=(maxWidth-cw*columns)/2;val gridOffsetY=if(homeEditMode)12.dp else 0.dp
-                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(.70f).padding(horizontal=6.dp,vertical=6.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(18.dp),color=Color.White.copy(alpha=.24f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal=3.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)23.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
+                val gridOffsetX=(maxWidth-cw*columns)/2;val gridOffsetY=if(homeEditMode)8.dp else 0.dp
+                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(.70f).padding(horizontal=4.dp,vertical=4.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(16.dp),color=Color.White.copy(alpha=.22f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal=3.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)28.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
 
                 val normalCw=maxWidth/columns.coerceAtLeast(1);val normalCh=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
