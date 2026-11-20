@@ -1289,7 +1289,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             }
         }
         if(gridDialog){
-            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.80f),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D)},
+            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.80f),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D))},
                 text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
                     Text("Columns: $columns")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={columns=(columns-1).coerceAtLeast(2);db.put("grid_columns",columns.toString())}){Text("−")};Text("$columns",modifier=Modifier.align(Alignment.CenterVertically));Button(onClick={columns=(columns+1).coerceAtMost(8);db.put("grid_columns",columns.toString())}){Text("+")}}
