@@ -981,6 +981,7 @@ fun LauncherRoot(db: LauncherDb) {
                 Surface(shape=CircleShape,color=Color.White.copy(alpha=.52f),modifier=Modifier.size(44.dp).clickable{controlCenter=true}) {                    Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Tune,null,tint=fg)}
                 }
             }
+            AnimatedVisibility(homeEditMode,enter=fadeIn(tween(120)),exit=fadeOut(tween(100))){Row(Modifier.fillMaxWidth().padding(top=4.dp),horizontalArrangement=Arrangement.End){Button(onClick={homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false},shape=RoundedCornerShape(28.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF1685F8))){Text("Done",fontWeight=FontWeight.SemiBold)}}}
             Spacer(Modifier.height(18.dp))
             if(page<0&&minusScreen=="Google Discover") {
                 AnimatedVisibility(
@@ -1019,7 +1020,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.72f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().then(if(homeEditMode) Modifier.border(2.dp,Color.White.copy(alpha=.9f),RoundedCornerShape(18.dp)) else Modifier).graphicsLayer{val workspaceScale=if(homeEditMode)0.68f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
@@ -1081,11 +1082,9 @@ fun LauncherRoot(db: LauncherDb) {
             }
             AnimatedVisibility(homeEditMode,enter=fadeIn(tween(160))+scaleIn(spring(dampingRatio=.82f)),exit=fadeOut(tween(120))){
                 Column(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){
-                        Button(onClick={homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false},shape=RoundedCornerShape(28.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF1685F8))){Text("Done",fontWeight=FontWeight.SemiBold)}
-                    }
+
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
-                        pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=if(page==i)Color(0xFF1685F8)else fg)} }
+                        pageAppSlices.indices.forEach { i -> TextButton(onClick={page=i;pendingDragPage=i}){Text((i+1).toString(),color=Color.White)} }
                         TextButton(onClick={page=pageCount-1;pendingDragPage=pageCount-1;extraHomePages=maxOf(extraHomePages,1);db.put("extra_home_pages",extraHomePages.toString())}){Text("+")}
                     }
                     Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(30.dp),color=Color.Black.copy(alpha=.28f),border=BorderStroke(1.dp,Color.White.copy(alpha=.16f))){
@@ -1107,7 +1106,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.20f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
+            if(!homeEditMode) Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.20f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
