@@ -236,7 +236,7 @@ fun AppIcon(
         }
         if(labels) {
             Spacer(Modifier.height(6.dp))
-            Text(app.label,color=fg,fontSize=11.sp,maxLines=1,textAlign=TextAlign.Center)
+            Text(app.label,color=Color.White,fontSize=11.sp,maxLines=1,textAlign=TextAlign.Center)
         }
     }
 }
@@ -261,7 +261,7 @@ fun FolderTile(folder:HomeFolder, apps:List<InstalledApp>, fg:Color, onClick:()-
             }
         }
         Spacer(Modifier.height(5.dp))
-        Text(folder.title,color=fg,fontSize=10.sp,maxLines=1,textAlign=TextAlign.Center)
+        Text(folder.title,color=Color.White,fontSize=10.sp,maxLines=1,textAlign=TextAlign.Center)
     }
 }
 
