@@ -967,11 +967,27 @@ fun LauncherRoot(db: LauncherDb) {
             }
             Spacer(Modifier.height(18.dp))
             if(page<0&&minusScreen=="Google Discover") {
-                Column(Modifier.weight(1f).fillMaxWidth(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
-                    Text("Google Discover",color=fg,fontSize=24.sp,fontWeight=FontWeight.SemiBold)
-                    Text("Open the Google app to view your Discover feed.",color=fg.copy(alpha=.7f),fontSize=14.sp)
-                    Spacer(Modifier.height(14.dp))
-                    Button(onClick={apps.firstOrNull{it.packageName=="com.google.android.googlequicksearchbox"}?.let{activity.launch(it)}}){Text("Open Google")}
+                AnimatedVisibility(
+                    visible=true,
+                    enter=slideInHorizontally(tween(320)){it/3}+fadeIn(tween(220)),
+                    exit=slideOutHorizontally(tween(240)){-it/3}+fadeOut(tween(160)),
+                    modifier=Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    AndroidView(
+                        factory={ctx->android.webkit.WebView(ctx).apply {
+                            setBackgroundColor(android.graphics.Color.WHITE)
+                            settings.javaScriptEnabled=true
+                            settings.domStorageEnabled=true
+                            settings.loadsImagesAutomatically=true
+                            settings.useWideViewPort=true
+                            settings.loadWithOverviewMode=true
+                            settings.userAgentString=settings.userAgentString+" Mobile"
+                            webViewClient=android.webkit.WebViewClient()
+                            loadUrl("https://www.google.com/discover")
+                        }},
+                        update={},
+                        modifier=Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp))
+                    )
                 }
             } else AnimatedContent(
                 targetState=page,
