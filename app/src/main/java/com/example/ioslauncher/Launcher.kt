@@ -579,7 +579,10 @@ fun LauncherRoot(db: LauncherDb) {
             widgetPositions=widgetPositions-id
         } else {
             val safeGrid=gridBoundsFor(destinationPage)
-            if(safeGrid.width<=0f||safeGrid.height<=0f||!safeGrid.contains(widgetDragPosition)){android.widget.Toast.makeText(context,"Drop inside the home screen area",android.widget.Toast.LENGTH_SHORT).show();draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
+            if(safeGrid.width<=0f||safeGrid.height<=0f){android.widget.Toast.makeText(context,"Home screen is not ready",android.widget.Toast.LENGTH_SHORT).show();draggingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;dragPreviewSlots=emptyMap();dragEdgeDirection=0;pendingDragPage=page;return}
+            // At an edge-page handoff the finger may still be outside the incoming
+            // page's measured grid. Clamp the drop point to the incoming workspace
+            // instead of rejecting a widget that was successfully paged across.
             // Recalculate using the destination page's current grid bounds and tile model;
             // the preview may have been cleared during the last edge-page transition.
             val destinationGrid=gridBoundsFor(destinationPage)
