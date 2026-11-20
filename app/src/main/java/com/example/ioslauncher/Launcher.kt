@@ -1304,11 +1304,46 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 confirmButton={TextButton(onClick={batchMoveDialog=false}){Text("Cancel",color=Color(0xFF6750A4),fontWeight=FontWeight.SemiBold)}})
         }
         if(batchFolderDialog){
-            AlertDialog(onDismissRequest={batchFolderDialog=false},containerColor=Color(0xFFF4F1FA),shape=RoundedCornerShape(30.dp),
-                title={Text("Create folder",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color(0xFF19151F))},
-                text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)){Surface(color=Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Folder,null,tint=Color(0xFF6750A4),modifier=Modifier.size(32.dp));Column(Modifier.padding(start=12.dp)){Text("${selectedEditApps.size} apps selected",fontWeight=FontWeight.SemiBold,color=Color(0xFF292331));Text("Home Screen ${page+1}",fontSize=13.sp,color=Color(0xFF77717D)}}};Text("Combine these apps into a folder on this screen.",color=Color(0xFF625B68),fontSize=14.sp)}},
-                confirmButton={Button(onClick={if(selectedEditApps.size>=2){val chosen=selectedEditApps.toList();val slot=chosen.firstOrNull()?.let{appSlotAssignments[it]}?:0;folders=folders+HomeFolder("folder:"+System.currentTimeMillis(),"Folder",chosen,page,slot);persistFolders();appPageAssignments=appPageAssignments-chosen;appSlotAssignments=appSlotAssignments-chosen;db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});selectedEditApps=setOf()};batchFolderDialog=false},shape=RoundedCornerShape(16.dp)){Text("Create folder")}},
-                dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel",color=Color(0xFF6750A4))}})
+            AlertDialog(
+                onDismissRequest={batchFolderDialog=false},
+                containerColor=Color(0xFFF4F1FA),
+                shape=RoundedCornerShape(30.dp),
+                title={ Text("Create folder",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color(0xFF19151F)) },
+                text={
+                    Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                        Surface(color=Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Icon(Icons.Default.Folder,null,tint=Color(0xFF6750A4),modifier=Modifier.size(32.dp))
+                                Column(Modifier.padding(start=12.dp)) {
+                                    Text("${selectedEditApps.size} apps selected",fontWeight=FontWeight.SemiBold,color=Color(0xFF292331))
+                                    Text("Home Screen ${page+1}",fontSize=13.sp,color=Color(0xFF77717D))
+                                }
+                            }
+                        }
+                        Text("Combine these apps into a folder on this screen.",color=Color(0xFF625B68),fontSize=14.sp)
+                    }
+                },
+                confirmButton={
+                    Button(
+                        onClick={
+                            if(selectedEditApps.size>=2){
+                                val chosen=selectedEditApps.toList()
+                                val slot=chosen.firstOrNull()?.let{appSlotAssignments[it]}?:0
+                                folders=folders+HomeFolder("folder:"+System.currentTimeMillis(),"Folder",chosen,page,slot)
+                                persistFolders()
+                                appPageAssignments=appPageAssignments-chosen
+                                appSlotAssignments=appSlotAssignments-chosen
+                                db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                                db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value})
+                                selectedEditApps=setOf()
+                            }
+                            batchFolderDialog=false
+                        },
+                        shape=RoundedCornerShape(16.dp)
+                    ){ Text("Create folder") }
+                },
+                dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel",color=Color(0xFF6750A4))}}
+            )
         }
         if(widgetPickerOpen){
             ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=Color(0xFF171717),contentColor=Color.White,shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
