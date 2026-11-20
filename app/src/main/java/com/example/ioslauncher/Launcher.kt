@@ -1043,7 +1043,8 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
-                        val rawSize=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)\n                        val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
+                        val rawSize=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                        val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
                         val slot=dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset
                         add(HomeGridTile("widget:"+id,slot,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
@@ -1071,7 +1072,8 @@ fun LauncherRoot(db: LauncherDb) {
                 }
                 pageWidgets.forEach{(id,info)->
                     val cell=cells["widget:"+id]?:return@forEach
-                    val rawSize=widgetSizes[id]?:((normalCw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)\n                    val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
+                    val rawSize=widgetSizes[id]?:((normalCw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
+                    val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
                     val sx=kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                     val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
