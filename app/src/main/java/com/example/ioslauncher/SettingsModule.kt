@@ -141,12 +141,12 @@ fun SettingsScreen(
                         Text("App Library transparency",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
                         Text("${(drawerTransparency*100).toInt()}%",color=muted,fontSize=13.sp)
                     }
-                    Slider(value=drawerTransparency,onValueChange=onDrawerTransparency,valueRange=0f..0.80f,colors=iosSliderColors)
+                    Slider(value=drawerTransparency,onValueChange=onDrawerTransparency,valueRange=0f..0.80f,colors=iosSliderColors,modifier=Modifier.fillMaxWidth())
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text("App Library blur",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
                         Text("${drawerBlur.toInt()} px",color=muted,fontSize=13.sp)
                     }
-                    Slider(value=drawerBlur,onValueChange=onDrawerBlur,valueRange=0f..32f,colors=iosSliderColors)
+                    Slider(value=drawerBlur,onValueChange=onDrawerBlur,valueRange=0f..32f,colors=iosSliderColors,modifier=Modifier.fillMaxWidth())
                 }
             }
             SettingsGroup("Home screen layout",card,muted) {
@@ -183,7 +183,7 @@ fun SettingsScreen(
     if(choiceTitle!=null) {
         AlertDialog(
             onDismissRequest={choiceTitle=null},
-            containerColor=(if(useDark)Color(0xFF28282D) else Color(0xFFF8F8FC)).copy(alpha=0.80f),
+            containerColor=(if(useDark)Color(0xFF28282D) else Color(0xFFF8F8FC)).copy(alpha=0.90f),
             shape=RoundedCornerShape(28.dp),
             title={Text(choiceTitle!!,fontSize=22.sp,fontWeight=FontWeight.SemiBold,color=fg)},
             text={
