@@ -1390,7 +1390,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             Box(Modifier.fillMaxSize().zIndex(20f)){
                 val dragged=draggingApp
                 if(dragged!=null){
-                    Image(dragged.icon.toBitmap().asImageBitmap(),contentDescription=dragged.label,
+                    Image(dragged.icon.toBitmap(144,144,android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap(),contentDescription=dragged.label,
                         modifier=Modifier.offset{IntOffset((dragPosition.x-36.dp.toPx()).toInt(),(dragPosition.y-36.dp.toPx()).toInt())}.size(72.dp).shadow(18.dp,CircleShape).clip(CircleShape).alpha(.94f))
                 }else{
                     Surface(modifier=Modifier.offset{IntOffset((widgetDragPosition.x-60.dp.toPx()).toInt(),(widgetDragPosition.y-60.dp.toPx()).toInt())}.size(120.dp,96.dp),shape=RoundedCornerShape(22.dp),color=Color.White.copy(alpha=.28f),border=BorderStroke(2.dp,Color.White.copy(alpha=.85f)),shadowElevation=18.dp){Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Widgets,null,tint=fg,modifier=Modifier.size(42.dp))}}
