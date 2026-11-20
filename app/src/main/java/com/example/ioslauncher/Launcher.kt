@@ -1059,7 +1059,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=if(dark) .18f else .34f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
+            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.50f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
@@ -1289,7 +1289,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             }
         }
         if(gridDialog){
-            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.90f),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D))},
+            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D))},
                 text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
                     Text("Columns: $columns")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={columns=(columns-1).coerceAtLeast(2);db.put("grid_columns",columns.toString())}){Text("−")};Text("$columns",modifier=Modifier.align(Alignment.CenterVertically));Button(onClick={columns=(columns+1).coerceAtMost(8);db.put("grid_columns",columns.toString())}){Text("+")}}
@@ -1346,7 +1346,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             )
         }
         if(widgetPickerOpen){
-            ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=Color(0xFF171717),contentColor=Color.White,shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
+            ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=if(dark) Color(0xFF202126) else Color(0xFFF5F5FA),contentColor=if(dark) Color.White else Color(0xFF1C1C1E),shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
                 Column(Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=28.dp)){
                     Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),color=Color.White);Icon(Icons.Default.Search,null,tint=Color.White)}
                     Spacer(Modifier.height(14.dp))
