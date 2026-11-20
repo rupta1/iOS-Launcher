@@ -976,14 +976,15 @@ fun LauncherRoot(db: LauncherDb) {
                     AndroidView(
                         factory={ctx->android.webkit.WebView(ctx).apply {
                             setBackgroundColor(android.graphics.Color.WHITE)
-                            settings.javaScriptEnabled=true
-                            settings.domStorageEnabled=true
-                            settings.loadsImagesAutomatically=true
-                            settings.useWideViewPort=true
-                            settings.loadWithOverviewMode=true
-                            settings.userAgentString=settings.userAgentString+" Mobile"
-                            webViewClient=android.webkit.WebViewClient()
-                            loadUrl("https://www.google.com/discover")
+                            val webSettings=this.settings
+                            webSettings.setJavaScriptEnabled(true)
+                            webSettings.setDomStorageEnabled(true)
+                            webSettings.setLoadsImagesAutomatically(true)
+                            webSettings.setUseWideViewPort(true)
+                            webSettings.setLoadWithOverviewMode(true)
+                            webSettings.setUserAgentString(webSettings.getUserAgentString()+" Mobile")
+                            this.webViewClient=android.webkit.WebViewClient()
+                            this.loadUrl("https://www.google.com/discover")
                         }},
                         update={},
                         modifier=Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp))
