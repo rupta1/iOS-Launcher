@@ -984,7 +984,7 @@ fun LauncherRoot(db: LauncherDb) {
                             webSettings.setLoadWithOverviewMode(true)
                             webSettings.setUserAgentString(webSettings.getUserAgentString()+" Mobile")
                             this.webViewClient=android.webkit.WebViewClient()
-                            this.loadUrl("https://www.google.com/?hl=en&gl=in")
+                            this.loadUrl("https://newsblur.com/")
                         }},
                         update={},
                         modifier=Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp))
