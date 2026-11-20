@@ -1042,7 +1042,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                     draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
                 }
-                val cells=remember(tiles,columns,gridRows,fillCells){calculateHomeGridCells(tiles,columns,gridRows,fillCells)}
+                val cells=remember(tiles,columns,gridRows,fillCells,homeEditMode){calculateHomeGridCells(tiles,columns,gridRows,compact=fillCells && !homeEditMode)}
                 pageApps.forEachIndexed{index,app->
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
