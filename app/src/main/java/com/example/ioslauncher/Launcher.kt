@@ -1026,10 +1026,10 @@ fun LauncherRoot(db: LauncherDb) {
                 }) {
                 val gridRows=effectiveRows.coerceAtLeast(1)
                 val previewScale=if(homeEditMode)0.70f else 1f
-                val gridAreaHeight=if(homeEditMode)maxHeight-64.dp else maxHeight
+                val gridAreaHeight=if(homeEditMode)maxHeight-76.dp else maxHeight
                 val cw=(maxWidth*previewScale)/columns.coerceAtLeast(1);val ch=(gridAreaHeight*previewScale)/gridRows.coerceAtLeast(1)
                 val gridOffsetX=(maxWidth-cw*columns)/2;val gridOffsetY=if(homeEditMode)8.dp else 0.dp
-                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(.70f).padding(horizontal=4.dp,vertical=4.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(16.dp),color=Color.White.copy(alpha=.22f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal=3.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)28.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
+                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(.76f).padding(horizontal=4.dp,vertical=4.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(16.dp),color=Color.White.copy(alpha=.22f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal=4.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)34.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
 
                 val normalCw=maxWidth/columns.coerceAtLeast(1);val normalCh=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
@@ -1043,7 +1043,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
-                        val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
+                        val rawSize=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)\n                        val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
                         val slot=dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset
                         add(HomeGridTile("widget:"+id,slot,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
@@ -1055,7 +1055,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x+gridOffsetX,y+gridOffsetY).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
-                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)34.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)42.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
@@ -1071,7 +1071,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
                 pageWidgets.forEach{(id,info)->
                     val cell=cells["widget:"+id]?:return@forEach
-                    val size=widgetSizes[id]?:((cw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
+                    val rawSize=widgetSizes[id]?:((normalCw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)\n                    val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
                     val sx=kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                     val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
@@ -1083,7 +1083,7 @@ fun LauncherRoot(db: LauncherDb) {
                 }
             }
             }
-            Row(Modifier.fillMaxWidth().padding(vertical=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+            Row(Modifier.fillMaxWidth().padding(top=4.dp,bottom=if(homeEditMode)8.dp else 10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
                 repeat(pageCount){i->Box(Modifier.padding(horizontal=4.dp).size(if(page==i)8.dp else 6.dp).clip(CircleShape).background(if(page==i)Color(0xFF1685F8)else fg.copy(alpha=.28f)).clickable{page=i})}
             }
             AnimatedVisibility(homeEditMode,enter=fadeIn(tween(160))+scaleIn(spring(dampingRatio=.82f)),exit=fadeOut(tween(120))){
