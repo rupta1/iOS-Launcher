@@ -209,6 +209,18 @@ fun LauncherRoot(db: LauncherDb) {
         val widgetPage = parts.getOrNull(1)?.toIntOrNull()
         if (id != null && widgetPage != null) id to widgetPage else null
     }) }
+    LaunchedEffect(Unit) {
+        if(db.get("default_google_search_widget_attempted","false")!="true"){
+            db.put("default_google_search_widget_attempted","true")
+            val googleProvider=activity.availableHomeWidgets().firstOrNull { provider ->
+                provider.provider.packageName=="com.google.android.googlequicksearchbox" &&
+                    (provider.provider.className.contains("Search",true) || provider.loadLabel(context.packageManager).toString().contains("Search",true))
+            }
+            if(googleProvider!=null && homeWidgets.none { pair ->
+                AppWidgetManager.getInstance(context).getAppWidgetInfo(pair.first)?.provider?.packageName=="com.google.android.googlequicksearchbox"
+            }) activity.addHomeWidget(0,googleProvider)
+        }
+    }
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     var resizingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     var showWeatherWidget by remember { mutableStateOf(false) }
