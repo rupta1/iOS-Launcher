@@ -50,6 +50,8 @@ import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -86,7 +88,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.LocalTextStyle
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.core.graphics.drawable.toBitmap
@@ -113,7 +115,6 @@ private fun decodeHomeFolders(raw:String):List<HomeFolder> = try {
         HomeFolder(item.optString("id"),item.optString("title","Folder"),
             (0 until packages.length()).map { packages.optString(it) }.filter { it.isNotBlank() },
             item.optInt("page",0),item.optInt("slot",0))
-    }
     }
 } catch (_:Exception) { emptyList() }
 
@@ -1356,11 +1357,11 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
         if(widgetPickerOpen){
             ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=if(dark) Color(0xFF202126) else Color(0xFFF5F5FA),contentColor=if(dark) Color.White else Color(0xFF1C1C1E),modifier=Modifier.shadow(28.dp,RoundedCornerShape(topStart=32.dp,topEnd=32.dp)),shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
                 Column(Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=28.dp)){
-                    Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),color=if(dark) Color.White else Color(0xFF1C1C1E);Icon(Icons.Default.Search,null,tint=if(dark) Color.White else Color(0xFF1C1C1E))}
+                    Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),color=if(dark) Color.White else Color(0xFF1C1C1E));Icon(Icons.Default.Search,null,tint=if(dark) Color.White else Color(0xFF1C1C1E))}
                     Spacer(Modifier.height(14.dp))
                     OutlinedTextField(value=widgetSearch,onValueChange={widgetSearch=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Search widgets",color=if(dark) Color.Gray else Color(0xFF77777D))},singleLine=true,leadingIcon={Icon(Icons.Default.Search,null,tint=Color.Gray)},colors=OutlinedTextFieldDefaults.colors(focusedTextColor=if(dark) Color.White else Color(0xFF1C1C1E),unfocusedTextColor=if(dark) Color.White else Color(0xFF1C1C1E),focusedBorderColor=if(dark) Color.White else Color(0xFF8E8E93),unfocusedBorderColor=if(dark) Color.DarkGray else Color(0xFFB8B8BD)))
                     Spacer(Modifier.height(16.dp))
-                    if(widgetProviders.isEmpty())Text("No compatible widgets are currently installed.",modifier=Modifier.padding(16.dp),color=if(dark) Color.White else Color(0xFF1C1C1E)
+                    if(widgetProviders.isEmpty()) Text("No compatible widgets are currently installed.",modifier=Modifier.padding(16.dp),color=if(dark) Color.White else Color(0xFF1C1C1E))
                     else LazyVerticalGrid(columns=GridCells.Fixed(2),modifier=Modifier.heightIn(max=620.dp),contentPadding=PaddingValues(bottom=16.dp),horizontalArrangement=Arrangement.spacedBy(14.dp),verticalArrangement=Arrangement.spacedBy(20.dp)){
                         items(widgetProviders.filter{provider->provider.loadLabel(context.packageManager).toString().contains(widgetSearch,true)||provider.provider.packageName.contains(widgetSearch,true)},key={it.provider.flattenToString()}){
                             provider->
