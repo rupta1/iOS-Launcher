@@ -1025,9 +1025,13 @@ fun LauncherRoot(db: LauncherDb) {
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
                 val gridRows=(effectiveRows-(if(homeEditMode)1 else 0)).coerceAtLeast(1)
-                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal=10.dp,vertical=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.24f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(54.dp).padding(horizontal=5.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)32.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
+                val previewScale=if(homeEditMode)0.70f else 1f
+                val gridAreaHeight=if(homeEditMode)maxHeight-92.dp else maxHeight
+                val cw=(maxWidth*previewScale)/columns.coerceAtLeast(1);val ch=(gridAreaHeight*previewScale)/gridRows.coerceAtLeast(1)
+                val gridOffsetX=(maxWidth-cw*columns)/2;val gridOffsetY=if(homeEditMode)12.dp else 0.dp
+                if(homeEditMode) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(.70f).padding(horizontal=6.dp,vertical=6.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(18.dp),color=Color.White.copy(alpha=.24f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.45f))){Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal=3.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->AppIcon(app=app,labels=false,fg=fg,size=if(homeEditMode)23.dp else 49.dp,draggableEnabled=false,animateOnEntry=false,onBounds={key,rect->dockAppBounds[key]=rect},onClick={activity.launch(app)})}}}
 
-                val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/gridRows.coerceAtLeast(1)
+                val normalCw=maxWidth/columns.coerceAtLeast(1);val normalCh=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
                 val pageWidgets=homeWidgets.filter{if(draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && it.first==draggingWidgetId) renderedPage==pendingDragPage else it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
@@ -1050,8 +1054,8 @@ fun LauncherRoot(db: LauncherDb) {
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
-                    Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
-                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)48.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
+                    Box(Modifier.offset(x+gridOffsetX,y+gridOffsetY).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)34.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
@@ -1063,7 +1067,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val cell=cells["folder:"+folder.id]?:return@forEach
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-folder-y")
-                    Box(Modifier.offset(x,y).size(cw,ch).onGloballyPositioned{folderBounds[folder.id]=it.boundsInRoot()},contentAlignment=Alignment.Center){FolderTile(folder,apps,fg){openFolderId=folder.id}}
+                    Box(Modifier.offset(x+gridOffsetX,y+gridOffsetY).size(cw,ch).onGloballyPositioned{folderBounds[folder.id]=it.boundsInRoot()},contentAlignment=Alignment.Center){FolderTile(folder,apps,fg){openFolderId=folder.id}}
                 }
                 pageWidgets.forEach{(id,info)->
                     val cell=cells["widget:"+id]?:return@forEach
@@ -1072,7 +1076,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-y")
-                    Box(Modifier.offset(x,y).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id) .12f else 1f}.pointerInput(id,lockLayout){if(!lockLayout) detectDragGesturesAfterLongPress(onDragStart={val origin=widgetBounds[id]?:Rect.Zero;draggingWidgetId=id;pendingDragPage=renderedPage;page=renderedPage;widgetDragPosition=origin.center;widgetCanvasBounds=origin;draggingApp=null;dragEdgeDirection=0;edgePagingArmed=true;homeEditMode=true},onDragEnd={finishWidgetDrag()},onDragCancel={ /* Parent pointer layer retains widget drag through page transitions. */ },onDrag={change,delta->change.consume();widgetDragPosition+=delta;updateDragEdge(widgetDragPosition)})}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
+                    Box(Modifier.offset(x+gridOffsetX,y+gridOffsetY).size(cw*sx,ch*sy).graphicsLayer{alpha=if(draggingWidgetId==id) .12f else 1f}.pointerInput(id,lockLayout){if(!lockLayout) detectDragGesturesAfterLongPress(onDragStart={val origin=widgetBounds[id]?:Rect.Zero;draggingWidgetId=id;pendingDragPage=renderedPage;page=renderedPage;widgetDragPosition=origin.center;widgetCanvasBounds=origin;draggingApp=null;dragEdgeDirection=0;edgePagingArmed=true;homeEditMode=true},onDragEnd={finishWidgetDrag()},onDragCancel={ /* Parent pointer layer retains widget drag through page transitions. */ },onDrag={change,delta->change.consume();widgetDragPosition+=delta;updateDragEdge(widgetDragPosition)})}.onGloballyPositioned{widgetBounds[id]=it.boundsInRoot();if(draggingWidgetId==id)widgetCanvasBounds=it.boundsInRoot()}){
                         AndroidView(factory={activity.widgetHost.createView(it,id,info)},modifier=Modifier.fillMaxSize())
                         Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(28.dp).clip(CircleShape).background(Color(0x88333333)).onGloballyPositioned{widgetHandleBounds[id]=it.boundsInRoot()}.pointerInput(id,lockLayout){if(!lockLayout) detectDragGestures(onDragStart={resizingWidgetId=id},onDragEnd={resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID;db.put("home_widget_sizes",widgetSizes.entries.joinToString(";"){it.key.toString()+":"+it.value.first.value+":"+it.value.second.value})},onDragCancel={resizingWidgetId=AppWidgetManager.INVALID_APPWIDGET_ID},onDrag={change,delta->change.consume();val oldSize=widgetSizes[id]?:((cw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp);val next=(oldSize.first+with(density){delta.x.toDp()}).coerceIn(cw,(cw*columns).coerceAtLeast(cw));val nextH=(oldSize.second+with(density){delta.y.toDp()}).coerceIn(ch,(ch*effectiveRows).coerceAtLeast(ch));widgetSizes=widgetSizes+(id to (next to nextH))})},contentAlignment=Alignment.Center){Text("⠿",color=Color.White,fontSize=18.sp)}
                     }
