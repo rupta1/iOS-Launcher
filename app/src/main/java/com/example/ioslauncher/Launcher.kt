@@ -1024,18 +1024,24 @@ fun LauncherRoot(db: LauncherDb) {
                 val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
-                val pageWidgets=homeWidgets.filter{it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val pageWidgets=homeWidgets.filter{it.second==renderedPage || (draggingWidgetId!=AppWidgetManager.INVALID_APPWIDGET_ID && it.first==draggingWidgetId && renderedPage==pendingDragPage)}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val headerOffset=systemHeaderRows*columns
                 val tiles=buildList {
+                    if(renderedPage==0 && homeWidgets.any { AppWidgetManager.getInstance(context).getAppWidgetInfo(it.first)?.provider?.packageName=="com.google.android.googlequicksearchbox" && it.second==0 }){
+                        add(HomeGridTile("system:google-search",0,columns,2))
+                    }
                     pageApps.forEachIndexed { i, app ->
-                        val appSlot=dragPreviewSlots["app:"+app.packageName] ?: (appSlotAssignments[app.packageName] ?: i)
+                        val appSlot=dragPreviewSlots["app:"+app.packageName] ?: ((appSlotAssignments[app.packageName] ?: i)+headerOffset)
                         add(HomeGridTile("app:"+app.packageName,appSlot))
                     }
-                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot))}
+                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
+                        val defaultSearch=id==homeWidgets.firstOrNull{it.second==0 && AppWidgetManager.getInstance(context).getAppWidgetInfo(it.first)?.provider?.packageName=="com.google.android.googlequicksearchbox"}?.first
+                        val slot=if(defaultSearch)0 else (dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset)
+                        add(HomeGridTile("widget:"+id,slot,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
-                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
+                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
                 }
                 val cells=remember(tiles,columns,gridRows,fillCells){calculateHomeGridCells(tiles,columns,gridRows,fillCells)}
                 pageApps.forEachIndexed{index,app->
