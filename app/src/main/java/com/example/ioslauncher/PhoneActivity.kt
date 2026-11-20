@@ -419,7 +419,7 @@ private fun IosDialer() {
         Surface(
             modifier=Modifier.fillMaxWidth().padding(12.dp),
             shape=RoundedCornerShape(30.dp),
-            color=if(dark) Color(0xFF1C1C1E) else Color(0xFFF7F7FA),
+            color=(if(dark) Color(0xFF1C1C1E) else Color(0xFFF7F7FA).copy(alpha=.80f)),
             tonalElevation=6.dp
         ) {
             Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(13.dp)) {
