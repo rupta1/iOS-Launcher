@@ -1019,7 +1019,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.82f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.72f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout,homeEditMode){if(!lockLayout){var handled=false;detectTransformGestures{_,_,zoom,_ -> if(!handled&&zoom<0.975f){homeEditMode=true;handled=true}else if(!handled&&zoom>1.025f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
@@ -1048,7 +1048,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x,y).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
-                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=62.dp,draggableEnabled=true,animateOnEntry=false,
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)48.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
