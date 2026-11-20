@@ -110,13 +110,18 @@ fun SettingsScreen(
     var choiceValue by remember { mutableStateOf("") }
     var choiceOptions by remember { mutableStateOf(emptyList<String>()) }
     var choiceAction by remember { mutableStateOf<(String)->Unit>({}) }
-    val card=if(dark) Color(0xFF242424) else Color.White
-    val fg=if(dark) Color(0xFFF5F5F7) else Color(0xFF17171B)
-    val muted=if(dark) Color(0xFF99999F) else Color(0xFF777780)
+    val systemDark=isSystemInDarkTheme()
+    val useDark=themeMode.equals("dark",true)||(themeMode.equals("system",true)&&systemDark)||dark
+    val card=if(useDark) Color(0xFF25252A) else Color(0xFFFFFFFF)
+    val fg=if(useDark) Color(0xFFF5F5F7) else Color(0xFF17171B)
+    val muted=if(useDark) Color(0xFF9898A0) else Color(0xFF777780)
+    val accent=Color(0xFF0A84FF)
+    val iosSwitchColors=SwitchDefaults.colors(checkedThumbColor=Color.White,checkedTrackColor=accent,uncheckedThumbColor=Color.White,uncheckedTrackColor=if(useDark)Color(0xFF48484D) else Color(0xFFD1D1D6),uncheckedBorderColor=Color.Transparent)
+    val iosSliderColors=SliderDefaults.colors(thumbColor=accent,activeTrackColor=accent,inactiveTrackColor=if(useDark)Color(0xFF45454A) else Color(0xFFD1D1D6))
     fun choose(title:String,value:String,options:List<String>,action:(String)->Unit) {
         choiceTitle=title; choiceValue=value; choiceOptions=options; choiceAction=action
     }
-    Column(Modifier.fillMaxSize().background(if(dark) Color.Black else Color(0xFFF3F2F7)).padding(WindowInsets.statusBars.asPaddingValues()).padding(horizontal=18.dp)) {
+    Column(Modifier.fillMaxSize().background(if(useDark) Color(0xFF000000) else Color(0xFFF2F2F7)).padding(WindowInsets.statusBars.asPaddingValues()).padding(horizontal=18.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=4.dp), verticalAlignment=Alignment.CenterVertically) {
             IconButton(onClick=onClose) { Icon(Icons.Default.ArrowBack,null,tint=fg) }
         }
@@ -136,12 +141,12 @@ fun SettingsScreen(
                         Text("App Library transparency",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
                         Text("${(drawerTransparency*100).toInt()}%",color=muted,fontSize=13.sp)
                     }
-                    Slider(value=drawerTransparency,onValueChange=onDrawerTransparency,valueRange=0f..0.80f)
+                    Slider(value=drawerTransparency,onValueChange=onDrawerTransparency,valueRange=0f..0.80f,colors=iosSliderColors)
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text("App Library blur",color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
                         Text("${drawerBlur.toInt()} px",color=muted,fontSize=13.sp)
                     }
-                    Slider(value=drawerBlur,onValueChange=onDrawerBlur,valueRange=0f..32f)
+                    Slider(value=drawerBlur,onValueChange=onDrawerBlur,valueRange=0f..32f,colors=iosSliderColors)
                 }
             }
             SettingsGroup("Home screen layout",card,muted) {
@@ -178,7 +183,9 @@ fun SettingsScreen(
     if(choiceTitle!=null) {
         AlertDialog(
             onDismissRequest={choiceTitle=null},
-            title={Text(choiceTitle!!)},
+            containerColor=(if(useDark)Color(0xFF28282D) else Color(0xFFF8F8FC)).copy(alpha=0.80f),
+            shape=RoundedCornerShape(28.dp),
+            title={Text(choiceTitle!!,fontSize=22.sp,fontWeight=FontWeight.SemiBold,color=fg)},
             text={
                 Column {
                     choiceOptions.forEach { option ->
@@ -187,14 +194,14 @@ fun SettingsScreen(
                         }.padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
                             RadioButton(selected=option.equals(choiceValue,true),onClick={
                                 choiceAction(option); choiceTitle=null
-                            })
+                            },colors=RadioButtonDefaults.colors(selectedColor=Color(0xFF0A84FF),unselectedColor=muted))
                             Spacer(Modifier.width(10.dp))
-                            Text(option)
+                            Text(option,color=fg,fontSize=16.sp)
                         }
                     }
                 }
             },
-            confirmButton={ TextButton(onClick={choiceTitle=null}) { Text("Cancel") } }
+            confirmButton={ TextButton(onClick={choiceTitle=null}) { Text("Cancel",color=accent) } }
         )
     }
 }
@@ -223,6 +230,6 @@ private fun SettingChoice(title:String,value:String,fg:Color,muted:Color,onClick
 private fun SettingSwitch(title:String,checked:Boolean,fg:Color,onChange:(Boolean)->Unit) {
     Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal=18.dp,vertical=15.dp),verticalAlignment=Alignment.CenterVertically) {
         Text(title,color=fg,fontSize=14.sp,modifier=Modifier.weight(1f))
-        Switch(checked=checked,onCheckedChange=onChange)
+        Switch(checked=checked,onCheckedChange=onChange,colors=SwitchDefaults.colors(checkedThumbColor=Color.White,checkedTrackColor=Color(0xFF0A84FF),uncheckedThumbColor=Color.White,uncheckedTrackColor=Color(0xFFD1D1D6),uncheckedBorderColor=Color.Transparent))
     }
 }
