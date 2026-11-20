@@ -1059,7 +1059,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(28.dp),color=Color.White.copy(alpha=if(dark) .13f else .42f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=.28f))){
+            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=if(dark) .18f else .34f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
