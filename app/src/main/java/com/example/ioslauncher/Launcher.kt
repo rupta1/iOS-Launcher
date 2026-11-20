@@ -84,6 +84,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.LocalTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.core.graphics.drawable.toBitmap
@@ -110,6 +113,7 @@ private fun decodeHomeFolders(raw:String):List<HomeFolder> = try {
         HomeFolder(item.optString("id"),item.optString("title","Folder"),
             (0 until packages.length()).map { packages.optString(it) }.filter { it.isNotBlank() },
             item.optInt("page",0),item.optInt("slot",0))
+    }
     }
 } catch (_:Exception) { emptyList() }
 
@@ -888,8 +892,9 @@ fun LauncherRoot(db: LauncherDb) {
         }
     }
 
+    val launcherFont = FontFamily(Font(R.font.san_francisco_font))
     // New home surface: measured grid geometry and a single parent drag owner.
-    Box(Modifier.fillMaxSize().background(Color.Transparent)
+    CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily=launcherFont)) { Box(Modifier.fillMaxSize().background(Color.Transparent)
         .pointerInput(Unit) {
             var trackedPointer: androidx.compose.ui.input.pointer.PointerId? = null
             var pointerDownPosition = Offset.Zero
