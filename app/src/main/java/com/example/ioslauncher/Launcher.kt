@@ -1026,7 +1026,7 @@ fun LauncherRoot(db: LauncherDb) {
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
                 val gridRows=effectiveRows.coerceAtLeast(1)
-                val previewScale=if(homeEditMode)0.70f else 1f
+                val previewScale=if(homeEditMode)0.82f else 1f
                 val gridAreaHeight=if(homeEditMode)maxHeight-76.dp else maxHeight
                 val cw=(maxWidth*previewScale)/columns.coerceAtLeast(1);val ch=(gridAreaHeight*previewScale)/gridRows.coerceAtLeast(1)
                 val gridOffsetX=(maxWidth-cw*columns)/2;val gridOffsetY=if(homeEditMode)8.dp else 0.dp
@@ -1045,7 +1045,7 @@ fun LauncherRoot(db: LauncherDb) {
                     pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
                         val rawSize=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                        val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
+                        val size=if(homeEditMode)(rawSize.first*.82f to rawSize.second*.82f)else rawSize
                         val slot=dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset
                         add(HomeGridTile("widget:"+id,slot,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
@@ -1057,7 +1057,7 @@ fun LauncherRoot(db: LauncherDb) {
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
                     val y by animateDpAsState(ch*cell.row,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-y")
                     Box(Modifier.offset(x+gridOffsetX,y+gridOffsetY).size(cw,ch).graphicsLayer{alpha=if(draggingApp?.packageName==app.packageName) .12f else 1f},contentAlignment=Alignment.Center) {
-                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)42.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
+                        AppIcon(app=app,labels=showLabels,fg=fg,index=index,animationSpeed=animationSpeed,size=if(homeEditMode)46.dp else 62.dp,draggableEnabled=true,animateOnEntry=false,
                             onBounds={key,rect->appBounds[key]=rect},
                             onDragStart={ if(!lockLayout){ val origin=appBounds[app.packageName]?:Rect.Zero; draggingApp=app;dragOriginBounds=origin;dragOriginPage=page;pendingDragPage=page;dragPosition=origin.center;draggingFromDock=false;draggingFromFolder=false;dragSourceFolderId=null;edgePagingArmed=true;homeEditMode=true } },
                             onDrag={delta-> if(draggingApp?.packageName==app.packageName){dragPosition+=delta;updateDragEdge(dragPosition)} },
@@ -1074,7 +1074,7 @@ fun LauncherRoot(db: LauncherDb) {
                 pageWidgets.forEach{(id,info)->
                     val cell=cells["widget:"+id]?:return@forEach
                     val rawSize=widgetSizes[id]?:((normalCw*minOf(2,columns)).coerceAtLeast(110.dp) to info.minHeight.coerceAtLeast(90).dp)
-                    val size=if(homeEditMode)(rawSize.first*.70f to rawSize.second*.70f)else rawSize
+                    val size=if(homeEditMode)(rawSize.first*.82f to rawSize.second*.82f)else rawSize
                     val sx=kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns)
                     val sy=kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=420f),label="new-home-widget-x")
