@@ -1013,45 +1013,19 @@ fun LauncherRoot(db: LauncherDb) {
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
                 val pageWidgets=homeWidgets.filter{it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
-                val headerOffset=systemHeaderRows*columns
                 val tiles=buildList {
-                    if(renderedPage==0){
-                        add(HomeGridTile("system:search",0,columns,1))
-                        add(HomeGridTile("system:clock",columns,columns,1))
-                    }
                     pageApps.forEachIndexed { i, app ->
-                        val appSlot=dragPreviewSlots["app:"+app.packageName] ?: ((appSlotAssignments[app.packageName] ?: i) + headerOffset)
+                        val appSlot=dragPreviewSlots["app:"+app.packageName] ?: (appSlotAssignments[app.packageName] ?: i)
                         add(HomeGridTile("app:"+app.packageName,appSlot))
                     }
-                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
+                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot))}
                     pageWidgets.forEach{(id,info)->
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
+                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
-                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
+                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
                 }
                 val cells=remember(tiles,columns,gridRows,fillCells){calculateHomeGridCells(tiles,columns,gridRows,fillCells)}
-                if(renderedPage==0){
-                    Surface(
-                        modifier=Modifier.offset(0.dp,0.dp).size(maxWidth,ch).padding(5.dp).clickable{drawer=true;search=""},
-                        shape=RoundedCornerShape(24.dp),color=Color.White.copy(alpha=.88f),shadowElevation=4.dp
-                    ){
-                        Row(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically){
-                            Icon(Icons.Default.Search,null,tint=Color(0xFF4285F4),modifier=Modifier.size(28.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Text("Search apps and web",color=Color(0xFF55555D),fontSize=16.sp)
-                        }
-                    }
-                    Surface(
-                        modifier=Modifier.offset(0.dp,ch).size(maxWidth,ch).padding(5.dp),
-                        shape=RoundedCornerShape(24.dp),color=Color.White.copy(alpha=.88f),shadowElevation=4.dp
-                    ){
-                        Column(Modifier.fillMaxSize().padding(horizontal=18.dp),verticalArrangement=Arrangement.Center){
-                            Text(SimpleDateFormat("EEEE, MMM d",Locale.getDefault()).format(Date()),color=Color(0xFF66666F),fontSize=13.sp)
-                            Text(SimpleDateFormat("h:mm",Locale.getDefault()).format(Date()),color=Color(0xFF17171C),fontSize=32.sp,fontWeight=FontWeight.SemiBold)
-                        }
-                    }
-                }
                 pageApps.forEachIndexed{index,app->
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
