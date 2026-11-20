@@ -1289,7 +1289,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             }
         }
         if(gridDialog){
-            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.80f),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D))},
+            AlertDialog(onDismissRequest={gridDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.90f),shape=RoundedCornerShape(28.dp),title={Text("Home screen grid",fontSize=23.sp,fontWeight=FontWeight.SemiBold,color=if(isSystemInDarkTheme())Color.White else Color(0xFF19191D))},
                 text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
                     Text("Columns: $columns")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={columns=(columns-1).coerceAtLeast(2);db.put("grid_columns",columns.toString())}){Text("−")};Text("$columns",modifier=Modifier.align(Alignment.CenterVertically));Button(onClick={columns=(columns+1).coerceAtMost(8);db.put("grid_columns",columns.toString())}){Text("+")}}
@@ -1298,29 +1298,29 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                 }},confirmButton={Button(onClick={gridDialog=false}){Text("Done")}})
         }
         if(batchMoveDialog){
-            AlertDialog(onDismissRequest={batchMoveDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.80f),shape=RoundedCornerShape(30.dp),
-                title={Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text("Move selected apps",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color(0xFF19151F));Text("Choose a home screen",fontSize=14.sp,color=Color(0xFF77717D))}},
-                text={Column(Modifier.fillMaxWidth().heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){(0 until pageCount).forEach{dest->Surface(onClick={val selected=selectedEditApps.toList();val destinationApps=pageAppSlices.getOrNull(dest).orEmpty().filterNot{it.packageName in selected};if(selected.size+destinationApps.size>columns*effectiveRows){android.widget.Toast.makeText(context,"Not enough space on this home screen",android.widget.Toast.LENGTH_SHORT).show()}else{selected.forEach{pkg->appPageAssignments=appPageAssignments+(pkg to dest)};val tiles=destinationApps.mapIndexed{index,app->HomeGridTile("app:"+app.packageName,appSlotAssignments[app.packageName]?:index)}+selected.mapIndexed{index,pkg->HomeGridTile("app:"+pkg,columns*effectiveRows-selected.size+index)};val placed=HomeWorkspaceEngine.layout(tiles,columns,effectiveRows,fillCells);placed.forEach{(key,cell)->if(key.startsWith("app:"))appSlotAssignments=appSlotAssignments+(key.removePrefix("app:") to cell.row*columns+cell.column)};db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});page=dest;pendingDragPage=dest;batchMoveDialog=false;selectedEditApps=setOf()}},color=Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)){Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=13.dp),verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF6750A4),modifier=Modifier.size(42.dp)){Box(contentAlignment=Alignment.Center){Text((dest+1).toString(),color=Color.White,fontWeight=FontWeight.Bold)}};Column(Modifier.weight(1f).padding(start=12.dp)){Text("Home Screen ${dest+1}",fontWeight=FontWeight.SemiBold,color=Color(0xFF292331));Text(if(dest==page)"Current screen" else "Tap to move",fontSize=12.sp,color=Color(0xFF77717D))};Icon(Icons.Default.ChevronRight,null,tint=Color(0xFF6750A4))}}}}},
-                confirmButton={TextButton(onClick={batchMoveDialog=false}){Text("Cancel",color=Color(0xFF6750A4),fontWeight=FontWeight.SemiBold)}})
+            AlertDialog(onDismissRequest={batchMoveDialog=false},containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.90f),shape=RoundedCornerShape(30.dp),
+                title={Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text("Move selected apps",fontSize=24.sp,fontWeight=FontWeight.Bold,color=if(dark)Color.White else Color(0xFF19151F));Text("Choose a home screen",fontSize=14.sp,color=if(dark)Color(0xFFB0B0B8) else Color(0xFF77717D))}},
+                text={Column(Modifier.fillMaxWidth().heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){(0 until pageCount).forEach{dest->Surface(onClick={val selected=selectedEditApps.toList();val destinationApps=pageAppSlices.getOrNull(dest).orEmpty().filterNot{it.packageName in selected};if(selected.size+destinationApps.size>columns*effectiveRows){android.widget.Toast.makeText(context,"Not enough space on this home screen",android.widget.Toast.LENGTH_SHORT).show()}else{selected.forEach{pkg->appPageAssignments=appPageAssignments+(pkg to dest)};val tiles=destinationApps.mapIndexed{index,app->HomeGridTile("app:"+app.packageName,appSlotAssignments[app.packageName]?:index)}+selected.mapIndexed{index,pkg->HomeGridTile("app:"+pkg,columns*effectiveRows-selected.size+index)};val placed=HomeWorkspaceEngine.layout(tiles,columns,effectiveRows,fillCells);placed.forEach{(key,cell)->if(key.startsWith("app:"))appSlotAssignments=appSlotAssignments+(key.removePrefix("app:") to cell.row*columns+cell.column)};db.put("app_pages",appPageAssignments.entries.joinToString(";"){it.key+":"+it.value});db.put("app_slots",appSlotAssignments.entries.joinToString(";"){it.key+":"+it.value});page=dest;pendingDragPage=dest;batchMoveDialog=false;selectedEditApps=setOf()}},color=if(dark)Color(0xFF3A3544) else Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)){Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=13.dp),verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF6750A4),modifier=Modifier.size(42.dp)){Box(contentAlignment=Alignment.Center){Text((dest+1).toString(),color=Color.White,fontWeight=FontWeight.Bold)}};Column(Modifier.weight(1f).padding(start=12.dp)){Text("Home Screen ${dest+1}",fontWeight=FontWeight.SemiBold,color=if(dark)Color.White else Color(0xFF292331));Text(if(dest==page)"Current screen" else "Tap to move",fontSize=12.sp,color=if(dark)Color(0xFFB0B0B8) else Color(0xFF77717D))};Icon(Icons.Default.ChevronRight,null,tint=Color(0xFF6750A4))}}}}},
+                confirmButton={TextButton(onClick={batchMoveDialog=false}){Text("Cancel",color=Color(0xFF0A84FF),fontWeight=FontWeight.SemiBold)}})
         }
         if(batchFolderDialog){
             AlertDialog(
                 onDismissRequest={batchFolderDialog=false},
-                containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.80f),
+                containerColor=(if(isSystemInDarkTheme())Color(0xFF29292E) else Color(0xFFF8F8FC)).copy(alpha=0.90f),
                 shape=RoundedCornerShape(30.dp),
-                title={ Text("Create folder",fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color(0xFF19151F)) },
+                title={ Text("Create folder",fontSize=24.sp,fontWeight=FontWeight.Bold,color=if(dark)Color.White else Color(0xFF19151F)) },
                 text={
                     Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Surface(color=Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)) {
+                        Surface(color=if(dark)Color(0xFF3A3544) else Color(0xFFE6DFF2),shape=RoundedCornerShape(18.dp)) {
                             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
                                 Icon(Icons.Default.Folder,null,tint=Color(0xFF6750A4),modifier=Modifier.size(32.dp))
                                 Column(Modifier.padding(start=12.dp)) {
-                                    Text("${selectedEditApps.size} apps selected",fontWeight=FontWeight.SemiBold,color=Color(0xFF292331))
-                                    Text("Home Screen ${page+1}",fontSize=13.sp,color=Color(0xFF77717D))
+                                    Text("${selectedEditApps.size} apps selected",fontWeight=FontWeight.SemiBold,color=if(dark)Color.White else Color(0xFF292331))
+                                    Text("Home Screen ${page+1}",fontSize=13.sp,color=if(dark)Color(0xFFB0B0B8) else Color(0xFF77717D))
                                 }
                             }
                         }
-                        Text("Combine these apps into a folder on this screen.",color=Color(0xFF625B68),fontSize=14.sp)
+                        Text("Combine these apps into a folder on this screen.",color=if(dark)Color(0xFFB0B0B8) else Color(0xFF625B68),fontSize=14.sp)
                     }
                 },
                 confirmButton={
@@ -1342,7 +1342,7 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                         shape=RoundedCornerShape(16.dp)
                     ){ Text("Create folder") }
                 },
-                dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel",color=Color(0xFF6750A4))}}
+                dismissButton={TextButton(onClick={batchFolderDialog=false}){Text("Cancel",color=Color(0xFF0A84FF))}}
             )
         }
         if(widgetPickerOpen){
