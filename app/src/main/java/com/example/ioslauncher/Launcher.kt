@@ -1007,20 +1007,27 @@ fun LauncherRoot(db: LauncherDb) {
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
-                val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/effectiveRows.coerceAtLeast(1)
+                val systemHeaderRows=if(renderedPage==0)2 else 0
+                val gridRows=effectiveRows+systemHeaderRows
+                val cw=maxWidth/columns.coerceAtLeast(1);val ch=maxHeight/gridRows.coerceAtLeast(1)
                 val pageApps=pageAppSlices.getOrNull(renderedPage.coerceAtLeast(0)).orEmpty()
                 val pageFolders=folders.filter{it.page==renderedPage}
                 val pageWidgets=homeWidgets.filter{it.second==renderedPage}.mapNotNull{(id,_)->AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.let{id to it}}
+                val headerOffset=systemHeaderRows*columns
                 val tiles=buildList {
-                    pageApps.forEachIndexed{i,app->add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName]?:appSlotAssignments[app.packageName]?:i))}
-                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot))}
+                    if(renderedPage==0){
+                        add(HomeGridTile("system:search",0,columns,1))
+                        add(HomeGridTile("system:clock",columns,columns,1))
+                    }
+                    pageApps.forEachIndexed{i,app->add(HomeGridTile("app:"+app.packageName,dragPreviewSlots["app:"+app.packageName]?:((appSlotAssignments[app.packageName]?:i)+headerOffset))}
+                    pageFolders.forEach{add(HomeGridTile("folder:"+it.id,dragPreviewSlots["folder:"+it.id]?:it.slot+headerOffset))}
                     pageWidgets.forEach{(id,info)->
                         val size=widgetSizes[id]?: (info.minWidth.coerceAtLeast(110).dp to info.minHeight.coerceAtLeast(90).dp)
-                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,effectiveRows)))
+                        add(HomeGridTile("widget:"+id,dragPreviewSlots["widget:"+id]?:widgetSlotAssignments[id]?:pageApps.size+pageFolders.size+headerOffset,kotlin.math.ceil(size.first.value/cw.value.coerceAtLeast(1f)).toInt().coerceIn(1,columns),kotlin.math.ceil(size.second.value/ch.value.coerceAtLeast(1f)).toInt().coerceIn(1,gridRows)))
                     }
-                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size))}
+                    draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
                 }
-                val cells=remember(tiles,columns,effectiveRows,fillCells){calculateHomeGridCells(tiles,columns,effectiveRows,fillCells)}
+                val cells=remember(tiles,columns,gridRows,fillCells){calculateHomeGridCells(tiles,columns,gridRows,fillCells)}
                 pageApps.forEachIndexed{index,app->
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
