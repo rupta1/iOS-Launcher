@@ -623,12 +623,12 @@ fun LauncherRoot(db: LauncherDb) {
         // Require the pointer to leave the edge zone before another page turn.
         edgePagingArmed=false
         dragEdgeDirection=0
-        homeGridBoundsByPage.remove(next)
-        homeGridBounds=Rect.Zero
+        // Keep the last measured target-page geometry during edge paging. Clearing
+        // all hit-test maps here makes backward transfers fail before AnimatedContent
+        // finishes measuring the incoming page, especially on the first workspace.
+        // The bounds are stable screen-space geometry; the page's item model is rebuilt
+        // by updateGridDragPreview using pendingDragPage.
         dragPreviewSlots=emptyMap()
-        appBounds.clear()
-        widgetBounds.clear()
-        folderBounds.clear()
     }
     fun clearActiveDragSession() {
         draggingApp=null
@@ -977,7 +977,7 @@ fun LauncherRoot(db: LauncherDb) {
                 label="home-screen-page",
                 modifier=Modifier.weight(1f).fillMaxWidth()
             ) { renderedPage ->
-                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.82f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout){if(!lockLayout)detectTransformGestures{_,_,zoom,_ -> if(zoom!=1f){val gestureScale=zoom;if(gestureScale<0.985f)homeEditMode=true else if(gestureScale>1.015f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false}}}}.onGloballyPositioned{
+                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer{val workspaceScale=if(homeEditMode)0.82f else 1f;scaleX=workspaceScale;scaleY=workspaceScale;transformOrigin=androidx.compose.ui.graphics.TransformOrigin.Center}.pointerInput(lockLayout){if(!lockLayout){var cumulativeZoom=1f;var handled=false;detectTransformGestures{_,_,zoom,_ -> cumulativeZoom*=zoom;if(!handled&&cumulativeZoom<0.90f){homeEditMode=true;handled=true}else if(!handled&&cumulativeZoom>1.12f&&homeEditMode){homeEditMode=false;selectedEditApps=setOf();gridDialog=false;batchMoveDialog=false;batchFolderDialog=false;handled=true}}}}.onGloballyPositioned{
                     val bounds=it.boundsInRoot();homeGridBounds=bounds;homeGridBoundsByPage[renderedPage]=bounds
                     draggingApp?.let{app->if(renderedPage==pendingDragPage)updateGridDragPreview(dragPosition,"app:"+app.packageName)}
                 }) {
