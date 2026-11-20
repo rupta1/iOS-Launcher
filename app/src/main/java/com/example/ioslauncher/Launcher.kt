@@ -210,14 +210,18 @@ fun LauncherRoot(db: LauncherDb) {
         if (id != null && widgetPage != null) id to widgetPage else null
     }) }
     LaunchedEffect(homeWidgets) {
-        val hasGoogleSearch=homeWidgets.any { pair ->
-            AppWidgetManager.getInstance(context).getAppWidgetInfo(pair.first)?.provider?.packageName=="com.google.android.googlequicksearchbox"
+        val googleWidgets=homeWidgets.mapNotNull { pair ->
+            AppWidgetManager.getInstance(context).getAppWidgetInfo(pair.first)?.takeIf { it.provider.packageName=="com.google.android.googlequicksearchbox" }?.let { pair to it }
         }
-        if(!hasGoogleSearch){
-            val googleProvider=activity.availableHomeWidgets().filter { provider ->
-                provider.provider.packageName=="com.google.android.googlequicksearchbox"
-            }.minByOrNull { provider -> provider.minWidth + provider.minHeight }
+        if(googleWidgets.isEmpty()){
+            val providers=activity.availableHomeWidgets().filter { provider -> provider.provider.packageName=="com.google.android.googlequicksearchbox" }
+            val googleProvider=providers.firstOrNull { provider -> provider.provider.className.contains("Search",true) && provider.loadLabel(context.packageManager).toString().equals("Google",true) }
+                ?: providers.firstOrNull { provider -> provider.provider.className.contains("Search",true) }
+                ?: providers.firstOrNull { provider -> provider.loadLabel(context.packageManager).toString().equals("Google",true) }
             if(googleProvider!=null) activity.addHomeWidget(0,googleProvider)
+        } else {
+            val (pair,info)=googleWidgets.first()
+            if(pair.second!=0) homeWidgets=homeWidgets.map { if(it.first==pair.first) pair.first to 0 else it }
         }
     }
     var draggingWidgetId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
