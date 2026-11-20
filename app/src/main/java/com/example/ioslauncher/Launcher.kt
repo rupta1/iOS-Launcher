@@ -1028,6 +1028,27 @@ fun LauncherRoot(db: LauncherDb) {
                     draggingApp?.takeIf{moving->renderedPage==pendingDragPage&&pageApps.none{it.packageName==moving.packageName}}?.let{add(HomeGridTile("app:"+it.packageName,dragPreviewSlots["app:"+it.packageName]?:size+headerOffset))}
                 }
                 val cells=remember(tiles,columns,gridRows,fillCells){calculateHomeGridCells(tiles,columns,gridRows,fillCells)}
+                if(renderedPage==0){
+                    Surface(
+                        modifier=Modifier.offset(0.dp,0.dp).size(maxWidth,ch).padding(5.dp).clickable{drawer=true;search=""},
+                        shape=RoundedCornerShape(24.dp),color=Color.White.copy(alpha=.88f),shadowElevation=4.dp
+                    ){
+                        Row(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically){
+                            Icon(Icons.Default.Search,null,tint=Color(0xFF4285F4),modifier=Modifier.size(28.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Search apps and web",color=Color(0xFF55555D),fontSize=16.sp)
+                        }
+                    }
+                    Surface(
+                        modifier=Modifier.offset(0.dp,ch).size(maxWidth,ch).padding(5.dp),
+                        shape=RoundedCornerShape(24.dp),color=Color.White.copy(alpha=.88f),shadowElevation=4.dp
+                    ){
+                        Column(Modifier.fillMaxSize().padding(horizontal=18.dp),verticalArrangement=Arrangement.Center){
+                            Text(SimpleDateFormat("EEEE, MMM d",Locale.getDefault()).format(Date()),color=Color(0xFF66666F),fontSize=13.sp)
+                            Text(SimpleDateFormat("h:mm",Locale.getDefault()).format(Date()),color=Color(0xFF17171C),fontSize=32.sp,fontWeight=FontWeight.SemiBold)
+                        }
+                    }
+                }
                 pageApps.forEachIndexed{index,app->
                     val cell=cells["app:"+app.packageName]?:return@forEachIndexed
                     val x by animateDpAsState(cw*cell.column,spring(dampingRatio=.82f,stiffness=460f),label="new-home-app-x")
