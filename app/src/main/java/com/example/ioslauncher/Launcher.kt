@@ -354,7 +354,10 @@ fun LauncherRoot(db: LauncherDb) {
     }
     var deviceState by remember { mutableStateOf(DeviceStateReader.read(context)) }
     val bg = if (dark) Color(0xFF171923) else Color(0xFFF2F1F7)
-    val fg = if (dark) Color.White else Color(0xFF18191F)
+    val wallpaperPrimary = remember { try { WallpaperManager.getInstance(context).getWallpaperColors(WallpaperManager.FLAG_SYSTEM)?.primaryColor?.toArgb() ?: android.graphics.Color.BLACK } catch (_:Exception) { android.graphics.Color.BLACK } }
+    val wallpaperLuminance = (0.299*android.graphics.Color.red(wallpaperPrimary)+0.587*android.graphics.Color.green(wallpaperPrimary)+0.114*android.graphics.Color.blue(wallpaperPrimary))/255.0
+    val wallpaperText = if (wallpaperLuminance < 0.52) Color.White else Color(0xFF111111)
+    val fg = wallpaperText
     val filtered = apps.filter { it.label.contains(search, true) }
 
     fun persistDock() { db.put("dock_packages", dockPackages.joinToString("|")) }
@@ -1059,7 +1062,7 @@ fun LauncherRoot(db: LauncherDb) {
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.50f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
+            Surface(Modifier.fillMaxWidth().padding(bottom=8.dp).onGloballyPositioned{dockBounds=it.boundsInRoot()},shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.20f),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(alpha=if(dark).22f else .42f))){
                 Row(Modifier.fillMaxWidth().height(78.dp).padding(horizontal=6.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically){
                     dockPackages.mapNotNull{pkg->apps.firstOrNull{it.packageName==pkg}}.forEach{app->
                         AppIcon(app=app,labels=false,fg=fg,size=49.dp,draggableEnabled=true,animateOnEntry=false,
@@ -1346,13 +1349,13 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             )
         }
         if(widgetPickerOpen){
-            ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=if(dark) Color(0xFF202126) else Color(0xFFF5F5FA),contentColor=if(dark) Color.White else Color(0xFF1C1C1E),shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
+            ModalBottomSheet(onDismissRequest={widgetPickerOpen=false;widgetSearch="";widgetPickerDrag=null},containerColor=if(dark) Color(0xFF202126) else Color(0xFFF5F5FA),contentColor=if(dark) Color.White else Color(0xFF1C1C1E),modifier=Modifier.shadow(28.dp,RoundedCornerShape(topStart=32.dp,topEnd=32.dp)),shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),dragHandle={Box(Modifier.padding(vertical=10.dp).width(42.dp).height(5.dp).clip(CircleShape).background(Color.Gray))}){
                 Column(Modifier.fillMaxWidth().padding(horizontal=20.dp).padding(bottom=28.dp)){
-                    Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),color=Color.White);Icon(Icons.Default.Search,null,tint=Color.White)}
+                    Row(verticalAlignment=Alignment.CenterVertically){Text("Add widgets",fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),color=if(dark) Color.White else Color(0xFF1C1C1E);Icon(Icons.Default.Search,null,tint=if(dark) Color.White else Color(0xFF1C1C1E))}
                     Spacer(Modifier.height(14.dp))
-                    OutlinedTextField(value=widgetSearch,onValueChange={widgetSearch=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Search widgets",color=Color.Gray)},singleLine=true,leadingIcon={Icon(Icons.Default.Search,null,tint=Color.Gray)},colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White,unfocusedTextColor=Color.White,focusedBorderColor=Color.White,unfocusedBorderColor=Color.DarkGray))
+                    OutlinedTextField(value=widgetSearch,onValueChange={widgetSearch=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Search widgets",color=if(dark) Color.Gray else Color(0xFF77777D))},singleLine=true,leadingIcon={Icon(Icons.Default.Search,null,tint=Color.Gray)},colors=OutlinedTextFieldDefaults.colors(focusedTextColor=if(dark) Color.White else Color(0xFF1C1C1E),unfocusedTextColor=if(dark) Color.White else Color(0xFF1C1C1E),focusedBorderColor=if(dark) Color.White else Color(0xFF8E8E93),unfocusedBorderColor=if(dark) Color.DarkGray else Color(0xFFB8B8BD)))
                     Spacer(Modifier.height(16.dp))
-                    if(widgetProviders.isEmpty())Text("No compatible widgets are currently installed.",modifier=Modifier.padding(16.dp),color=Color.White)
+                    if(widgetProviders.isEmpty())Text("No compatible widgets are currently installed.",modifier=Modifier.padding(16.dp),color=if(dark) Color.White else Color(0xFF1C1C1E)
                     else LazyVerticalGrid(columns=GridCells.Fixed(2),modifier=Modifier.heightIn(max=620.dp),contentPadding=PaddingValues(bottom=16.dp),horizontalArrangement=Arrangement.spacedBy(14.dp),verticalArrangement=Arrangement.spacedBy(20.dp)){
                         items(widgetProviders.filter{provider->provider.loadLabel(context.packageManager).toString().contains(widgetSearch,true)||provider.provider.packageName.contains(widgetSearch,true)},key={it.provider.flattenToString()}){
                             provider->
@@ -1360,20 +1363,20 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
                             val preview=remember(provider){try{provider.loadPreviewImage(context,context.resources.displayMetrics.densityDpi)}catch(_:Exception){null}}
                             val appIcon=remember(provider){try{context.packageManager.getApplicationIcon(provider.provider.packageName)}catch(_:Exception){null}}
                             Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.fillMaxWidth().pointerInput(provider){detectDragGesturesAfterLongPress(onDragStart={_->widgetPickerDrag=provider},onDragEnd={val picked=widgetPickerDrag;widgetPickerDrag=null;if(picked!=null){widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,picked)}},onDragCancel={widgetPickerDrag=null},onDrag={change,_->change.consume()})}){
-                                Surface(Modifier.fillMaxWidth().height(168.dp).clip(RoundedCornerShape(24.dp)),shape=RoundedCornerShape(24.dp),color=Color(0xFF24242A)){
+                                Surface(Modifier.fillMaxWidth().height(168.dp).clip(RoundedCornerShape(24.dp)),shape=RoundedCornerShape(24.dp),color=if(dark) Color(0xFF24242A) else Color(0xFFE8E8EE)){
                                     Box(contentAlignment=Alignment.Center){
                                         if(preview!=null)Image(preview.toBitmap().asImageBitmap(),null,Modifier.fillMaxSize().padding(6.dp),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
                                         else if(appIcon!=null)Image(appIcon.toBitmap().asImageBitmap(),null,Modifier.size(76.dp).clip(RoundedCornerShape(22.dp)))
                                         else Icon(Icons.Default.Widgets,null,tint=Color.White,modifier=Modifier.size(64.dp))
                                     }
                                 }
-                                Spacer(Modifier.height(8.dp));Text(label,fontWeight=FontWeight.SemiBold,maxLines=1,color=Color.White,textAlign=TextAlign.Center);Text("Widget · ${provider.provider.packageName}",fontSize=11.sp,color=Color.Gray,maxLines=1,textAlign=TextAlign.Center)
+                                Spacer(Modifier.height(8.dp));Text(label,fontWeight=FontWeight.SemiBold,maxLines=1,color=if(dark) Color.White else Color(0xFF1C1C1E),textAlign=TextAlign.Center);Text("Widget · ${provider.provider.packageName}",fontSize=11.sp,color=if(dark) Color.Gray else Color(0xFF77777D),maxLines=1,textAlign=TextAlign.Center)
                                 Spacer(Modifier.height(8.dp))
-                                Button(onClick={widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,provider)},shape=RoundedCornerShape(24.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF173B59),contentColor=Color(0xFF4F9CF8)),modifier=Modifier.widthIn(min=90.dp)){Text("Add")}
+                                Button(onClick={widgetPickerOpen=false;widgetSearch="";activity.addHomeWidget(page,provider)},shape=RoundedCornerShape(24.dp),colors=ButtonDefaults.buttonColors(containerColor=if(dark) Color(0xFF173B59) else Color(0xFFE1ECFF),contentColor=Color(0xFF1683F5)),modifier=Modifier.widthIn(min=90.dp)){Text("Add")}
                             }
                         }
                     }
-                    Text("Tip: long-press a widget card and release to add it to the current home screen.",fontSize=12.sp,color=Color.Gray,modifier=Modifier.padding(top=8.dp))
+                    Text("Tip: long-press a widget card and release to add it to the current home screen.",fontSize=12.sp,color=if(dark) Color.Gray else Color(0xFF77777D),modifier=Modifier.padding(top=8.dp))
                 }
             }
         }
