@@ -446,7 +446,7 @@ fun LauncherRoot(db: LauncherDb) {
         val previewRows=effectiveRows+(if(pendingDragPage==0)2 else 0)
         val cw=(destinationGrid.width/columns.coerceAtLeast(1)).coerceAtLeast(1f)
         val ch=(destinationGrid.height/previewRows.coerceAtLeast(1)).coerceAtLeast(1f)
-        val headerOffset=if(pendingDragPage==0)2*columns else 0)
+        val headerOffset=if(pendingDragPage==0)2*columns else 0
         val items=mutableListOf<DragGridPlacement>()
         // Build occupied app cells from the destination page's model, not from
         // currentPageAppKeys/appBounds (those can still describe the page we dragged from
