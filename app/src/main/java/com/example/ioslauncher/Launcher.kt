@@ -1407,4 +1407,5 @@ AnimatedVisibility(visible=openFolderId!=null,enter=fadeIn(tween(150))+scaleIn(s
             }
  }
     }
+    }
 }
