@@ -923,7 +923,7 @@ fun LauncherRoot(db: LauncherDb) {
                         if (dragPointerOffset == null) dragPointerOffset = if (appDragActive) dragPosition-pointerDownPosition else widgetDragPosition-pointerDownPosition
                         val adjusted = tracked.position + (dragPointerOffset ?: Offset.Zero)
                         if (appDragActive) { dragPosition = adjusted; updateDragEdge(dragPosition) }
-                        else widgetDragPosition = adjusted
+                        else { widgetDragPosition = adjusted; updateDragEdge(widgetDragPosition) }
                     }
                     if (tracked != null && !tracked.pressed && (appDragActive || widgetDragActive)) {
                         if (appDragActive) finishIconDrag() else finishWidgetDrag()
